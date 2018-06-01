@@ -1,0 +1,7 @@
+[submodule "lib-lwip"]
+	path = lib-lwip
+	url = https://git.savannah.nongnu.org/git/lwip.git
+	branch = STABLE-2_0_0
+[submodule "contrib-lwip"]
+	path = contrib-lwip
+	url = https://git.savannah.nongnu.org/git/lwip/lwip-contrib.git
