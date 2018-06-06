@@ -1,5 +1,8 @@
 #!make -f
 
+NET_DRIVERS ?= rtl enet
+
+
 CFLAGS = -Iinclude -Ilib-lwip/src/include
 
 CFLAGS += -O2 -g -Wall -Wstrict-prototypes -I$(SRCDIR) -nostartfiles -nostdlib \
@@ -38,7 +41,20 @@ build/port/%.o: port/%.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 
-OBJS := $(LWIP_OBJS) $(PORT_OBJS)
+#
+# netif drivers
+#
+include drivers/Makefile.inc
+NDRV_SRCS := $(addprefix drivers/,$(sort $(foreach v,common $(NET_DRIVERS),$(DRIVER_SRCS_$(v)))))
+NDRV_OBJS := $(patsubst %.c,build/%.o,$(NDRV_SRCS))
+CFLAGS += $(addprefix -DHAVE_DRIVER_,$(sort $(NET_DRIVERS)))
+
+build/drivers/%.o: drivers/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+
+OBJS := $(LWIP_OBJS) $(NDRV_OBJS) $(PORT_OBJS)
 
 
 test: $(OBJS)
