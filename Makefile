@@ -2,6 +2,9 @@
 
 NET_DRIVERS ?= rtl enet
 
+CC ?= $(CROSS)gcc
+STRIP ?= $(CROSS)strip
+
 
 CFLAGS = -Iinclude -Ilib-lwip/src/include
 
@@ -24,7 +27,7 @@ LWIP_EXCLUDE := netif/slipif.c
 LWIP_SRCS := $(filter-out $(addprefix $(LWIPDIR)/,$(LWIP_EXCLUDE)),$(LWIPNOAPPSFILES))
 LWIP_OBJS := $(patsubst $(LWIPDIR)/%.c,build/lwip/%.o,$(LWIP_SRCS))
 
-build/lwip/%.o: $(LWIPDIR)/%.c
+build/lwip/%.o: $(LWIPDIR)/%.c include/lwipopts.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
@@ -57,12 +60,12 @@ build/drivers/%.o: drivers/%.c
 OBJS := $(LWIP_OBJS) $(NDRV_OBJS) $(PORT_OBJS)
 
 
-test: $(OBJS)
+netsrv: $(OBJS)
 	$(CC) $(CFLAGS) $(addprefix -Wl$(comma),$(LDFLAGS)) -o $@ -Wl,-\( $(LIBS) $(OBJS) -Wl,-\)
 
 
 .PHONY: clean
 clean:
-	rm -rf test build
+	rm -rf netsrv netsrv.s build
 
 comma = ,
