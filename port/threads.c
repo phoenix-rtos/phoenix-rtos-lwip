@@ -18,18 +18,18 @@
 
 static struct {
 	semaphore_t start_sem;
-	void (*main)(void *arg);
+	void (*th_main)(void *arg);
 } global;
 
 
 static void thread_main(void *arg)
 {
-	void (*main)(void *arg);
+	void (*th_main)(void *arg);
 
-	main = global.main;
+	th_main = global.th_main;
 	semaphoreUp(&global.start_sem);
 
-	main(arg);
+	th_main(arg);
 
 	endthread();
 }
@@ -46,7 +46,7 @@ sys_thread_t sys_thread_new(const char *name, void (* thread)(void *arg), void *
 		bail("no memory for thread: %s\n", name);
 
 	semaphoreDown(&global.start_sem, 0);
-	global.main = thread;
+	global.th_main = thread;
 
 	err = beginthreadex(thread_main, prio, stack, stacksize, arg, &id);
 	if (err) {
