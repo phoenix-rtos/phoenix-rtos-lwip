@@ -13,7 +13,10 @@
 #include "lwip/netifapi.h"
 #include "lwip/stats.h"
 #include "lwip/snmp.h"
+
+#include <errno.h>
 #include <stdlib.h>
+#include <string.h>
 
 
 #ifndef MAX_MDIO_BUSSES

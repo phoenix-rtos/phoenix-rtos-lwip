@@ -1,0 +1,8 @@
+############ ARM (Cortex-A5/A7/A9) ############
+
+CROSS ?= arm-phoenix-
+
+CFLAGS += -mcpu=cortex-a7 -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -mthumb \
+	-mno-unaligned-access
+
+LDFLAGS += -z max-page-size=0x1000

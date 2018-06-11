@@ -9,6 +9,7 @@
 #define LWIP_UDP 1
 #define LWIP_TCP 1
 #define MEM_LIBC_MALLOC 1
+#define LWIP_ERRNO_INCLUDE <errno.h>
 
 #define IP_REASSEMBLY 1
 #define IP_FRAG 1

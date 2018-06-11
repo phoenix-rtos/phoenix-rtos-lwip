@@ -12,13 +12,11 @@
 #define PHOENIX_LWIP_CC_H_
 
 
-#include <arch.h>
+#include <stdint.h>
 #include <endian.h>
 
 
 /* types used by LwIP */
-
-typedef addr_t mem_ptr_t;
 
 #define U16_F "hu"
 #define S16_F "hd"

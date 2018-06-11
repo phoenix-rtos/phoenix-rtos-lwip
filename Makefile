@@ -1,21 +1,27 @@
 #!make -f
 
-NET_DRIVERS ?= rtl enet
-
-CC ?= $(CROSS)gcc
-STRIP ?= $(CROSS)strip
+TARGET ?= ia32
+NET_DRIVERS ?= $(if $(filter ia32%,$(TARGET)),rtl) $(if $(filter arm-imx%,$(TARGET)),enet)
 
 
-CFLAGS = -Iinclude -Ilib-lwip/src/include
+CC = $(CROSS)gcc
+AR = $(CROSS)ar
+STRIP = $(CROSS)strip
 
-CFLAGS += -O2 -g -Wall -Wstrict-prototypes -I$(SRCDIR) -nostartfiles -nostdlib \
-	-m32 -mtune=generic -mno-mmx -mno-sse -fno-pic -fno-pie \
-	-fomit-frame-pointer -ffreestanding \
-	--sysroot=$(HOME)/src/phs/compiler/i386-phoenix \
-	-static -ffunction-sections -fdata-sections
 
-LIBS = -lphoenix $(shell $(CC) $(CFLAGS) -print-file-name=libgcc.a)
-LDFLAGS = -m elf_i386 --gc-sections
+MAKEFLAGS += --no-print-directory --output-sync
+
+CFLAGS += -O3 -g -Wall -Wstrict-prototypes
+CFLAGS += -Iinclude -Ilib-lwip/src/include
+CFLAGS += -static -ffunction-sections -fdata-sections
+CFLAGS += -nostartfiles -nostdlib
+
+ARFLAGS += -r
+
+LDFLAGS += --gc-sections -nostdlib
+LIBS = -lphoenix -lgcc
+
+include Makefile.$(TARGET)
 
 #
 # LwIP sources
