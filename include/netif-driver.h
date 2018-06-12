@@ -47,9 +47,11 @@ void register_netif_driver(netif_driver_t *drv);
 int create_netif(char *conf);
 
 int register_mdio_bus(const mdio_bus_ops_t *ops, void *arg);
-void mdio_setup(unsigned bus, unsigned max_khz, unsigned min_hold_ns, unsigned opt_preamble);
+int mdio_setup(unsigned bus, unsigned max_khz, unsigned min_hold_ns, unsigned opt_preamble);
 uint16_t mdio_read(unsigned bus, unsigned addr, uint16_t reg);
 void mdio_write(unsigned bus, unsigned addr, uint16_t reg, uint16_t val);
+int mdio_lock_bus(unsigned bus);
+void mdio_unlock_bus(unsigned bus);
 
 
 #endif /* PHOENIX_NETIF_DRIVER_H_ */
