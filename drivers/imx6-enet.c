@@ -12,6 +12,7 @@
 #include "lwip/etharp.h"
 #include "netif-driver.h"
 #include "bdring.h"
+#include "ephy.h"
 #include "hw-debug.h"
 #include "physmmap.h"
 #include "res-create.h"
@@ -67,6 +68,8 @@ typedef struct
 	u32 mscr;
 
 	char name[32];
+
+	eth_phy_state_t phy;
 
 	u32 rx_irq_stack[256] __attribute__((aligned(16))), tx_irq_stack[256], mdio_stack[256];
 } enet_priv_t;
@@ -782,12 +785,12 @@ static err_t enet_netifOutput(struct netif *netif, struct pbuf *p)
 }
 
 
-// ARGS: enet:base:irq[:no-mdio]
+// ARGS: enet:base:irq[:no-mdio][:PHY:[bus.]addr[:config]]
 static int enet_netifInit(struct netif *netif, char *cfg)
 {
 	enet_priv_t *priv;
 	char *p;
-	int irq, mdio = 1;
+	int err, irq, mdio = 1;
 
 	netif->linkoutput = enet_netifOutput;
 
@@ -795,24 +798,44 @@ static int enet_netifInit(struct netif *netif, char *cfg)
 	priv->netif = netif;
 
 	if (!cfg)
-		return ERR_ARG;
+		return -EINVAL;
 
 	priv->devphys = strtoul(cfg, &p, 0);
 	if (!*cfg || *p++ != ':')
-		return ERR_ARG;
+		return -EINVAL;
 
 	irq = strtoul((cfg = p), &p, 0);
 	if (!*cfg || (*p && *p++ != ':') || irq < 0)
-		return ERR_ARG;
+		return -EINVAL;
 
-	if (*p) {
-		if (!strcmp(p, "no-mdio"))
+	cfg = NULL;
+	while (p && *p) {
+		cfg = strchr(p, ':');
+		if (cfg)
+			*cfg++ = 0;
+
+		if (!strcmp(p, "no-mdio")) {
 			mdio = 0;
-		else
-			return ERR_ARG;
+			p = cfg;
+			continue;
+		}
+
+		if (!strcmp(p, "PHY"))
+			break;
+
+		return -EINVAL;
 	}
 
-	return enet_initDevice(priv, irq, mdio);
+	if ((err = enet_initDevice(priv, irq, mdio)))
+		return err;
+
+	if (cfg) {
+		err = ephy_init(&priv->phy, cfg);
+		if (err)
+			enet_printf(priv, "WARN: PHY init failed: %s (%d)", strerror(err), err);
+	}
+
+	return 0;
 }
 
 
