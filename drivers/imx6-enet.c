@@ -286,7 +286,7 @@ static void enet_fillRxDesc(const net_bufdesc_ring_t *ring, size_t i, addr_t pa,
 	unsigned wrap = desc == (volatile enet_buf_desc_t *)ring->ring + ring->last ? ENET_DESC_WRAP : 0;
 
 	desc->len = sz;
-	desc->addr = pa - 2;
+	desc->addr = pa;
 #if USE_ENET_EXT_DESCRIPTORS
 	desc->yflags = ENET_RXDY_INT;
 #endif
@@ -374,7 +374,8 @@ static int enet_irq_handler(enet_priv_t *state, u32 flag)
 	u32 events;
 
 	events = state->mmio->EIR & flag;
-	__sync_fetch_and_and(&state->mmio->EIMR, ~events);
+	state->mmio->EIMR &= ~events;	// XXX: races against irq_lock holders
+					// can't lock nor __sync_... here, though
 
 	if (events & ENET_IRQ_EBERR)
 		__sync_fetch_and_or(&state->drv_exit, EV_BUS_ERROR);	// FIXME: atomic_set()
@@ -774,11 +775,13 @@ static err_t enet_netifOutput(struct netif *netif, struct pbuf *p)
 	enet_priv_t *state = netif->state;
 	size_t nf;
 
-#if ETH_PAD_SIZE
-	pbuf_header(p, -ETH_PAD_SIZE); /* drop the padding word */
-#endif
+	if (ETH_PAD_SIZE)
+		pbuf_header(p, -ETH_PAD_SIZE); /* drop the padding word */
+
 	mutexLock(state->tx_lock);
 	nf = net_transmitPacket(&state->tx, p);
+	if (nf)
+		state->mmio->TDAR = ~0u;
 	mutexUnlock(state->tx_lock);
 
 	return nf ? ERR_OK : ERR_BUF;
