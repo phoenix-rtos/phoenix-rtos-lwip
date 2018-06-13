@@ -743,7 +743,7 @@ static int enet_initDevice(enet_priv_t *state, int irq, int mdio)
 	if ((err = enet_initRings(state)))
 		return err;
 
-	enet_printf(state, "%s @ mmio 0x%x irq %d", state->name, state->devphys, irq);
+	enet_printf(state, "mmio 0x%x irq %d", state->devphys, irq);
 
 	interrupt(irq, enet_rx_irq_handler, state, state->rx_irq_cond, &state->rx_irq_handle);
 	interrupt(irq, enet_tx_irq_handler, state, state->tx_irq_cond, &state->tx_irq_handle);
