@@ -12,15 +12,17 @@
 #define PHOENIX_LWIP_CC_H_
 
 
+#include <stdio.h>
 #include <stdint.h>
 #include <endian.h>
 
 
 /* types used by LwIP */
 
-#define U16_F "hu"
-#define S16_F "hd"
-#define X16_F "hx"
+#define X8_F  "02x"
+#define U16_F "u"
+#define S16_F "d"
+#define X16_F "x"
 #define U32_F "u"
 #define S32_F "d"
 #define X32_F "x"
@@ -46,7 +48,7 @@
 __attribute__((cold,noreturn,format(printf,1,2)))
 void bail(const char *format, ...);
 
-#define LWIP_PLATFORM_DIAG	printf
+#define LWIP_PLATFORM_DIAG(x)	printf x
 #define LWIP_PLATFORM_ASSERT	bail
 
 
