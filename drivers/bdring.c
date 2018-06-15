@@ -257,10 +257,10 @@ size_t net_transmitPacket(net_bufdesc_ring_t *ring, struct pbuf *p)
 		n = MAX_TX_FRAGMENTS;
 
 	frags = n = net_fillFragments(p, pa, psz, n, ring->ops->max_tx_frag);
-	if (!frags)
+	if (!frags) {
+		pbuf_free(p);
 		return 0;	/* dropped: too many fragments or empty packet */
-
-	pbuf_ref(p);
+	}
 
 	/* fill fragments from last to avoid race against HW */
 	i = ni = (i + n) & ring->last;

@@ -164,19 +164,17 @@ struct pbuf *net_makeDMAPbuf(struct pbuf *p)
 	addr_t pa;
 	err_t err;
 
-	if (p->flags & PBUF_FLAG_IS_CUSTOM)
+	if (p->flags & PBUF_FLAG_IS_CUSTOM) {
+		pbuf_ref(p);
 		return p;
+	}
 
 	q = net_allocDMAPbuf(&pa, p->tot_len + ETH_PAD_SIZE);
-	if (!q) {
-		pbuf_free(p);
+	if (!q)
 		return q;
-	}
 
 	pbuf_header(q, -ETH_PAD_SIZE);
 	err = pbuf_copy(q, p);
-
-	pbuf_free(p);
 
 	if (!err)
 		return q;

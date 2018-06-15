@@ -12,6 +12,13 @@
 #define MEM_LIBC_MALLOC 1
 #define LWIP_ERRNO_INCLUDE <errno.h>
 
+#if 0
+#define LWIP_DEBUG 1
+#define LWIP_DBG_MIN_LEVEL LWIP_DBG_LEVEL_ALL
+#define LWIP_DBG_TYPES_ON LWIP_DBG_ON
+#define PBUF_DEBUG LWIP_DBG_ON
+#endif
+
 #define IP_REASSEMBLY 1
 #define IP_FRAG 1
 #define ETH_PAD_SIZE 2
