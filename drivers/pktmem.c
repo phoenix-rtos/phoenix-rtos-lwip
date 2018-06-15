@@ -134,29 +134,27 @@ static ssize_t net_allocPktBuf(void **bufp)
 
 struct pbuf *net_allocDMAPbuf(addr_t *pa, size_t sz)
 {
-	struct pbuf_custom *p;
+	struct pbuf_custom *pc;
+	void *data;
 	size_t bsz;
 
-	p = (void *)pbuf_alloc(PBUF_RAW, sizeof(*p) - sizeof(struct pbuf), PBUF_RAM);
-	if (!p)
-		return NULL;
-
-	bsz = net_allocPktBuf(&p->pbuf.payload);
-
-	if (bsz) {
-		p->pbuf.flags |= PBUF_FLAG_IS_CUSTOM;
-		p->custom_free_function = net_freeDMAPbuf;
-	}
-
-	*pa = mphys(p->pbuf.payload, &bsz);
+	bsz = net_allocPktBuf(&data);
+	*pa = mphys(data, &bsz);
 
 	if (bsz < sz) {
-		pbuf_free(&p->pbuf);
+		if (bsz)
+			net_freePktBuf(data);
 		return NULL;
 	}
 
-	p->pbuf.len = p->pbuf.tot_len = sz;
-	return &p->pbuf;
+	pc = mem_malloc(sizeof(*pc));
+	if (!pc) {
+		net_freePktBuf(data);
+		return NULL;
+	}
+
+	pc->custom_free_function = net_freeDMAPbuf;
+	return pbuf_alloced_custom(PBUF_RAW, sz, PBUF_REF, pc, data, bsz);
 }
 
 
