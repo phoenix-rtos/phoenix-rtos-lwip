@@ -10,7 +10,6 @@
  */
 #include "bdring.h"
 #include "physmmap.h"
-#include "pktmem.h"
 #include "lwip/netif.h"
 
 #include <errno.h>
@@ -131,7 +130,7 @@ size_t net_receivePackets(net_bufdesc_ring_t *ring, struct netif *ni)
 		p->tot_len = p->len = sz;
 
 		if (!pkt)
-			pkt = p;
+			pbuf_header((pkt = p), ETH_PAD_SIZE);
 		else
 			pbuf_cat(pkt, p);
 
@@ -158,12 +157,23 @@ size_t net_refillRx(net_bufdesc_ring_t *ring, size_t ethpad)
 	n = 0;
 	i = ring->tail;
 	nxt = (i + 1) & ring->last;	// NOTE: 2^n ring size verified in net_initRings
-	sz = ring->ops->pkt_buf_sz;
 
 	while (nxt != ring->head) {
-		p = net_allocDMAPbuf(&pa, sz);
+		sz = ring->ops->pkt_buf_sz * 2;
+		p = pbuf_alloc(PBUF_RAW, sz, PBUF_RAM);
 		if (!p)
 			break;
+
+		if (ethpad != ETH_PAD_SIZE)
+			pbuf_header(p, ethpad - ETH_PAD_SIZE);
+
+		pa = mphys(p->payload, &sz);
+		if (sz < ring->ops->pkt_buf_sz) {
+			pbuf_header(p, -sz);
+			sz = ring->ops->pkt_buf_sz * 2 - sz;
+			pa = mphys(p->payload, &sz);
+			LWIP_ASSERT("discontinuous va???", (sz >= ring->ops->pkt_buf_sz));
+		}
 
 		ring->bufp[i] = p;
 		ring->ops->fillRxDesc(ring, i, pa, sz, 0);
@@ -244,10 +254,6 @@ size_t net_transmitPacket(net_bufdesc_ring_t *ring, struct pbuf *p)
 	size_t psz[MAX_TX_FRAGMENTS];
 	size_t n, frags, i, ni;
 	int last;
-
-	p = net_makeDMAPbuf(p);
-	if (!p)
-		return 0;
 
 	// NOTE: 2^n ring size verified in net_initRings
 	n = *(volatile unsigned *)&ring->tail;	// access tail once - it may be advanced by tx_done thread

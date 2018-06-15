@@ -15,7 +15,7 @@
 #include <sys/mman.h>
 
 
-void *dmammap(size_t sz);
+void *dmammap(size_t sz) __attribute__((malloc,alloc_size(1),assume_aligned(SIZE_PAGE)));
 
 volatile void *physmmap(addr_t addr, size_t sz);
 void physunmap(volatile void *va, size_t sz);

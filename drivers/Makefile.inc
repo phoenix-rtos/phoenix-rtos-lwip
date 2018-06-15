@@ -3,7 +3,7 @@
 #
 
 SRCS_ia32_pci = pci.c pci-x86.c physmmap.c
-SRCS_util = bdring.c physmmap.c res-create.c
+SRCS_util = bdring.c pktmem.c physmmap.c res-create.c
 SRCS_ephy = ephy.c gpio.c imx6ull-gpio.c
 
 

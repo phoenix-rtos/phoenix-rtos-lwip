@@ -124,7 +124,11 @@ static size_t rtl_nextRxBufferSize(const net_bufdesc_ring_t *ring, size_t i)
 	volatile rtl_buf_desc_t *r = ring->ring;
 	u32 cmd = r[i].cmd;
 
-	return cmd & RTL_DESC_OWN ? 0 : cmd & RXCMD_SZ_MASK;
+	if (cmd & RTL_DESC_OWN)
+		return 0;
+
+	cmd &= RXCMD_SZ_MASK;
+	return cmd + ETH_PAD_SIZE;
 }
 
 
@@ -158,6 +162,11 @@ static void rtl_fillDesc(const net_bufdesc_ring_t *ring, size_t i, addr_t pa, si
 }
 
 
+static void rtl_fillRxDesc(const net_bufdesc_ring_t *ring, size_t i, addr_t pa, size_t sz, unsigned seg)
+{
+	rtl_fillDesc(ring, i, pa + ETH_PAD_SIZE, sz - ETH_PAD_SIZE, 0);
+}
+
 static int rtl_nextTxDone(const net_bufdesc_ring_t *ring, size_t i)
 {
 	volatile rtl_buf_desc_t *r = ring->ring;
@@ -169,13 +178,13 @@ static int rtl_nextTxDone(const net_bufdesc_ring_t *ring, size_t i)
 static const net_bufdesc_ops_t rtl_ring_ops = {
 	rtl_nextRxBufferSize,
 	rtl_pktRxFinished,
-	rtl_fillDesc,
+	rtl_fillRxDesc,
 	rtl_nextTxDone,
 	rtl_fillDesc,
 
 	/* desc_size */		sizeof(rtl_buf_desc_t),
 	/* ring_alignment */	64,
-	/* pkt_buf_sz */	2048,	/* <= RXCMD_SZ_MASK */
+	/* pkt_buf_sz */	1524,	/* <= RXCMD_SZ_MASK */
 	/* max_tx_frag */	TXCMD_SZ_MASK,
 };
 

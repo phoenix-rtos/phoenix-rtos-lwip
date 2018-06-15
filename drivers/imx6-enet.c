@@ -118,7 +118,7 @@ static void enet_start(enet_priv_t *state)
 //	addr_t ecr_pa = (addr_t)&((struct enet_regs *)state->phys)->ECR;
 	// FIXME: last_will(ECR = ENET_ECR_REG_MAGIC | ENET_ECR_RESET);
 
-	state->mmio->MRBR = 2048 - 64;	// FIXME: coerce with net_allocPktBuf()
+	state->mmio->MRBR = ENET_BUFFER_SIZE;	// FIXME: coerce with net_allocPktBuf()
 	state->mmio->FTRL = BIT(14)-1;	// FIXME: truncation to just above link MTU
 
 	state->mmio->RCR = (1518 << 16) |
@@ -268,6 +268,8 @@ static size_t enet_nextRxBufferSize(const net_bufdesc_ring_t *ring, size_t i)
 	sz = desc->len;
 	if (!sz)	// FIXME: hw bug?
 		sz = 1;
+	else
+		sz += ETH_PAD_SIZE;	// FIXME: support RX split?
 	return sz;
 }
 
@@ -285,7 +287,7 @@ static void enet_fillRxDesc(const net_bufdesc_ring_t *ring, size_t i, addr_t pa,
 	volatile enet_buf_desc_t *desc = (volatile enet_buf_desc_t *)ring->ring + i;
 	unsigned wrap = desc == (volatile enet_buf_desc_t *)ring->ring + ring->last ? ENET_DESC_WRAP : 0;
 
-	desc->len = sz;
+	desc->len = sz - 2;
 	desc->addr = pa;
 #if USE_ENET_EXT_DESCRIPTORS
 	desc->yflags = ENET_RXDY_INT;
@@ -346,7 +348,7 @@ static const net_bufdesc_ops_t enet_ring_ops = {
 
 	/* desc_size */		sizeof(enet_buf_desc_t),
 	/* ring_alignment */	64,
-	/* pkt_buf_sz */	2048,	/* >= eth-mtu */
+	/* pkt_buf_sz */	ENET_BUFFER_SIZE,
 	/* max_tx_frag */	0xFFFF,
 };
 
