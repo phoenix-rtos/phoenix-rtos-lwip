@@ -12,6 +12,7 @@
 #include "pktmem.h"
 #include "lwip/mem.h"
 #include "lwip/pbuf.h"
+#include "lwip/sys.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -82,17 +83,26 @@ static void net_freePktBuf(void *p)
 
 static void net_freeDMAPbuf(struct pbuf *p)
 {
+	SYS_ARCH_DECL_PROTECT(old_level);
+
+	SYS_ARCH_PROTECT(old_level);
 	net_freePktBuf(p->payload);
+	SYS_ARCH_UNPROTECT(old_level);
+
 	mem_free(p);
 }
 
 
 static ssize_t net_allocPktBuf(void **bufp)
 {
+	SYS_ARCH_DECL_PROTECT(old_level);
 	buf_page_head_t *ph;
 	unsigned i;
 
+	SYS_ARCH_PROTECT(old_level);
 	if (!pkt_bufs_free) {
+		SYS_ARCH_UNPROTECT(old_level);
+
 		ph = dmammap(PAGE_SIZE);
 		if (ph == MAP_FAILED) {
 			printf("mmap: no memory?\n");
@@ -101,6 +111,8 @@ static ssize_t net_allocPktBuf(void **bufp)
 
 		memset(ph, 0, CACHE_LINE_SIZE);
 		ph->free_mask = (1 << PKT_BUF_CNT) - 1;
+
+		SYS_ARCH_PROTECT(old_level);
 		net_listAdd(ph, &pkt_buf_lru);
 		pkt_bufs_free += PKT_BUF_CNT;
 	} else {
@@ -108,11 +120,13 @@ static ssize_t net_allocPktBuf(void **bufp)
 	}
 
 	i = __builtin_ctz(ph->free_mask);
-	*bufp = (void *)ph + CACHE_LINE_SIZE + i * PKT_BUF_SIZE;
-
 	--pkt_bufs_free;
 	if (!(ph->free_mask &= ~(1 << i)))
 		net_listDel(ph);
+
+	SYS_ARCH_UNPROTECT(old_level);
+
+	*bufp = (void *)ph + CACHE_LINE_SIZE + i * PKT_BUF_SIZE;
 
 	return PKT_BUF_SIZE;
 }
