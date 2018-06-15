@@ -354,7 +354,6 @@ static err_t rtl_netifOutput(struct netif *netif, struct pbuf *p)
 	}
 
 	mutexLock(state->tx_lock);
-	rtl_printf(state, "TX: %zu\n", (size_t)p->tot_len);
 	nf = net_transmitPacket(&state->tx, p);
 	if (nf)
 		state->mmio->TPPOLL = RTL_POLL_NPQ;
