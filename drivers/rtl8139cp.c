@@ -239,7 +239,7 @@ static void rtl_rx_irq_thread(void *arg)
 		state->mmio->ISR = RTL_INT_RX;
 		mutexUnlock(state->irq_lock);
 
-		rx_done = net_receivePackets(&state->rx, state->netif);
+		rx_done = net_receivePackets(&state->rx, state->netif, 0);
 		if (rx_done || !net_rxFullyFilled(&state->rx))
 			net_refillRx(&state->rx, 0);
 

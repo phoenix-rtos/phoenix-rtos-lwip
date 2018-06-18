@@ -268,8 +268,6 @@ static size_t enet_nextRxBufferSize(const net_bufdesc_ring_t *ring, size_t i)
 	sz = desc->len;
 	if (!sz)	// FIXME: hw bug?
 		sz = 1;
-	else
-		sz += ETH_PAD_SIZE;	// FIXME: support RX split?
 	return sz;
 }
 
@@ -318,7 +316,7 @@ static void enet_fillTxDesc(const net_bufdesc_ring_t *ring, size_t i, addr_t pa,
 	flags |= seg & BDRING_SEG_LAST ? ENET_DESC_LAST : 0;
 
 	desc->len = sz;
-	desc->addr = pa - (ETH_PAD_SIZE == 2 ? 2 : 0);
+	desc->addr = pa;
 
 #if USE_ENET_EXT_DESCRIPTORS
 	yflags = ENET_TXDY_INT;
@@ -409,7 +407,7 @@ static void enet_rx_irq_thread(void *arg)
 		state->mmio->EIR = ENET_IRQ_RXF;
 		mutexUnlock(state->irq_lock);
 
-		rx_done = net_receivePackets(&state->rx, state->netif);
+		rx_done = net_receivePackets(&state->rx, state->netif, 2);
 		if (rx_done || !net_rxFullyFilled(&state->rx)) {
 			net_refillRx(&state->rx, 2);
 			state->mmio->RDAR = ~0u;
@@ -777,7 +775,7 @@ static err_t enet_netifOutput(struct netif *netif, struct pbuf *p)
 	enet_priv_t *state = netif->state;
 	size_t nf;
 
-	if (ETH_PAD_SIZE)
+	if (ETH_PAD_SIZE != 2)
 		pbuf_header(p, -ETH_PAD_SIZE); /* drop the padding word */
 
 	mutexLock(state->tx_lock);

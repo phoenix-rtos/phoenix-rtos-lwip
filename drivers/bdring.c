@@ -110,7 +110,7 @@ int net_initRings(net_bufdesc_ring_t *rings, const size_t *sizes, size_t nrings,
 }
 
 
-size_t net_receivePackets(net_bufdesc_ring_t *ring, struct netif *ni)
+size_t net_receivePackets(net_bufdesc_ring_t *ring, struct netif *ni, unsigned ethpad)
 {
 	struct pbuf *p, *pkt;
 	size_t n, i, sz;
@@ -136,6 +136,7 @@ size_t net_receivePackets(net_bufdesc_ring_t *ring, struct netif *ni)
 			pbuf_cat(pkt, p);
 
 		if (ring->ops->pktRxFinished(ring, i)) {
+			pbuf_header_force(p, ETH_PAD_SIZE - ethpad);
 			ni->input(pkt, ni);
 			pkt = NULL;
 		}
