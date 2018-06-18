@@ -83,7 +83,7 @@ static err_t netif_dev_init(struct netif *netif)
 
 	MIB2_INIT_NETIF(netif, snmp_ifType_ethernet_csmacd, 10000000);
 
-	netif->mtu = 1514;
+	netif->mtu = 1500;
 	netif->hwaddr_len = ETH_HWADDR_LEN;
 	netif->flags = NETIF_FLAG_UP | NETIF_FLAG_LINK_UP | NETIF_FLAG_BROADCAST |
 		NETIF_FLAG_ETHARP | NETIF_FLAG_ETHERNET;
