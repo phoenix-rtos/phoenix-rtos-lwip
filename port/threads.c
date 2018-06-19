@@ -34,9 +34,8 @@ static void thread_main(void *arg)
 }
 
 
-sys_thread_t sys_thread_new(const char *name, void (* thread)(void *arg), void *arg, int stacksize, int prio)
+int sys_thread_opt_new(const char *name, void (* thread)(void *arg), void *arg, int stacksize, int prio, handle_t *id)
 {
-	handle_t id;
 	void *stack;
 	int err;
 
@@ -47,11 +46,24 @@ sys_thread_t sys_thread_new(const char *name, void (* thread)(void *arg), void *
 	semaphoreDown(&global.start_sem, 0);
 	global.th_main = thread;
 
-	err = beginthreadex(thread_main, prio, stack, stacksize, arg, &id);
+	err = beginthreadex(thread_main, prio, stack, stacksize, arg, id);
 	if (err) {
 		semaphoreUp(&global.start_sem);
-		errout(err, "beginthread(%s)", name);
+		free(stack);
 	}
+
+	return err;
+}
+
+
+sys_thread_t sys_thread_new(const char *name, void (* thread)(void *arg), void *arg, int stacksize, int prio)
+{
+	handle_t id;
+	int err;
+
+	err = sys_thread_opt_new(name, thread, arg, stacksize, prio, &id);
+	if (err)
+		errout(err, "beginthread(%s)", name);
 
 	return id;
 }

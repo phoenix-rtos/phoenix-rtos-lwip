@@ -54,4 +54,7 @@ void sys_arch_global_unlock(void);
 #define SYS_ARCH_UNPROTECT(lev)	sys_arch_global_unlock();
 
 
+int sys_thread_opt_new(const char *name, void (* thread)(void *arg), void *arg, int stacksize, int prio, handle_t *id);
+
+
 #endif /* PHOENIX_LWIP_SYS_ARCH_H_ */
