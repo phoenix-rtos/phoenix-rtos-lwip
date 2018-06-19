@@ -12,8 +12,6 @@
 #include "arch/sys_arch.h"
 
 #include <sys/threads.h>
-#include <errno.h>
-#include <string.h>
 
 
 static handle_t global_mutex;
@@ -51,5 +49,5 @@ void init_lwip_global_lock(void)
 	int err = mutexCreate(&global_mutex);
 
 	if (err)
-		bail("mutexCreate(global_lock) error: %s\n", strerror(err));
+		errout(err, "mutexCreate(global_lock)");
 }

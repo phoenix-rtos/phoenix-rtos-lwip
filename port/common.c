@@ -13,6 +13,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 
 void bail(const char *format, ...)
@@ -26,6 +27,19 @@ void bail(const char *format, ...)
 	exit(1);
 }
 
+
+void errout(int err, const char *format, ...)
+{
+	va_list arg;
+
+	va_start(arg, format);
+	vprintf(format, arg);
+	va_end(arg);
+
+	printf(": %s (%d)\n", strerror(err), err);
+
+	exit(1);
+}
 
 uint32_t sys_now(void)
 {

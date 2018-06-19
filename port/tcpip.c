@@ -11,7 +11,6 @@
 #include <lwip/tcpip.h>
 
 #include <sys/threads.h>
-#include <string.h>
 
 
 static void trigger_sem(void *arg)
@@ -28,7 +27,7 @@ void init_lwip_tcpip(void)
 
 	err = semaphoreCreate(&sem, 0);
 	if (err)
-		bail("can't alloc semaphore: %s", strerror(err));
+		errout(err, "semaphoreCreate()");
 
 	tcpip_init(trigger_sem, &sem);
 

@@ -13,7 +13,6 @@
 
 #include <sys/threads.h>
 #include <stdlib.h>
-#include <string.h>
 
 
 static struct {
@@ -51,7 +50,7 @@ sys_thread_t sys_thread_new(const char *name, void (* thread)(void *arg), void *
 	err = beginthreadex(thread_main, prio, stack, stacksize, arg, &id);
 	if (err) {
 		semaphoreUp(&global.start_sem);
-		bail("beginthread error: %s\n", strerror(err));
+		errout(err, "beginthread(%s)", name);
 	}
 
 	return id;
@@ -64,5 +63,5 @@ void init_lwip_threads(void)
 
 	err = semaphoreCreate(&global.start_sem, 1);
 	if (err)
-		bail("semaphoreCreate(thread.start_sem) error: %s\n", strerror(err));
+		errout(err, "semaphoreCreate(thread.start_sem)");
 }
