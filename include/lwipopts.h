@@ -3,12 +3,14 @@
 #define LWIP_HAVE_SLIPIF 0
 #define LWIP_NETIF_API 1
 #define LWIP_SOCKET 1
+#define LWIP_COMPAT_SOCKETS 0
 #define LWIP_ARP 1
 #define LWIP_ICMP 1
 #define LWIP_DHCP 1
 #define LWIP_AUTOIP 1
 #define LWIP_UDP 1
 #define LWIP_TCP 1
+#define LWIP_TCP_KEEPALIVE 1
 #define MEM_LIBC_MALLOC 1
 #define LWIP_ERRNO_INCLUDE <errno.h>
 

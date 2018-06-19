@@ -24,10 +24,12 @@ int main(int argc, char **argv)
 
 #ifndef HAVE_WORKING_INIT_ARRAY
 	void init_lwip_tcpip(void);
+	void init_lwip_sockets(void);
 	void register_driver_rtl(void);
 	void register_driver_enet(void);
 
 	init_lwip_tcpip();
+	init_lwip_sockets();
 #ifdef HAVE_DRIVER_rtl
 	register_driver_rtl();
 #endif
