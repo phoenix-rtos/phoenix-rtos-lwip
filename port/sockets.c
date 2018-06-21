@@ -38,6 +38,7 @@ static void socket_thread(void *arg)
 	msg_t msg;
 	u32 port = ss->port;
 	int sock = ss->sock;
+	int shutmode = 0;
 	int err;
 
 	free(ss);
@@ -101,8 +102,19 @@ static void socket_thread(void *arg)
 			smo->ret = lwip_setsockopt(sock, smi->opt.level, smi->opt.optname, msg.i.data, msg.i.size) < 0 ? -errno : 0;
 			break;
 		case sockmShutdown:
+			if (smi->send.flags < 0 || smi->send.flags > SHUT_RDWR) {
+				smo->ret = -EINVAL;
+				break;
+			}
+
 			smo->ret = lwip_shutdown(sock, smi->send.flags) < 0 ? -errno : 0;
-			break;
+			shutmode |= smi->send.flags + 1;
+			if (shutmode != 3)
+				break;
+
+			/* closed */
+			msgRespond(port, &msg, respid);
+			return;
 		case mtRead:
 			msg.o.io.err = lwip_read(sock, msg.o.data, msg.o.size);
 			break;
