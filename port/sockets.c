@@ -13,6 +13,8 @@
 
 #include <errno.h>
 #include <stdlib.h>
+#include <string.h>
+#include <sys/poll.h>
 #include <sys/sockport.h>
 #include <sys/threads.h>
 
@@ -28,6 +30,42 @@ struct sock_start {
 
 
 static int wrap_socket(u32 *port, int sock, int flags);
+
+
+// oh crap, there is no lwip_poll() ...
+static int poll_one(int socket, int events, time_t timeout)
+{
+	struct timeval to;
+	fd_set rd, wr, ex;
+	int err;
+
+	FD_ZERO(&rd);
+	FD_ZERO(&wr);
+	FD_ZERO(&ex);
+
+	if (events & POLLIN)
+		FD_SET(socket, &rd);
+	if (events & POLLOUT)
+		FD_SET(socket, &wr);
+	if (events & POLLPRI)
+		FD_SET(socket, &ex);
+
+	to.tv_sec = timeout / 1000000;
+	to.tv_usec = timeout % 1000000;
+
+	if ((err = lwip_select(socket + 1, &rd, &wr, &ex, timeout >= 0 ? &to : NULL)) < 0)
+		return -errno;
+
+	events = 0;
+	if (FD_ISSET(socket, &rd))
+		events |= POLLIN;
+	if (FD_ISSET(socket, &wr))
+		events |= POLLOUT;
+	if (FD_ISSET(socket, &ex))
+		events |= POLLPRI;
+
+	return events;
+}
 
 
 static void socket_thread(void *arg)
@@ -51,6 +89,9 @@ static void socket_thread(void *arg)
 		salen = sizeof(smo->sockname.addr);
 
 		switch (msg.type) {
+		case sockmPoll:
+			smo->ret = poll_one(sock, smi->poll.events, smi->poll.timeout);
+			break;
 		case sockmConnect:
 			smo->ret = lwip_connect(sock, (const void *)smi->send.addr, smi->send.addrlen) < 0 ? -errno : 0;
 			break;
