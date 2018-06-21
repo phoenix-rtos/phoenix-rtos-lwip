@@ -16,12 +16,16 @@ CFLAGS += -Iinclude -Ilib-lwip/src/include
 CFLAGS += -static -ffunction-sections -fdata-sections
 CFLAGS += -nostartfiles -nostdlib
 
-ARFLAGS += -r
-
 LDFLAGS += --gc-sections -nostdlib
 LIBS = -lphoenix -lgcc
 
 include Makefile.$(TARGET)
+
+.PHONY: clean all
+all: netsrv
+
+OUT_LIBS := lwip lwip-port netdrivers
+OBJS := $(addprefix build/lib,$(addsuffix .a,$(OUT_LIBS)))
 
 #
 # LwIP sources
@@ -37,6 +41,8 @@ build/lwip/%.o: $(LWIPDIR)/%.c include/lwipopts.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
+build/liblwip.a: $(LWIP_OBJS)
+	$(AR) $(ARFLAGS) $@ $^
 
 #
 # LwIP system wrapper
@@ -49,6 +55,8 @@ build/port/%.o: port/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
+build/liblwip-port.a: $(PORT_OBJS)
+	$(AR) $(ARFLAGS) $@ $^
 
 #
 # netif drivers
@@ -62,15 +70,14 @@ build/drivers/%.o: drivers/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-
-OBJS := $(LWIP_OBJS) $(NDRV_OBJS) $(PORT_OBJS)
+build/libnetdrivers.a: $(NDRV_OBJS)
+	$(AR) $(ARFLAGS) $@ $^
 
 
 netsrv: $(OBJS)
-	$(CC) $(CFLAGS) $(addprefix -Wl$(comma),$(LDFLAGS)) -o $@ -Wl,-\( $(LIBS) $(OBJS) -Wl,-\)
+	$(CC) $(CFLAGS) $(addprefix -Wl$(comma),$(LDFLAGS) -Map=$@.map) -o $@ -Wl,-\( $(LIBS) $(OBJS) -Wl,-\)
 
 
-.PHONY: clean
 clean:
 	rm -rf netsrv netsrv.s build
 
