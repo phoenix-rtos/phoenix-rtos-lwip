@@ -93,6 +93,13 @@ static void socket_thread(void *arg)
 		case sockmSetFl:
 			smo->ret = lwip_fcntl(sock, F_SETFL, smi->send.flags);
 			break;
+		case sockmGetOpt:
+			salen = msg.o.size;
+			smo->ret = lwip_getsockopt(sock, smi->opt.level, smi->opt.optname, msg.o.data, &salen) < 0 ? -errno : salen;
+			break;
+		case sockmSetOpt:
+			smo->ret = lwip_setsockopt(sock, smi->opt.level, smi->opt.optname, msg.i.data, msg.i.size) < 0 ? -errno : 0;
+			break;
 		case mtRead:
 			msg.o.io.err = lwip_read(sock, msg.o.data, msg.o.size);
 			break;
