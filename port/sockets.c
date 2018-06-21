@@ -87,6 +87,12 @@ static void socket_thread(void *arg)
 			smo->ret = lwip_getpeername(sock, (void *)smo->sockname.addr, &salen) < 0 ? -errno : 0;
 			smo->sockname.addrlen = salen;
 			break;
+		case mtRead:
+			msg.o.io.err = lwip_read(sock, msg.o.data, msg.o.size);
+			break;
+		case mtWrite:
+			msg.o.io.err = lwip_write(sock, msg.i.data, msg.i.size);
+			break;
 		case mtClose:
 			msg.o.io.err = lwip_close(sock) < 0 ? -errno : 0;
 			msgRespond(port, &msg, respid);
