@@ -27,7 +27,7 @@ struct sock_start {
 };
 
 
-static int wrap_socket(u32 *port, int sock);
+static int wrap_socket(u32 *port, int sock, int flags);
 
 
 static void socket_thread(void *arg)
@@ -62,7 +62,7 @@ static void socket_thread(void *arg)
 		case sockmAccept:
 			err = lwip_accept(sock, (void *)smo->sockname.addr, &salen);
 			if (err >= 0) {
-				err = wrap_socket(&new_port, smo->ret);
+				err = wrap_socket(&new_port, smo->ret, smi->send.flags);
 				smo->ret = err < 0 ? err : new_port;
 			} else {
 				smo->ret = -errno;
@@ -87,6 +87,12 @@ static void socket_thread(void *arg)
 			smo->ret = lwip_getpeername(sock, (void *)smo->sockname.addr, &salen) < 0 ? -errno : 0;
 			smo->sockname.addrlen = salen;
 			break;
+		case sockmGetFl:
+			smo->ret = lwip_fcntl(sock, F_GETFL, 0);
+			break;
+		case sockmSetFl:
+			smo->ret = lwip_fcntl(sock, F_SETFL, smi->send.flags);
+			break;
 		case mtRead:
 			msg.o.io.err = lwip_read(sock, msg.o.data, msg.o.size);
 			break;
@@ -107,10 +113,15 @@ static void socket_thread(void *arg)
 }
 
 
-static int wrap_socket(u32 *port, int sock)
+static int wrap_socket(u32 *port, int sock, int flags)
 {
 	struct sock_start *ss;
 	int err;
+
+	if ((flags & SOCK_NONBLOCK) && (err = lwip_fcntl(sock, F_SETFL, O_NONBLOCK)) < 0) {
+		lwip_close(sock);
+		return err;
+	}
 
 	ss = malloc(sizeof(*ss));
 	if (!ss) {
@@ -155,7 +166,7 @@ static void socketsrv_thread(void *arg)
 			if ((sock = lwip_socket(smi->socket.domain, smi->socket.type, smi->socket.protocol)) < 0)
 				msg.o.lookup.err = -errno;
 			else
-				msg.o.lookup.err = wrap_socket(&msg.o.lookup.res.port, sock);
+				msg.o.lookup.err = wrap_socket(&msg.o.lookup.res.port, sock, smi->socket.type);
 		} else {
 			msg.o.io.err = -EINVAL;
 		}

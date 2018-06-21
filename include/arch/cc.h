@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <endian.h>
+#include <fcntl.h>
 
 
 /* types used by LwIP */
