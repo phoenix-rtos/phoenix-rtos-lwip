@@ -100,6 +100,9 @@ static void socket_thread(void *arg)
 		case sockmSetOpt:
 			smo->ret = lwip_setsockopt(sock, smi->opt.level, smi->opt.optname, msg.i.data, msg.i.size) < 0 ? -errno : 0;
 			break;
+		case sockmShutdown:
+			smo->ret = lwip_shutdown(sock, smi->send.flags) < 0 ? -errno : 0;
+			break;
 		case mtRead:
 			msg.o.io.err = lwip_read(sock, msg.o.data, msg.o.size);
 			break;
