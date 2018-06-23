@@ -12,10 +12,12 @@
 #define PHOENIX_LWIP_CC_H_
 
 
-#include <stdio.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <endian.h>
 #include <fcntl.h>
+#include <netdb.h>
 
 
 /* types used by LwIP */
@@ -62,6 +64,12 @@ void errout(int err, const char *format, ...);
 #else
 #define __constructor__(o) static __attribute__((constructor(o)))
 #endif
+
+
+/* sockets IPC */
+
+#define SA_FAMILY_T_DEFINED
+#define LWIP_RAND() ((u32_t)rand())
 
 
 #endif /* PHOENIX_LWIP_CC_H_ */

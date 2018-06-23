@@ -7,12 +7,17 @@
 #define LWIP_ARP 1
 #define LWIP_ICMP 1
 #define LWIP_DHCP 1
+#define LWIP_DNS 1
 #define LWIP_AUTOIP 1
 #define LWIP_UDP 1
 #define LWIP_TCP 1
 #define LWIP_TCP_KEEPALIVE 1
 #define MEM_LIBC_MALLOC 1
 #define LWIP_ERRNO_INCLUDE <errno.h>
+#define LWIP_DNS_API_DEFINE_ERRORS 0
+#define LWIP_DNS_API_DEFINE_FLAGS 0
+#define LWIP_DNS_API_DECLARE_STRUCTS 0
+#define LWIP_DNS_API_DECLARE_H_ERRNO 0
 
 #if 0
 #define LWIP_DEBUG 1

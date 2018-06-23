@@ -8,6 +8,7 @@
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
+#include <lwip/netdb.h>
 #include <lwip/sockets.h>
 #include <lwip/sys.h>
 
@@ -155,6 +156,7 @@ static void socket_thread(void *arg)
 
 			/* closed */
 			msgRespond(port, &msg, respid);
+			portDestroy(port);
 			return;
 		case mtRead:
 			msg.o.io.err = lwip_read(sock, msg.o.data, msg.o.size);
@@ -165,14 +167,13 @@ static void socket_thread(void *arg)
 		case mtClose:
 			msg.o.io.err = lwip_close(sock) < 0 ? -errno : 0;
 			msgRespond(port, &msg, respid);
+			portDestroy(port);
 			return;
 		default:
 			smo->ret = -EINVAL;
 		}
 		msgRespond(port, &msg, respid);
 	}
-
-	errout(err, "msgRecv(socketsrv)");
 }
 
 
@@ -213,9 +214,82 @@ static int wrap_socket(u32 *port, int sock, int flags)
 }
 
 
+static int do_getnameinfo(const struct sockaddr *addr, socklen_t addrlen, char *host, socklen_t hostsz, char *serv, socklen_t servsz, int flags)
+{
+	errno = ENOSYS;
+	return EAI_SYSTEM;
+}
+
+
+static int do_getaddrinfo(const char *name, const char *serv, const struct addrinfo *hints, void *buf, size_t *buflen)
+{
+	struct addrinfo *res, *ai, *dest;
+	size_t n, addr_needed, str_needed;
+	void *addrdest, *strdest;
+	int err;
+
+	if ((err = lwip_getaddrinfo(name, serv, hints, &res)))
+		return err;
+
+	n = addr_needed = str_needed = 0;
+	for (ai = res; ai; ai = ai->ai_next) {
+		++n;
+		if (ai->ai_addrlen)
+			addr_needed += (ai->ai_addrlen + sizeof(size_t) - 1) & ~(sizeof(size_t) - 1);
+		if (ai->ai_canonname)
+			str_needed += strlen(ai->ai_canonname) + 1;
+	}
+
+	str_needed += n * sizeof(*ai) + addr_needed;
+	if (*buflen < str_needed) {
+		*buflen = str_needed;
+		if (res)
+			lwip_freeaddrinfo(res);
+		return EAI_OVERFLOW;
+	}
+
+	*buflen = str_needed;
+	dest = buf;
+	addrdest = buf + n * sizeof(*ai);
+	strdest = addrdest + addr_needed;
+
+	for (ai = res; ai; ai = ai->ai_next) {
+		dest->ai_flags = ai->ai_flags;
+		dest->ai_family = ai->ai_family;
+		dest->ai_socktype = ai->ai_socktype;
+		dest->ai_protocol = ai->ai_protocol;
+
+		if ((dest->ai_addrlen = ai->ai_addrlen)) {
+			memcpy(addrdest, ai->ai_addr, ai->ai_addrlen);
+			dest->ai_addr = (void *)(addrdest - buf);
+			addrdest += (ai->ai_addrlen + sizeof(size_t) - 1) & ~(sizeof(size_t) - 1);
+		}
+
+		if (ai->ai_canonname) {
+			n = strlen(ai->ai_canonname) + 1;
+			memcpy(strdest, ai->ai_canonname, n);
+			dest->ai_canonname = (void *)(strdest - buf);
+			strdest += n;
+		} else
+			dest->ai_canonname = NULL;
+
+		dest->ai_next = (void *)((void *)(dest + 1) - buf);
+		++dest;
+	}
+
+	if (res)
+		lwip_freeaddrinfo(res);
+
+	return 0;
+}
+
+
 static void socketsrv_thread(void *arg)
 {
+	struct addrinfo hint;
 	unsigned respid;
+	char *node, *serv;
+	size_t sz;
 	msg_t msg;
 	u32 port;
 	int err, sock;
@@ -223,14 +297,44 @@ static void socketsrv_thread(void *arg)
 	port = (unsigned)arg;
 
 	while ((err = msgRecv(port, &msg, &respid)) >= 0) {
-		if (msg.type == sockmSocket) {
-			const sockport_msg_t *smi = (const void *)msg.i.raw;
+		const sockport_msg_t *smi = (const void *)msg.i.raw;
+		sockport_resp_t *smo = (void *)msg.o.raw;
 
+		switch (msg.type) {
+		case sockmSocket:
 			if ((sock = lwip_socket(smi->socket.domain, smi->socket.type, smi->socket.protocol)) < 0)
 				msg.o.lookup.err = -errno;
 			else
 				msg.o.lookup.err = wrap_socket(&msg.o.lookup.res.port, sock, smi->socket.type);
-		} else {
+			break;
+
+		case sockmGetNameInfo:
+			if (msg.i.size != sizeof(size_t) || (sz = *(size_t *)msg.i.data) > msg.o.size) {
+				smo->ret = EAI_SYSTEM;
+				smo->sys.errno = -EINVAL;
+				break;
+			}
+
+			smo->ret = do_getnameinfo((const void *)smi->send.addr, smi->send.addrlen, msg.o.data, sz, msg.o.data + sz, msg.o.size - sz, smi->send.flags);
+			smo->sys.errno = smo->ret == EAI_SYSTEM ? errno : 0;
+			break;
+
+		case sockmGetAddrInfo:
+			node = smi->socket.ai_node_sz ? msg.i.data : NULL;
+			serv = msg.i.size > smi->socket.ai_node_sz ? msg.i.data + smi->socket.ai_node_sz : NULL;
+
+			if (smi->socket.ai_node_sz > msg.i.size || (node && node[smi->socket.ai_node_sz - 1]) || (serv && ((char *)msg.i.data)[msg.i.size - 1])) {
+				smo->ret = EAI_SYSTEM;
+				smo->sys.errno = -EINVAL;
+				break;
+			}
+
+			smo->sys.buflen = msg.o.size;
+			smo->ret = do_getaddrinfo(node, serv, &hint, msg.o.data, &smo->sys.buflen);
+			smo->sys.errno = smo->ret == EAI_SYSTEM ? errno : 0;
+			break;
+
+		default:
 			msg.o.io.err = -EINVAL;
 		}
 
