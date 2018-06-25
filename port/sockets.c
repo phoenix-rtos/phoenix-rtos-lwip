@@ -69,6 +69,26 @@ static int poll_one(int socket, int events, time_t timeout)
 }
 
 
+static const struct sockaddr *sa_convert_lwip_to_sys(const void *sa)
+{
+	// hack warning
+	*(uint16_t *)sa = ((uint8_t *)sa)[1];
+	return sa;
+}
+
+
+static const struct sockaddr *sa_convert_sys_to_lwip(const void *sa, socklen_t salen)
+{
+	uint16_t fam = *(volatile uint16_t *)sa;
+	struct sockaddr *lsa = (void *)sa;
+
+	lsa->sa_len = (uint8_t)salen;
+	lsa->sa_family = (sa_family_t)fam;
+
+	return lsa;
+}
+
+
 static void socket_thread(void *arg)
 {
 	struct sock_start *ss = arg;
@@ -94,10 +114,10 @@ static void socket_thread(void *arg)
 			smo->ret = poll_one(sock, smi->poll.events, smi->poll.timeout);
 			break;
 		case sockmConnect:
-			smo->ret = lwip_connect(sock, (const void *)smi->send.addr, smi->send.addrlen) < 0 ? -errno : 0;
+			smo->ret = lwip_connect(sock, sa_convert_sys_to_lwip(smi->send.addr, smi->send.addrlen), smi->send.addrlen) < 0 ? -errno : 0;
 			break;
 		case sockmBind:
-			smo->ret = lwip_bind(sock, (const void *)smi->send.addr, smi->send.addrlen) < 0 ? -errno : 0;
+			smo->ret = lwip_bind(sock, sa_convert_sys_to_lwip(smi->send.addr, smi->send.addrlen), smi->send.addrlen) < 0 ? -errno : 0;
 			break;
 		case sockmListen:
 			smo->ret = lwip_listen(sock, smi->listen.backlog) < 0 ? -errno : 0;
@@ -105,6 +125,7 @@ static void socket_thread(void *arg)
 		case sockmAccept:
 			err = lwip_accept(sock, (void *)smo->sockname.addr, &salen);
 			if (err >= 0) {
+				sa_convert_lwip_to_sys(smo->sockname.addr);
 				err = wrap_socket(&new_port, smo->ret, smi->send.flags);
 				smo->ret = err < 0 ? err : new_port;
 			} else {
@@ -112,7 +133,8 @@ static void socket_thread(void *arg)
 			}
 			break;
 		case sockmSend:
-			smo->ret = lwip_sendto(sock, msg.i.data, msg.i.size, smi->send.flags, (const void *)smi->send.addr, smi->send.addrlen);
+			smo->ret = lwip_sendto(sock, msg.i.data, msg.i.size, smi->send.flags,
+				sa_convert_sys_to_lwip(smi->send.addr, smi->send.addrlen), smi->send.addrlen);
 			if (smo->ret < 0)
 				smo->ret = -errno;
 			break;
@@ -120,14 +142,20 @@ static void socket_thread(void *arg)
 			smo->ret = lwip_recvfrom(sock, msg.o.data, msg.o.size, smi->send.flags, (void *)smo->sockname.addr, &salen);
 			if (smo->ret < 0)
 				smo->ret = -errno;
+			else
+				sa_convert_lwip_to_sys(smo->sockname.addr);
 			smo->sockname.addrlen = salen;
 			break;
 		case sockmGetSockName:
 			smo->ret = lwip_getsockname(sock, (void *)smo->sockname.addr, &salen) < 0 ? -errno : 0;
+			if (smo->ret >= 0)
+				sa_convert_lwip_to_sys(smo->sockname.addr);
 			smo->sockname.addrlen = salen;
 			break;
 		case sockmGetPeerName:
 			smo->ret = lwip_getpeername(sock, (void *)smo->sockname.addr, &salen) < 0 ? -errno : 0;
+			if (smo->ret >= 0)
+				sa_convert_lwip_to_sys(smo->sockname.addr);
 			smo->sockname.addrlen = salen;
 			break;
 		case sockmGetFl:
@@ -261,6 +289,7 @@ static int do_getaddrinfo(const char *name, const char *serv, const struct addri
 
 		if ((dest->ai_addrlen = ai->ai_addrlen)) {
 			memcpy(addrdest, ai->ai_addr, ai->ai_addrlen);
+			sa_convert_lwip_to_sys(addrdest);
 			dest->ai_addr = (void *)(addrdest - buf);
 			addrdest += (ai->ai_addrlen + sizeof(size_t) - 1) & ~(sizeof(size_t) - 1);
 		}
@@ -273,7 +302,7 @@ static int do_getaddrinfo(const char *name, const char *serv, const struct addri
 		} else
 			dest->ai_canonname = NULL;
 
-		dest->ai_next = (void *)((void *)(dest + 1) - buf);
+		dest->ai_next = ai->ai_next ? (void *)((void *)(dest + 1) - buf) : NULL;
 		++dest;
 	}
 
@@ -286,7 +315,7 @@ static int do_getaddrinfo(const char *name, const char *serv, const struct addri
 
 static void socketsrv_thread(void *arg)
 {
-	struct addrinfo hint;
+	struct addrinfo hint = { 0 };
 	unsigned respid;
 	char *node, *serv;
 	size_t sz;
@@ -315,7 +344,7 @@ static void socketsrv_thread(void *arg)
 				break;
 			}
 
-			smo->ret = do_getnameinfo((const void *)smi->send.addr, smi->send.addrlen, msg.o.data, sz, msg.o.data + sz, msg.o.size - sz, smi->send.flags);
+			smo->ret = do_getnameinfo(sa_convert_sys_to_lwip(smi->send.addr, smi->send.addrlen), smi->send.addrlen, msg.o.data, sz, msg.o.data + sz, msg.o.size - sz, smi->send.flags);
 			smo->sys.errno = smo->ret == EAI_SYSTEM ? errno : 0;
 			break;
 
@@ -329,6 +358,10 @@ static void socketsrv_thread(void *arg)
 				break;
 			}
 
+			hint.ai_flags = smi->socket.flags;
+			hint.ai_family = smi->socket.domain;
+			hint.ai_socktype = smi->socket.type;
+			hint.ai_protocol = smi->socket.protocol;
 			smo->sys.buflen = msg.o.size;
 			smo->ret = do_getaddrinfo(node, serv, &hint, msg.o.data, &smo->sys.buflen);
 			smo->sys.errno = smo->ret == EAI_SYSTEM ? errno : 0;

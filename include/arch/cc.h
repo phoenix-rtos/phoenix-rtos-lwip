@@ -66,9 +66,8 @@ void errout(int err, const char *format, ...);
 #endif
 
 
-/* sockets IPC */
+/* randomness */
 
-#define SA_FAMILY_T_DEFINED
 #define LWIP_RAND() ((u32_t)rand())
 
 
