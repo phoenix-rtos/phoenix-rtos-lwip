@@ -166,6 +166,8 @@ size_t net_refillRx(net_bufdesc_ring_t *ring, size_t ethpad)
 		if (!p)
 			break;
 
+		pbuf_header_force(p, ethpad - ETH_PAD_SIZE);
+
 		ring->bufp[i] = p;
 		ring->ops->fillRxDesc(ring, i, pa, sz, 0);
 
