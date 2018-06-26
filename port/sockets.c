@@ -13,15 +13,16 @@
 #include <lwip/sys.h>
 
 #include <errno.h>
+#include <poll.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/poll.h>
+#include <sys/file.h>
 #include <sys/sockport.h>
 #include <sys/threads.h>
 
 
 #define SOCKTHREAD_PRIO 4
-#define SOCKTHREAD_STACKSZ (SIZE_PAGE/4)
+#define SOCKTHREAD_STACKSZ (SIZE_PAGE/2)
 
 
 struct sock_start {
@@ -30,39 +31,46 @@ struct sock_start {
 };
 
 
+struct poll_state {
+	int socket;
+	fd_set rd, wr, ex;
+};
+
+
 static int wrap_socket(u32 *port, int sock, int flags);
 
 
 // oh crap, there is no lwip_poll() ...
-static int poll_one(int socket, int events, time_t timeout)
+static int poll_one(struct poll_state *p, int events, time_t timeout)
 {
 	struct timeval to;
-	fd_set rd, wr, ex;
 	int err;
 
-	FD_ZERO(&rd);
-	FD_ZERO(&wr);
-	FD_ZERO(&ex);
-
 	if (events & POLLIN)
-		FD_SET(socket, &rd);
+		FD_SET(p->socket, &p->rd);
+	else
+		FD_CLR(p->socket, &p->rd);
 	if (events & POLLOUT)
-		FD_SET(socket, &wr);
+		FD_SET(p->socket, &p->wr);
+	else
+		FD_CLR(p->socket, &p->wr);
 	if (events & POLLPRI)
-		FD_SET(socket, &ex);
+		FD_SET(p->socket, &p->ex);
+	else
+		FD_CLR(p->socket, &p->ex);
 
 	to.tv_sec = timeout / 1000000;
 	to.tv_usec = timeout % 1000000;
 
-	if ((err = lwip_select(socket + 1, &rd, &wr, &ex, timeout >= 0 ? &to : NULL)) < 0)
-		return -errno;
+	if ((err = lwip_select(p->socket + 1, &p->rd, &p->wr, &p->ex, timeout >= 0 ? &to : NULL)) <= 0)
+		return err ? -errno : 0;
 
 	events = 0;
-	if (FD_ISSET(socket, &rd))
+	if (FD_ISSET(p->socket, &p->rd))
 		events |= POLLIN;
-	if (FD_ISSET(socket, &wr))
+	if (FD_ISSET(p->socket, &p->wr))
 		events |= POLLOUT;
-	if (FD_ISSET(socket, &ex))
+	if (FD_ISSET(p->socket, &p->ex))
 		events |= POLLPRI;
 
 	return events;
@@ -94,6 +102,7 @@ static void socket_thread(void *arg)
 	struct sock_start *ss = arg;
 	unsigned respid;
 	socklen_t salen;
+	struct poll_state polls = {0};
 	msg_t msg;
 	u32 port = ss->port;
 	int sock = ss->sock;
@@ -101,6 +110,8 @@ static void socket_thread(void *arg)
 	int err;
 
 	free(ss);
+
+	polls.socket = sock;
 
 	while ((err = msgRecv(port, &msg, &respid)) >= 0) {
 		const sockport_msg_t *smi = (const void *)msg.i.raw;
@@ -110,9 +121,6 @@ static void socket_thread(void *arg)
 		salen = sizeof(smo->sockname.addr);
 
 		switch (msg.type) {
-		case sockmPoll:
-			smo->ret = poll_one(sock, smi->poll.events, smi->poll.timeout);
-			break;
 		case sockmConnect:
 			smo->ret = lwip_connect(sock, sa_convert_sys_to_lwip(smi->send.addr, smi->send.addrlen), smi->send.addrlen) < 0 ? -errno : 0;
 			break;
@@ -191,6 +199,12 @@ static void socket_thread(void *arg)
 			break;
 		case mtWrite:
 			msg.o.io.err = lwip_write(sock, msg.i.data, msg.i.size);
+			break;
+		case mtGetAttr:
+			if (msg.i.attr.type == atPollStatus)
+				msg.o.attr.val = poll_one(&polls, msg.i.attr.val, 0);
+			else
+				msg.o.attr.val = -EINVAL;
 			break;
 		case mtClose:
 			msg.o.io.err = lwip_close(sock) < 0 ? -errno : 0;
