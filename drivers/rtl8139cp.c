@@ -58,9 +58,6 @@ typedef struct
 } rtl_priv_t;
 
 
-static const char zeros[64];
-
-
 static void rtl_printf(rtl_priv_t *state, const char *format, ...)
 {
 	char buf[256];
@@ -343,14 +340,17 @@ static err_t rtl_netifOutput(struct netif *netif, struct pbuf *p)
 {
 	rtl_priv_t *state = netif->state;
 	size_t nf;
+	int do_unref = 0;
 
 	if (ETH_PAD_SIZE)
 		pbuf_header(p, -ETH_PAD_SIZE); /* drop the padding word */
 
 	if (p->tot_len < 60) {
-		struct pbuf *q = pbuf_alloc(PBUF_RAW, 60 - p->tot_len, PBUF_ROM);
-		q->payload = (void *)zeros;
-		pbuf_cat(p, q);
+		struct pbuf *q = pbuf_alloc(PBUF_RAW, 60 + ETH_PAD_SIZE, PBUF_RAM);
+		pbuf_header(q, -ETH_PAD_SIZE);
+		pbuf_copy(q, p);
+		p = q;
+		do_unref = 1;
 	}
 
 	mutexLock(state->tx_lock);
@@ -358,6 +358,9 @@ static err_t rtl_netifOutput(struct netif *netif, struct pbuf *p)
 	if (nf)
 		state->mmio->TPPOLL = RTL_POLL_NPQ;
 	mutexUnlock(state->tx_lock);
+
+	if (do_unref)
+		pbuf_free(p);
 
 	return nf ? ERR_OK : ERR_BUF;
 }
