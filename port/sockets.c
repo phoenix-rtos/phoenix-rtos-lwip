@@ -126,7 +126,7 @@ static void socket_thread(void *arg)
 			err = lwip_accept(sock, (void *)smo->sockname.addr, &salen);
 			if (err >= 0) {
 				sa_convert_lwip_to_sys(smo->sockname.addr);
-				err = wrap_socket(&new_port, smo->ret, smi->send.flags);
+				err = wrap_socket(&new_port, err, smi->send.flags);
 				smo->ret = err < 0 ? err : new_port;
 			} else {
 				smo->ret = -errno;
