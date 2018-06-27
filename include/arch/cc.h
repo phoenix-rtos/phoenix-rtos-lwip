@@ -30,6 +30,7 @@
 #define S32_F "d"
 #define X32_F "x"
 #define SZT_F "zu"
+#define SOCKLEN_T_DEFINED 1
 
 
 /* host endianness */
