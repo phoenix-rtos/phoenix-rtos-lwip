@@ -179,6 +179,8 @@ static int ephy_config(eth_phy_state_t *phy, char *cfg)
 	if (!*cfg)
 		return -EINVAL;
 
+	printf("ephy: config: %s\n", cfg);
+
 	phy->addr = strtoul(cfg, &p, 0);
 	if (*p == '.') {
 		phy->bus = phy->addr;

@@ -120,6 +120,8 @@ int create_netif(char *conf)
 	if (arg)
 		*arg++ = 0;
 
+	printf("netif: driver '%s' args '%s'\n", conf, arg);
+
 	for (drv = net_driver_list; drv != NULL; drv = drv->next)
 		if (!strcmp(conf, drv->name))
 			break;
