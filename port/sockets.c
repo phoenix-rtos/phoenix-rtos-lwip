@@ -345,7 +345,8 @@ static void socketsrv_thread(void *arg)
 
 		switch (msg.type) {
 		case sockmSocket:
-			if ((sock = lwip_socket(smi->socket.domain, smi->socket.type, smi->socket.protocol)) < 0)
+			sock = smi->socket.type & ~(SOCK_NONBLOCK|SOCK_CLOEXEC);
+			if ((sock = lwip_socket(smi->socket.domain, sock, smi->socket.protocol)) < 0)
 				msg.o.lookup.err = -errno;
 			else
 				msg.o.lookup.err = wrap_socket(&msg.o.lookup.res.port, sock, smi->socket.type);
