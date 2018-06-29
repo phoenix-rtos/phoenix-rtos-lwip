@@ -681,7 +681,7 @@ static int enet_pinConfig(enet_priv_t *state)
 		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_enet2_tx0, 1, 2, 1, 1, 0, 2, 6, 0 } },
 		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_enet2_tx1, 1, 2, 1, 1, 0, 2, 6, 0 } },
 		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_enet2_txen, 1, 2, 1, 1, 0, 2, 6, 0 } },
-		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_enet2_txclk, 1, 2, 1, 1, 0, 0, 6, 1 } },
+		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_enet2_txclk, 1, 0, 0, 0, 0, 0, 6, 1 } },
 		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_enet2_rx0, 0, 0 } },
 		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_enet2_rx1, 0, 0 } },
 		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_enet2_rxen, 0, 0 } },
