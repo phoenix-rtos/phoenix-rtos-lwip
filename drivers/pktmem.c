@@ -70,6 +70,7 @@ static void net_freePktBuf(void *p)
 
 	old_mask = ph->free_mask;
 	ph->free_mask |= 1 << which;
+	++pkt_bufs_free;
 
 	if (old_mask) {
 		if (!TRUE_LRU || pkt_buf_lru.next == ph)
