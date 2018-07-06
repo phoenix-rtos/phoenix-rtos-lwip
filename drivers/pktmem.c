@@ -104,7 +104,7 @@ static ssize_t net_allocPktBuf(void **bufp)
 		SYS_ARCH_UNPROTECT(old_level);
 
 		ph = dmammap(PAGE_SIZE);
-		if (ph == MAP_FAILED) {
+		if (!ph) {
 			printf("mmap: no memory?\n");
 			return 0;
 		}
@@ -139,22 +139,24 @@ struct pbuf *net_allocDMAPbuf(addr_t *pa, size_t sz)
 	size_t bsz;
 
 	bsz = net_allocPktBuf(&data);
+	if (!bsz)
+		return NULL;
+
 	*pa = mphys(data, &bsz);
 
-	if (bsz < sz) {
-		if (bsz)
-			net_freePktBuf(data);
-		return NULL;
-	}
+	if (bsz < sz)
+		goto free_ret;
 
 	pc = mem_malloc(sizeof(*pc));
-	if (!pc) {
-		net_freePktBuf(data);
-		return NULL;
-	}
+	if (!pc)
+		goto free_ret;
 
 	pc->custom_free_function = net_freeDMAPbuf;
 	return pbuf_alloced_custom(PBUF_RAW, sz, PBUF_REF, pc, data, bsz);
+
+free_ret:
+	net_freePktBuf(data);
+	return NULL;
 }
 
 

@@ -70,7 +70,7 @@ int net_initRings(net_bufdesc_ring_t *rings, const size_t *sizes, size_t nrings,
 		return -ENOMEM;
 
 	p = dmammap(sz);
-	if (p == MAP_FAILED) {
+	if (!p) {
 		free(bufp);
 		return -ENOMEM;
 	}

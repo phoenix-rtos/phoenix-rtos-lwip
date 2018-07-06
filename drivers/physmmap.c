@@ -15,6 +15,8 @@
 
 void *dmammap(size_t sz)
 {
+	void *p;
+
 	// NOTE: eh, apparently it's better to do this in every app than in one kernel.
 	// cf. 06b66f4c73352a9e53c14d3f9861933d1acf18c3
 	sz = (sz + SIZE_PAGE - 1) & ~(SIZE_PAGE - 1);
@@ -22,7 +24,8 @@ void *dmammap(size_t sz)
 	if (!sz)
 		return NULL;
 
-	return mmap(NULL, sz, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_UNCACHED, NULL, 0);
+	p = mmap(NULL, sz, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_UNCACHED, NULL, 0);
+	return p != MAP_FAILED ? p : NULL;
 }
 
 
