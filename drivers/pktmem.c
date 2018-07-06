@@ -27,6 +27,7 @@
 #define PKT_BUF_SIZE (2048 - CACHE_LINE_SIZE)
 #define PKT_BUF_CNT	(size_t)((PAGE_SIZE - CACHE_LINE_SIZE) / PKT_BUF_SIZE)
 #define PKT_BUF_IDX	11	// log2(PAGE_SIZE) - ceil(log2(PKT_BUF_CNT))
+#define PKT_BUF_CACHE_SIZE 16
 
 
 typedef struct _buf_page_head {
@@ -71,6 +72,14 @@ static void net_freePktBuf(void *p)
 	old_mask = ph->free_mask;
 	ph->free_mask |= 1 << which;
 	++pkt_bufs_free;
+
+	if (pkt_bufs_free > PKT_BUF_CACHE_SIZE && ph->free_mask == (1 << PKT_BUF_CNT) - 1) {
+		if (old_mask)
+			net_listDel(ph);
+		munmap(ph, PAGE_SIZE);
+		pkt_bufs_free -= PKT_BUF_CNT;
+		return;
+	}
 
 	if (old_mask) {
 		if (!TRUE_LRU || pkt_buf_lru.next == ph)
