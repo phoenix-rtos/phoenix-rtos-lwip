@@ -49,11 +49,11 @@ u32_t sys_arch_sem_wait(sys_sem_t *sem, u32_t timeout)
 	time_t to, now;
 
 	to = timeout * 1000;
-	gettime(&now);
+	gettime(&now, NULL);
 
 	switch (semaphoreDown(sem, to)) {
 	case 0:
-		gettime(&to);
+		gettime(&to, NULL);
 		return (to - now + 499) / 1000;
 	case -ETIME:
 	default:

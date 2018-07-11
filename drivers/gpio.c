@@ -80,7 +80,7 @@ int gpio_wait(gpio_info_t *gp, int active, time_t timeout)
 	if (gp->flags & GPIO_INVERTED)
 		active = !active;
 
-	gettime(&now);
+	gettime(&now, NULL);
 	when = now + timeout;
 
 	for (;;) {
@@ -89,7 +89,7 @@ int gpio_wait(gpio_info_t *gp, int active, time_t timeout)
 			return 0;
 
 		if (timeout) {
-			gettime(&now);
+			gettime(&now, NULL);
 			if (now >= when)
 				return -ETIME;
 			now = when - now;

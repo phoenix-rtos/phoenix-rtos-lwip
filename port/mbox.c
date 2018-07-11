@@ -145,7 +145,7 @@ u32_t sys_arch_mbox_fetch(sys_mbox_t *mbox, void **msg, u32_t timeout)
 	time_t since, now, when;
 	int found = 1;
 
-	gettime(&now);
+	gettime(&now, NULL);
 	since = now;
 	when = now + timeout;
 
@@ -156,7 +156,7 @@ u32_t sys_arch_mbox_fetch(sys_mbox_t *mbox, void **msg, u32_t timeout)
 		if (!timeout)
 			continue;
 
-		gettime(&now);
+		gettime(&now, NULL);
 		if (now >= when) {
 			found = 0;
 			break;
@@ -169,6 +169,6 @@ u32_t sys_arch_mbox_fetch(sys_mbox_t *mbox, void **msg, u32_t timeout)
 	if (!found)
 		return SYS_ARCH_TIMEOUT;
 
-	gettime(&now);
+	gettime(&now, NULL);
 	return (now - since) / 1000;
 }

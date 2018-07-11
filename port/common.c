@@ -45,7 +45,7 @@ uint32_t sys_now(void)
 {
 	time_t now;
 
-	gettime(&now);
+	gettime(&now, NULL);
 
 	return now / 1000;
 }
