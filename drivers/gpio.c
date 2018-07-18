@@ -17,6 +17,7 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <sys/time.h>
 
 
 #define GPIO_IMX6_ULL
