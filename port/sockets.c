@@ -404,9 +404,8 @@ void init_lwip_sockets(void)
 	if ((err = portCreate(&oid.port)) < 0)
 		errout(err, "portCreate(socketsrv)");
 
-	if ((err = portRegister(oid.port, PATH_SOCKSRV, &oid))) {
-		portDestroy(oid.port);
-		errout(err, "portRegister(%s)", PATH_SOCKSRV);
+	if ((err = create_dev(&oid, PATH_SOCKSRV))) {
+		errout(err, "create_dev(%s)", PATH_SOCKSRV);
 	}
 
 	if ((err = sys_thread_opt_new("socketsrv", socketsrv_thread, (void *)oid.port, SOCKTHREAD_STACKSZ, SOCKTHREAD_PRIO, NULL))) {
