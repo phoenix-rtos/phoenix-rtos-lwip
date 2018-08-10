@@ -219,7 +219,6 @@ static void socket_thread(void *arg)
 
 	portDestroy(ss->port);
 	lwip_close(ss->sock);
-	free(ss);
 }
 
 
