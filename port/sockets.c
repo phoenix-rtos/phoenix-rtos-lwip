@@ -216,6 +216,10 @@ static void socket_thread(void *arg)
 		}
 		msgRespond(port, &msg, respid);
 	}
+
+	portDestroy(ss->port);
+	lwip_close(ss->sock);
+	free(ss);
 }
 
 
