@@ -196,9 +196,13 @@ static void socket_thread(void *arg)
 			return;
 		case mtRead:
 			msg.o.io.err = lwip_read(sock, msg.o.data, msg.o.size);
+			if (msg.o.io.err < 0)
+				msg.o.io.err = -errno;
 			break;
 		case mtWrite:
 			msg.o.io.err = lwip_write(sock, msg.i.data, msg.i.size);
+			if (msg.o.io.err < 0)
+				msg.o.io.err = -errno;
 			break;
 		case mtGetAttr:
 			if (msg.i.attr.type == atPollStatus)
