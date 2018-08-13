@@ -21,7 +21,7 @@
 #include <sys/threads.h>
 
 
-#define EPHY_KSZ8081RND
+//#define EPHY_KSZ8081RND
 
 
 static uint16_t ephy_reg_read(eth_phy_state_t *phy, u16 reg)
