@@ -37,7 +37,7 @@ LWIP_EXCLUDE := netif/slipif.c
 LWIP_SRCS := $(filter-out $(addprefix $(LWIPDIR)/,$(LWIP_EXCLUDE)),$(LWIPNOAPPSFILES))
 LWIP_OBJS := $(patsubst $(LWIPDIR)/%.c,build/lwip/%.o,$(LWIP_SRCS))
 
-build/lwip/%.o: $(LWIPDIR)/%.c include/lwipopts.h
+build/lwip/%.o: $(LWIPDIR)/%.c include/lwipopts.h $(filter clean,$(MAKECMDGOALS))
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
@@ -51,7 +51,7 @@ build/liblwip.a: $(LWIP_OBJS)
 PORT_SRCS := $(wildcard port/*.c)
 PORT_OBJS := $(patsubst %.c,build/%.o,$(PORT_SRCS))
 
-build/port/%.o: port/%.c
+build/port/%.o: port/%.c $(filter clean,$(MAKECMDGOALS))
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
@@ -66,7 +66,7 @@ NDRV_SRCS := $(addprefix drivers/,$(sort $(foreach v,common $(NET_DRIVERS),$(DRI
 NDRV_OBJS := $(patsubst %.c,build/%.o,$(NDRV_SRCS))
 CFLAGS += $(addprefix -DHAVE_DRIVER_,$(sort $(NET_DRIVERS)))
 
-build/drivers/%.o: drivers/%.c
+build/drivers/%.o: drivers/%.c $(filter clean,$(MAKECMDGOALS))
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
