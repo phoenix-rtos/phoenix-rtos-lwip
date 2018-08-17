@@ -141,11 +141,12 @@ u32_t sys_arch_mbox_tryfetch(sys_mbox_t *mbox, void **msg)
 }
 
 
-u32_t sys_arch_mbox_fetch(sys_mbox_t *mbox, void **msg, u32_t timeout)
+u32_t sys_arch_mbox_fetch(sys_mbox_t *mbox, void **msg, u32_t timeout_ms)
 {
-	time_t since, now, when;
+	time_t since, now, when, timeout;
 	int found = 1;
 
+	timeout = timeout_ms * 1000;
 	gettime(&now, NULL);
 	since = now;
 	when = now + timeout;
