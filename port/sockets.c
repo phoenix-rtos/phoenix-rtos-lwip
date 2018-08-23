@@ -19,6 +19,7 @@
 #include <sys/file.h>
 #include <sys/sockport.h>
 #include <sys/threads.h>
+#include <posix/utils.h>
 
 
 #define SOCKTHREAD_PRIO 4
