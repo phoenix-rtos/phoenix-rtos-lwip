@@ -264,10 +264,31 @@ static int wrap_socket(u32 *port, int sock, int flags)
 }
 
 
-static int do_getnameinfo(const struct sockaddr *addr, socklen_t addrlen, char *host, socklen_t hostsz, char *serv, socklen_t servsz, int flags)
+static int do_getnameinfo(const struct sockaddr *sa, socklen_t addrlen, char *host, socklen_t hostsz, char *serv, socklen_t servsz, int flags)
 {
-	errno = ENOSYS;
-	return EAI_SYSTEM;
+
+	// TODO: implement real netdb (for now always return the IP representation)
+	if (sa == NULL)
+		return EAI_FAIL;
+
+	if (sa->sa_family == AF_INET) {
+		struct sockaddr_in *sa_in = (struct sockaddr_in *)sa;
+
+		if (host != NULL) {
+			snprintf(host, hostsz, "%u.%u.%u.%u", (unsigned char)sa->sa_data[2], (unsigned char)sa->sa_data[3],
+				(unsigned char)sa->sa_data[4], (unsigned char)sa->sa_data[5]);
+			host[hostsz - 1] = '\0';
+		}
+
+		if (serv != NULL) {
+			snprintf(serv, servsz, "%u", ntohs(sa_in->sin_port));
+			serv[servsz - 1] = '\0';
+		}
+
+		return 0;
+	}
+
+	return EAI_FAMILY;
 }
 
 
@@ -371,6 +392,8 @@ static void socketsrv_thread(void *arg)
 
 			smo->ret = do_getnameinfo(sa_convert_sys_to_lwip(smi->send.addr, smi->send.addrlen), smi->send.addrlen, msg.o.data, sz, msg.o.data + sz, msg.o.size - sz, smi->send.flags);
 			smo->sys.errno = smo->ret == EAI_SYSTEM ? errno : 0;
+			smo->nameinfo.hostlen = strlen(msg.o.data) + 1;
+			smo->nameinfo.servlen = strlen(msg.o.data + sz) + 1;
 			break;
 
 		case sockmGetAddrInfo:
