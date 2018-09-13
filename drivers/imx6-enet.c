@@ -64,7 +64,6 @@ typedef struct
 	net_bufdesc_ring_t rx, tx;
 
 	addr_t devphys;
-	struct eth_addr mac __attribute__((aligned(4)));
 	u32 mscr;
 
 	char name[32];
@@ -192,6 +191,22 @@ static int enet_readFusedMac(u32 *buf)
 	return 0;
 }
 
+static u32 enet_readCpuId(void)
+{
+	volatile u32 *va = physmmap(0x21bc000, 0x1000);
+	u32 res = 0;
+
+	if (va == MAP_FAILED)
+		return 0;
+
+	/* use CFG1: wafer no + x/y coordinate */
+	res = va[0x100 + 4 * 0x02];
+
+	physunmap(va, 0x1000);
+
+	return res;
+}
+
 
 static inline u8 get_byte(u32 v, int i)
 {
@@ -234,9 +249,13 @@ static void enet_readCardMac(enet_priv_t *state)
 		mac[5] = get_byte(buf[1], 2);
 	}
 
-	if (eth_addr_cmp(&state->mac, &zero_eth)) {
+	if (memcmp(mac, &zero_eth.addr, ETH_HWADDR_LEN) == 0) {
+		u32 cpuId = enet_readCpuId();
 		mac[0] = 0x02;
-		mac[1] = mac[2] = mac[3] = mac[4] = 0;
+		mac[1] = (cpuId >> 24) & 0xFF;
+		mac[2] = (cpuId >> 16) & 0xFF;
+		mac[3] = (cpuId >>  8) & 0xFF;
+		mac[4] = (cpuId >>  0) & 0xFF;
 		mac[5] = state->devphys >> 16;
 	}
 
@@ -247,7 +266,7 @@ static void enet_readCardMac(enet_priv_t *state)
 
 static void enet_showCardId(enet_priv_t *state)
 {
-	u8 *mac = state->mac.addr;
+	u8 *mac = (void *)&state->netif->hwaddr;
 	enet_printf(state, "MAC: %02x:%02x:%02x:%02x:%02x:%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 }
 
