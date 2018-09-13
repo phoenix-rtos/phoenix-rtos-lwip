@@ -11,6 +11,7 @@
 #include <lwip/netdb.h>
 #include <lwip/sockets.h>
 #include <lwip/sys.h>
+#include <lwip/netif.h>
 
 #include <errno.h>
 #include <poll.h>
@@ -18,6 +19,9 @@
 #include <string.h>
 #include <sys/file.h>
 #include <sys/sockport.h>
+#include <sys/sockios.h>
+#include <net/if.h>
+#include <net/if_arp.h>
 #include <sys/threads.h>
 #include <posix/utils.h>
 
@@ -39,6 +43,7 @@ struct poll_state {
 
 
 static int wrap_socket(u32 *port, int sock, int flags);
+static int socket_ioctl(int sock, unsigned long request, const void* in_data, void* out_data);
 
 
 // oh crap, there is no lwip_poll() ...
@@ -216,6 +221,16 @@ static void socket_thread(void *arg)
 			msgRespond(port, &msg, respid);
 			portDestroy(port);
 			return;
+		case mtDevCtl: { /* ioctl */
+			unsigned long request;
+			void *out_data = NULL;
+			const void *in_data = ioctl_unpackEx(&msg, &request, NULL, &out_data);
+
+			int err = socket_ioctl(sock, request, in_data, out_data);
+			ioctl_setResponseErr(&msg, request, err);
+
+			break;
+		}
 		default:
 			smo->ret = -EINVAL;
 		}
@@ -261,6 +276,320 @@ static int wrap_socket(u32 *port, int sock, int flags)
 	}
 
 	return EOK;
+}
+
+static int socket_ioctl(int sock, unsigned long request, const void* in_data, void* out_data)
+{
+
+#if 0
+	printf("ioctl(type=0x%02x, cmd=0x%02x, size=%u, dev=%s)\n", (uint8_t)(request >> 8) & 0xFF, (uint8_t)request & 0xFF,
+			IOCPARM_LEN(request), ((struct ifreq *) out_data)->ifr_name);
+#endif
+	switch (request) {
+	case FIONREAD:
+		/* implemented in LWiP socket layer */
+		return lwip_ioctl(sock, request, out_data);
+
+	case FIONBIO:
+		/* implemented in LWiP socket layer */
+		return lwip_ioctl(sock, request, out_data);
+
+	case SIOCGIFNAME: {
+		struct ifreq *ifreq = (struct ifreq *) out_data;
+		struct netif *it;
+		for (it = netif_list; it != NULL; it = it->next) {
+			if (it->num == ifreq->ifr_ifindex) {
+				strncpy(ifreq->ifr_name, it->name, IFNAMSIZ);
+				return EOK;
+			}
+		}
+
+		return -ENXIO;
+	}
+
+	case SIOCGIFINDEX: {
+			struct ifreq *ifreq = (struct ifreq *) out_data;
+			struct netif *interface = netif_find(ifreq->ifr_name);
+			if (interface == NULL)
+				return -ENXIO;
+
+			ifreq->ifr_ifindex = interface->num;
+		}
+
+		return EOK;
+
+	case SIOCGIFFLAGS: {
+		/*
+		These flags are not supported yet:
+		IFF_DEBUG         Internal debugging flag.
+		IFF_POINTOPOINT   Interface is a point-to-point link.
+		IFF_RUNNING       Resources allocated.
+		IFF_NOARP         No arp protocol, L2 destination address not set.
+		IFF_PROMISC       Interface is in promiscuous mode.
+		IFF_NOTRAILERS    Avoid use of trailers.
+		IFF_ALLMULTI      Receive all multicast packets.
+		IFF_MASTER        Master of a load balancing bundle.
+		IFF_SLAVE         Slave of a load balancing bundle.
+		IFF_PORTSEL       Is able to select media type via ifmap.
+		IFF_AUTOMEDIA     Auto media selection active.
+		IFF_DYNAMIC       The addresses are lost when the interface goes down.
+		IFF_LOWER_UP      Driver signals L1 up (since Linux 2.6.17)
+		IFF_DORMANT       Driver signals dormant (since Linux 2.6.17)
+		IFF_ECHO          Echo sent packets (since Linux 2.6.25)
+		*/
+
+		struct ifreq *ifreq = (struct ifreq *) out_data;
+		struct netif *interface = netif_find(ifreq->ifr_name);
+		if (interface == NULL)
+			return -ENXIO;
+
+		ifreq->ifr_flags = 0;
+		ifreq->ifr_flags |= netif_is_up(interface) ? IFF_UP : 0;
+		ifreq->ifr_flags |= ip_addr_isloopback(&interface->ip_addr) ? IFF_LOOPBACK : 0;
+		ifreq->ifr_flags |= (interface->flags & NETIF_FLAG_IGMP) ? IFF_MULTICAST : 0;
+		ifreq->ifr_flags |= IFF_BROADCAST;
+
+		return EOK;
+	}
+	case SIOCSIFFLAGS: {
+		struct ifreq *ifreq = (struct ifreq *) in_data;
+		struct netif *interface = netif_find(ifreq->ifr_name);
+		if (interface == NULL)
+			return -ENXIO;
+
+		// only IFF_UP flag supported
+		if ((ifreq->ifr_flags & IFF_UP) && !netif_is_up(interface)) {
+			netif_set_up(interface);
+		}
+		if (!(ifreq->ifr_flags & IFF_UP) && netif_is_up(interface)) {
+			netif_set_down(interface);
+		}
+
+		return EOK;
+	}
+
+	case SIOCGIFADDR:
+	case SIOCGIFNETMASK:
+	case SIOCGIFBRDADDR:
+	case SIOCGIFDSTADDR: {
+		struct ifreq *ifreq = (struct ifreq *) out_data;
+		struct netif *interface = netif_find(ifreq->ifr_name);
+		if (interface == NULL)
+			return -ENXIO;
+
+		struct sockaddr_in *sin = NULL;
+		switch (request) {
+		case SIOCGIFADDR:
+			sin = (struct sockaddr_in *) &ifreq->ifr_addr;
+			sin->sin_addr.s_addr = interface->ip_addr.addr;
+			break;
+		case SIOCGIFNETMASK:
+			sin = (struct sockaddr_in *) &ifreq->ifr_netmask;
+			sin->sin_addr.s_addr = interface->netmask.addr;
+			break;
+		case SIOCGIFBRDADDR:
+			sin = (struct sockaddr_in *) &ifreq->ifr_broadaddr;
+			sin->sin_addr.s_addr = interface->ip_addr.addr | ~(interface->netmask.addr);
+			break;
+		case SIOCGIFDSTADDR:
+			return -EOPNOTSUPP;
+		}
+
+		return EOK;
+	}
+
+	case SIOCSIFADDR:
+	case SIOCSIFNETMASK:
+	case SIOCSIFBRDADDR:
+	case SIOCSIFDSTADDR: {
+		struct ifreq *ifreq = (struct ifreq *) in_data;
+		struct netif *interface = netif_find(ifreq->ifr_name);
+		ip_addr_t ipaddr;
+		if (interface == NULL)
+			return -ENXIO;
+
+		struct sockaddr_in *sin;
+		switch (request) {
+		case SIOCSIFADDR:
+			sin = (struct sockaddr_in *) &ifreq->ifr_addr;
+			ipaddr.addr = sin->sin_addr.s_addr;
+			netif_set_ipaddr(interface, &ipaddr);
+			break;
+		case SIOCSIFNETMASK:
+			sin = (struct sockaddr_in *) &ifreq->ifr_netmask;
+			ipaddr.addr = sin->sin_addr.s_addr;
+			netif_set_netmask(interface, &ipaddr);
+			break;
+		case SIOCSIFBRDADDR:
+			return -EOPNOTSUPP;
+		case SIOCSIFDSTADDR:
+			return -EOPNOTSUPP;
+		}
+
+		return EOK;
+	}
+
+	case SIOCGIFHWADDR: {
+		struct ifreq *ifreq = (struct ifreq *) out_data;
+		struct netif *interface = netif_find(ifreq->ifr_name);
+		if (interface == NULL)
+			return -ENXIO;
+
+		if (ip_addr_isloopback(&interface->ip_addr)) {
+			ifreq->ifr_hwaddr.sa_family = ARPHRD_LOOPBACK;
+		} else {
+			ifreq->ifr_hwaddr.sa_family = ARPHRD_ETHER;
+			ifreq->ifr_hwaddr.sa_len = interface->hwaddr_len;
+			memcpy(ifreq->ifr_hwaddr.sa_data, interface->hwaddr, interface->hwaddr_len);
+		}
+
+		sa_convert_lwip_to_sys(&ifreq->ifr_hwaddr);
+		return EOK;
+	}
+
+	case SIOCSIFHWADDR: {
+		struct ifreq *ifreq = (struct ifreq *) in_data;
+		struct netif *interface = netif_find(ifreq->ifr_name);
+		if (interface == NULL)
+			return -ENXIO;
+
+		/* TODO: support changing HW address */
+		return -EOPNOTSUPP;
+	}
+
+#if 0
+
+	case SIOCADDMULTI:
+	case SIOCDELMULTI: {
+		struct ifreq *ifreq = (struct ifreq *) arg;
+		struct netif *interface = netif_find(ifreq->ifr_name);
+		ip_addr_t group_ip;
+		group_ip.addr = net_multicastMacToIp(ifreq->ifr_hwaddr.sa_data);
+		group_ip.addr = lwip_ntohl(group_ip.addr);
+
+		if (cmd == SIOCADDMULTI)
+			igmp_joingroup(&interface->ip_addr, &group_ip);
+		else
+			igmp_leavegroup(&interface->ip_addr, &group_ip);
+
+		return EOK;
+	}
+#endif
+	case SIOCGIFMTU: {
+		struct ifreq *ifreq = (struct ifreq *) out_data;
+		struct netif *interface = netif_find(ifreq->ifr_name);
+		if (interface == NULL)
+			return -ENXIO;
+
+		ifreq->ifr_mtu = interface->mtu;
+		return EOK;
+	}
+	case SIOCSIFMTU: {
+		struct ifreq *ifreq = (struct ifreq *) in_data;
+		struct netif *interface = netif_find(ifreq->ifr_name);
+		if (interface == NULL)
+			return -ENXIO;
+
+		//TODO: check MAC constraints
+		if (ifreq->ifr_mtu < 64 || ifreq->ifr_mtu > 32768)
+			return -EINVAL;
+
+		interface->mtu = ifreq->ifr_mtu;
+		return EOK;
+	}
+	case SIOCGIFMETRIC: {
+		struct ifreq *ifreq = (struct ifreq *) out_data;
+		struct netif *interface = netif_find(ifreq->ifr_name);
+		if (interface == NULL)
+			return -ENXIO;
+
+		ifreq->ifr_metric = 0;
+		return EOK;
+	}
+	case SIOCSIFMETRIC:
+		return -EOPNOTSUPP;
+
+	case SIOCGIFTXQLEN:
+		return -EOPNOTSUPP;
+
+	case SIOCSIFTXQLEN:
+		return -EOPNOTSUPP;
+
+	case SIOCGIFCONF: {
+		struct ifconf *ifconf = (struct ifconf *) out_data;
+		int maxlen = ifconf->ifc_len;
+		struct ifreq* ifreq = ifconf->ifc_req;
+		struct netif *netif;
+
+		ifconf->ifc_len = 0;
+		if (!ifreq)  // WARN: it is legal to pass NULL here (we should return the lenght sufficient for whole response)
+			return -EFAULT;
+
+		memset(ifreq, 0, maxlen);
+
+		for (netif = netif_list; netif != NULL; netif = netif->next) {
+			if (ifconf->ifc_len + sizeof(struct ifreq) > maxlen) {
+				break;
+			}
+			/* LWiP name is only 2 chars, we have to manually add the number */
+			snprintf(ifreq->ifr_name, IFNAMSIZ, "%c%c%d", netif->name[0], netif->name[1], netif->num);
+
+			struct sockaddr_in* sin = (struct sockaddr_in *) &ifreq->ifr_addr;
+			sin->sin_addr.s_addr = netif->ip_addr.addr;
+
+			ifconf->ifc_len += sizeof(struct ifreq);
+			ifreq += 1;
+		}
+
+		return EOK;
+	}
+#if 0 //TODO
+	/** ROUTING
+	 * We support only 1 route per device + default device for all other routing.
+	 * Because of that we only support changing gateways and default routing device.
+	 *
+	 * Route deletion is not supported (apart from removing default device).
+	 */
+	case SIOCADDRT: {
+		struct rtentry *rt = (struct rtentry *) arg;
+		struct netif *interface = netif_find(rt->rt_dev);
+		struct sockaddr_in* sin;
+		ip_addr_t ipaddr;
+
+		if (interface == NULL)
+			return -ENXIO;
+
+		if (rt->rt_flags & RTF_GATEWAY) {
+			sin = (struct sockaddr_in*) &rt->rt_gateway;
+			ipaddr.addr = sin->sin_addr.s_addr;
+			netif_set_gw(interface, &ipaddr);
+		}
+
+		sin = (struct sockaddr_in*) &rt->rt_dst;
+		if (sin->sin_addr.s_addr == 0) { // change the default device
+			netif_set_default(interface);
+		}
+
+		/* NOTE: ignoring other params */
+
+		return EOK;
+	}
+	case SIOCDELRT: {
+		struct rtentry *rt = (struct rtentry *) arg;
+		struct sockaddr_in* sin;
+
+		sin = (struct sockaddr_in*) &rt->rt_dst;
+		if (sin->sin_addr.s_addr == 0) {
+			netif_set_default(NULL);
+			return EOK;
+		}
+
+		return -EOPNOTSUPP;
+	}
+#endif
+	}
+
+	return -EINVAL;
 }
 
 
