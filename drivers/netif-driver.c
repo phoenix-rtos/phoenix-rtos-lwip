@@ -148,6 +148,9 @@ int create_netif(char *conf)
 	err = netifapi_netif_add(ni, &ipaddr, &netmask, &gw,
 		(void *)idata, netif_dev_init, tcpip_input);
 
+	ipaddr.addr = PP_HTONL(0x0A020000 + ni->num);
+	netif_set_ipaddr(ni, &ipaddr);
+
 	if (err != ERR_OK)
 		free(ni);
 
