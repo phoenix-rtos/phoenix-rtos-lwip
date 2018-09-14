@@ -399,7 +399,11 @@ static int enet_irq_handler(enet_priv_t *state, u32 flag)
 	if (events & ENET_IRQ_EBERR)
 		__sync_fetch_and_or(&state->drv_exit, EV_BUS_ERROR);	// FIXME: atomic_set()
 
-	return events ? 0 : -1;
+	if (events & ENET_IRQ_RXF)
+		return state->rx_irq_cond;
+	else if (events & ENET_IRQ_TXF)
+		return state->tx_irq_cond;
+	return 0;
 }
 
 
