@@ -58,8 +58,8 @@ typedef struct
 	struct netif *netif;
 	unsigned drv_exit;
 
-#define PRIV_RESOURCES(s) &(s)->irq_lock, 4, ~0x03
-	handle_t irq_lock, tx_lock, rx_irq_cond, tx_irq_cond, rx_irq_handle, tx_irq_handle;
+#define PRIV_RESOURCES(s) &(s)->irq_lock, 3, ~0x03
+	handle_t irq_lock, tx_lock, irq_cond, irq_handle;
 
 	net_bufdesc_ring_t rx, tx;
 
@@ -70,7 +70,7 @@ typedef struct
 
 	eth_phy_state_t phy;
 
-	u32 rx_irq_stack[256] __attribute__((aligned(16))), tx_irq_stack[256], mdio_stack[256];
+	u32 irq_stack[256] __attribute__((aligned(16))), mdio_stack[256];
 } enet_priv_t;
 
 
@@ -388,92 +388,49 @@ static int enet_initRings(enet_priv_t *state)
 
 
 /* hard-IRQ handler */
-static int enet_irq_handler(enet_priv_t *state, u32 flag)
+static int enet_irq_handler(unsigned irq, void *arg)
 {
 	u32 events;
+	enet_priv_t *state = arg;
 
-	events = state->mmio->EIR & flag;
-	state->mmio->EIMR &= ~events;	// XXX: races against irq_lock holders
-					// can't lock nor __sync_... here, though
+	events = state->mmio->EIR & (ENET_IRQ_RXF | ENET_IRQ_TXF | ENET_IRQ_EBERR);
+	state->mmio->EIMR &= ~(ENET_IRQ_RXF | ENET_IRQ_TXF);
 
 	if (events & ENET_IRQ_EBERR)
 		__sync_fetch_and_or(&state->drv_exit, EV_BUS_ERROR);	// FIXME: atomic_set()
 
-	if (events & ENET_IRQ_RXF)
-		return state->rx_irq_cond;
-	else if (events & ENET_IRQ_TXF)
-		return state->tx_irq_cond;
 	return 0;
 }
 
 
-static int enet_rx_irq_handler(unsigned irq, void *arg)
-{
-	return enet_irq_handler(arg, ENET_IRQ_RXF | ENET_IRQ_EBERR);
-}
-
-
-static int enet_tx_irq_handler(unsigned irq, void *arg)
-{
-	return enet_irq_handler(arg, ENET_IRQ_TXF | ENET_IRQ_EBERR);
-}
-
-
-/* IRQ thread: RX */
-static void enet_rx_irq_thread(void *arg)
+/* IRQ thread */
+static void enet_irq_thread(void *arg)
 {
 	enet_priv_t *state = arg;
-	size_t rx_done;
+	size_t rx_done = 0;
 
 	mutexLock(state->irq_lock);
 	while (!state->drv_exit) {
-		state->mmio->EIR = ENET_IRQ_RXF;
-		mutexUnlock(state->irq_lock);
 
+		state->mmio->EIR = ENET_IRQ_RXF;
 		rx_done = net_receivePackets(&state->rx, state->netif, 2);
 		if (rx_done || !net_rxFullyFilled(&state->rx)) {
 			net_refillRx(&state->rx, 2);
 			state->mmio->RDAR = ~0u;
 		}
 
-		mutexLock(state->irq_lock);
-		if (!rx_done) {
-			state->mmio->EIMR |= ENET_IRQ_RXF;
-			condWait(state->rx_irq_cond, state->irq_lock, 0);
-		}
-	}
-	mutexUnlock(state->irq_lock);
-
-	if (state->drv_exit & EV_BUS_ERROR)
-		enet_printf(state, "HW signalled memory bus error -- device RX halted");
-
-	endthread();
-}
-
-
-/* IRQ thread: TX */
-static void enet_tx_irq_thread(void *arg)
-{
-	enet_priv_t *state = arg;
-	size_t tx_done;
-
-	mutexLock(state->irq_lock);
-	while (!state->drv_exit) {
 		state->mmio->EIR = ENET_IRQ_TXF;
-		mutexUnlock(state->irq_lock);
+		net_reapTxFinished(&state->tx);
 
-		tx_done = net_reapTxFinished(&state->tx);
-
-		mutexLock(state->irq_lock);
-		if (!tx_done) {
-			state->mmio->EIMR |= ENET_IRQ_TXF;
-			condWait(state->tx_irq_cond, state->irq_lock, 0);
+		if (!(state->mmio->EIR & (ENET_IRQ_RXF | ENET_IRQ_TXF))) {
+			state->mmio->EIMR |= ENET_IRQ_RXF | ENET_IRQ_TXF;
+			condWait(state->irq_cond, state->irq_lock, 0);
 		}
 	}
 	mutexUnlock(state->irq_lock);
 
 	if (state->drv_exit & EV_BUS_ERROR)
-		enet_printf(state, "HW signalled memory bus error -- device TX halted");
+		enet_printf(state, "HW signalled memory bus error -- device halted");
 
 	endthread();
 }
@@ -525,9 +482,9 @@ static int enet_mdioSetup(void *arg, unsigned max_khz, unsigned min_hold_ns, uns
 		speed = (state->mscr & ENET_MSCR_SPEED_MASK) >> ENET_MSCR_SPEED_SHIFT;
 		hold = (state->mscr & ENET_MSCR_HOLDTIME_MASK) >> ENET_MSCR_HOLDTIME_SHIFT;
 		enet_printf(state, "mdio: speed %u (%u kHz), hold %u (%u ns), %s preamble",
-			speed, ENET_CLK_KHZ / 2 / (speed + 1),
-			hold, (hold + 1) * 1000000 / ENET_CLK_KHZ,
-			state->mscr & ENET_MSCR_DIS_PRE ? "no" : "with");
+				speed, ENET_CLK_KHZ / 2 / (speed + 1),
+				hold, (hold + 1) * 1000000 / ENET_CLK_KHZ,
+				state->mscr & ENET_MSCR_DIS_PRE ? "no" : "with");
 	}
 
 	if (MDC_ALWAYS_ON)
@@ -554,17 +511,17 @@ static u16 enet_mdioIO(enet_priv_t *state, unsigned addr, unsigned reg, unsigned
 
 	if (addr & NETDEV_MDIO_CLAUSE45) {
 		u32 dev = ((addr & NETDEV_MDIO_A_MASK) << 18) |
-			  ((addr & NETDEV_MDIO_B_MASK) << (23-8));
+			((addr & NETDEV_MDIO_B_MASK) << (23-8));
 		state->mmio->MMFR = 0x00020000 | /* extended MDIO address write */
-				   dev | (reg & 0xFFFF);
+			dev | (reg & 0xFFFF);
 		enet_mdioWait(state);
 		state->mmio->MMFR = (read ? 0x20020000 : 0x10020000) | /* extended MDIO data r/w */
-				   dev | (read ? 0 : val & 0xFFFF);
+			dev | (read ? 0 : val & 0xFFFF);
 	} else { /* clause 22 */
 		state->mmio->MMFR = (read ? 0x60020000 : 0x50020000) | /* standard MDIO data r/w */
-				   ((addr & NETDEV_MDIO_A_MASK) << 23) |
-				   ((reg & 0x1F) << 18) |
-				   (read ? 0 : val & 0xFFFF);
+			((addr & NETDEV_MDIO_A_MASK) << 23) |
+			((reg & 0x1F) << 18) |
+			(read ? 0 : val & 0xFFFF);
 	}
 
 	enet_mdioWait(state);
@@ -690,8 +647,8 @@ static int enet_pinConfig(enet_priv_t *state)
 		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_enet1_tx1, 0, 0 } },
 		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_enet1_txen, 0, 0 } },
 		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_enet1_txclk, 1, 4 } },
-			// SION(1) = enable clk loopback to ENET module?
-			// (RX does not work without it)
+		// SION(1) = enable clk loopback to ENET module?
+		// (RX does not work without it)
 	};
 	static const platformctl_t pctl_enet2[] = {
 		{ pctl_set, pctl_iogpr, .iogpr = { pctl_gpr_enet2_clk, 0 } },
@@ -731,9 +688,9 @@ static int enet_pinConfig(enet_priv_t *state)
 
 	state->mmio->RCR =
 #if USE_RMII
-			  ENET_RCR_RMII_MODE |
+		ENET_RCR_RMII_MODE |
 #endif
-			  ENET_RCR_MII_MODE;
+		ENET_RCR_MII_MODE;
 
 	return 0;
 }
@@ -772,10 +729,9 @@ static int enet_initDevice(enet_priv_t *state, int irq, int mdio)
 
 	enet_printf(state, "mmio 0x%x irq %d", state->devphys, irq);
 
-	interrupt(irq, enet_rx_irq_handler, state, state->rx_irq_cond, &state->rx_irq_handle);
-	interrupt(irq, enet_tx_irq_handler, state, state->tx_irq_cond, &state->tx_irq_handle);
-	beginthread(enet_rx_irq_thread, 0, state->rx_irq_stack, sizeof(state->rx_irq_stack), state);
-	beginthread(enet_tx_irq_thread, 0, state->tx_irq_stack, sizeof(state->tx_irq_stack), state);
+	interrupt(irq, enet_irq_handler, state, state->irq_cond, &state->irq_handle);
+	beginthread(enet_irq_thread, 0, state->irq_stack, sizeof(state->irq_stack), state);
+
 	if (state->mscr) {
 		err = register_mdio_bus(&enet_mdio_ops, state);
 		if (err < 0) {
