@@ -345,6 +345,7 @@ static int socket_ioctl(int sock, unsigned long request, const void* in_data, vo
 
 		ifreq->ifr_flags = 0;
 		ifreq->ifr_flags |= netif_is_up(interface) ? IFF_UP : 0;
+		ifreq->ifr_flags |= netif_is_link_up(interface) ? IFF_RUNNING : 0;
 		ifreq->ifr_flags |= ip_addr_isloopback(&interface->ip_addr) ? IFF_LOOPBACK : 0;
 		ifreq->ifr_flags |= (interface->flags & NETIF_FLAG_IGMP) ? IFF_MULTICAST : 0;
 		ifreq->ifr_flags |= IFF_BROADCAST;

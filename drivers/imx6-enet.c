@@ -766,6 +766,15 @@ static err_t enet_netifOutput(struct netif *netif, struct pbuf *p)
 	return nf ? ERR_OK : ERR_BUF;
 }
 
+static void enet_setLinkSate(void *arg, int state)
+{
+	struct netif* netif = (struct netif*) arg;
+
+	if (state)
+		netif_set_link_up(netif);
+	else
+		netif_set_link_down(netif);
+}
 
 // ARGS: enet:base:irq[:no-mdio][:PHY:[bus.]addr[:config]]
 static int enet_netifInit(struct netif *netif, char *cfg)
@@ -812,7 +821,7 @@ static int enet_netifInit(struct netif *netif, char *cfg)
 		return err;
 
 	if (cfg) {
-		err = ephy_init(&priv->phy, cfg);
+		err = ephy_init(&priv->phy, cfg, enet_setLinkSate, (void*) priv->netif);
 		if (err)
 			enet_printf(priv, "WARN: PHY init failed: %s (%d)", strerror(err), err);
 	}

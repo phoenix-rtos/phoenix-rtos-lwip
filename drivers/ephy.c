@@ -104,8 +104,13 @@ static void ephy_show_link_state(eth_phy_state_t *phy)
 	pc1 = ephy_reg_read(phy, 0x1e);
 	pc2 = ephy_reg_read(phy, 0x1f);
 
+	int linkup = (bstat & 4) != 0;
+
+	if (phy->link_state_callback)
+		phy->link_state_callback(phy->link_state_callback_arg, linkup);
+
 	printf("ephy%u.%u: link is %s (ctl %04x, status %04x, adv %04x, lpa %04x, pctl %04x,%04x)\n",
-		phy->bus, phy->addr, bstat & 4 ? "UP  " : "DOWN", bctl, bstat, adv, lpa, pc1, pc2);
+		phy->bus, phy->addr, linkup ? "UP  " : "DOWN", bctl, bstat, adv, lpa, pc1, pc2);
 }
 
 
@@ -219,8 +224,7 @@ static int ephy_config(eth_phy_state_t *phy, char *cfg)
 	return 0;
 }
 
-
-int ephy_init(eth_phy_state_t *phy, char *conf)
+int ephy_init(eth_phy_state_t *phy, char *conf, link_state_cb_t cb, void *cb_arg)
 {
 	u32 phyid;
 	int err;
@@ -260,6 +264,8 @@ int ephy_init(eth_phy_state_t *phy, char *conf)
 	ephy_reg_write(phy, 0x1f, 0x8180);
 #endif
 
+	phy->link_state_callback = cb;
+	phy->link_state_callback_arg = cb_arg;
 	ephy_show_link_state(phy);
 
 	if (gpio_valid(&phy->irq_gpio)) {
