@@ -766,7 +766,7 @@ static err_t enet_netifOutput(struct netif *netif, struct pbuf *p)
 	return nf ? ERR_OK : ERR_BUF;
 }
 
-static void enet_setLinkSate(void *arg, int state)
+static void enet_setLinkState(void *arg, int state)
 {
 	struct netif* netif = (struct netif*) arg;
 
@@ -821,7 +821,7 @@ static int enet_netifInit(struct netif *netif, char *cfg)
 		return err;
 
 	if (cfg) {
-		err = ephy_init(&priv->phy, cfg, enet_setLinkSate, (void*) priv->netif);
+		err = ephy_init(&priv->phy, cfg, enet_setLinkState, (void*) priv->netif);
 		if (err)
 			enet_printf(priv, "WARN: PHY init failed: %s (%d)", strerror(err), err);
 	}
