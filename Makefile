@@ -1,7 +1,7 @@
 #!make -f
 
 TARGET ?= ia32
-NET_DRIVERS ?= $(if $(filter ia32%,$(TARGET)),rtl) $(if $(filter arm-imx%,$(TARGET)),enet)
+NET_DRIVERS ?= $(if $(filter ia32%,$(TARGET)),rtl) $(if $(filter arm-imx%,$(TARGET)),enet) pppos
 
 
 CC = $(CROSS)gcc
