@@ -22,7 +22,18 @@
 #define LWIP_DNS_API_DECLARE_H_ERRNO 0
 #define MEMP_NUM_NETCONN 1024
 #define PPP_SUPPORT 1
-#define PPPOE_SUPPORT 1
+#define PPPOS_SUPPORT 1
+#define PAP_SUPPORT 1
+#define CHAP_SUPPORT 1
+#define MSCHAP_SUPPORT 1
+
+
+#if 0 // debugging LWiP PPPoS
+#define LWIP_DEBUG 1
+#define LWIP_DBG_MIN_LEVEL LWIP_DBG_LEVEL_ALL
+#define LWIP_DBG_TYPES_ON LWIP_DBG_ON
+#define PPP_DEBUG LWIP_DBG_ON
+#endif
 
 #if 0
 #define LWIP_DEBUG 1

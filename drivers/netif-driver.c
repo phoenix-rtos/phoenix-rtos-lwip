@@ -115,12 +115,14 @@ int create_netif(char *conf)
 	ip4_addr_t ipaddr, netmask, gw;
 	size_t sz, ssz;
 	err_t err;
+	int is_ppp = 0;
 
 	arg = strchr(conf, ':');
 	if (arg)
 		*arg++ = 0;
 
-	printf("netif: driver '%s' args '%s'\n", conf, arg);
+	is_ppp = (arg != NULL) && (strncmp(conf, "ppp", 3) == 0);
+	printf("netif: driver '%s' args '%s' is_ppp=%d\n", conf, arg, is_ppp);
 
 	for (drv = net_driver_list; drv != NULL; drv = drv->next)
 		if (!strcmp(conf, drv->name))
@@ -145,11 +147,16 @@ int create_netif(char *conf)
 	idata->cfg = arg;
 	idata->drv = drv;
 
-	err = netifapi_netif_add(ni, &ipaddr, &netmask, &gw,
-		(void *)idata, netif_dev_init, tcpip_input);
+	if (!is_ppp) {
+		err = netifapi_netif_add(ni, &ipaddr, &netmask, &gw,
+			(void *)idata, netif_dev_init, tcpip_input);
 
-	ipaddr.addr = PP_HTONL(0x0A020000 + ni->num);
-	netif_set_ipaddr(ni, &ipaddr);
+		ipaddr.addr = PP_HTONL(0x0A020000 + ni->num);
+		netif_set_ipaddr(ni, &ipaddr);
+	} else {
+		ni->state = idata;
+		err = idata->drv->init(ni, idata->cfg);
+	}
 
 	if (err != ERR_OK)
 		free(ni);

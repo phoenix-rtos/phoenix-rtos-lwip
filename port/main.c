@@ -27,6 +27,7 @@ int main(int argc, char **argv)
 	void init_lwip_sockets(void);
 	void register_driver_rtl(void);
 	void register_driver_enet(void);
+	void register_driver_pppos(void);
 
 	init_lwip_tcpip();
 	init_lwip_sockets();
@@ -35,6 +36,9 @@ int main(int argc, char **argv)
 #endif
 #ifdef HAVE_DRIVER_enet
 	register_driver_enet();
+#endif
+#ifdef HAVE_DRIVER_pppos
+	register_driver_pppos();
 #endif
 #endif
 
