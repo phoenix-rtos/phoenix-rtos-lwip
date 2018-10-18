@@ -278,6 +278,8 @@ static int wrap_socket(u32 *port, int sock, int flags)
 	return EOK;
 }
 
+#define netif_is_ppp(_netif) (((_netif)->name[0] == 'p') && ((_netif)->name[1] == 'p'))
+
 static int socket_ioctl(int sock, unsigned long request, const void* in_data, void* out_data)
 {
 
@@ -322,7 +324,6 @@ static int socket_ioctl(int sock, unsigned long request, const void* in_data, vo
 		/*
 		These flags are not supported yet:
 		IFF_DEBUG         Internal debugging flag.
-		IFF_POINTOPOINT   Interface is a point-to-point link.
 		IFF_RUNNING       Resources allocated.
 		IFF_NOARP         No arp protocol, L2 destination address not set.
 		IFF_PROMISC       Interface is in promiscuous mode.
@@ -348,7 +349,11 @@ static int socket_ioctl(int sock, unsigned long request, const void* in_data, vo
 		ifreq->ifr_flags |= netif_is_link_up(interface) ? IFF_RUNNING : 0;
 		ifreq->ifr_flags |= ip_addr_isloopback(&interface->ip_addr) ? IFF_LOOPBACK : 0;
 		ifreq->ifr_flags |= (interface->flags & NETIF_FLAG_IGMP) ? IFF_MULTICAST : 0;
-		ifreq->ifr_flags |= IFF_BROADCAST;
+		if (netif_is_ppp(interface)) {
+			ifreq->ifr_flags |= IFF_POINTOPOINT;
+		} else {
+			ifreq->ifr_flags |= IFF_BROADCAST;
+		}
 
 		return EOK;
 	}
@@ -389,11 +394,21 @@ static int socket_ioctl(int sock, unsigned long request, const void* in_data, vo
 			sin->sin_addr.s_addr = interface->netmask.addr;
 			break;
 		case SIOCGIFBRDADDR:
-			sin = (struct sockaddr_in *) &ifreq->ifr_broadaddr;
-			sin->sin_addr.s_addr = interface->ip_addr.addr | ~(interface->netmask.addr);
+			if (!netif_is_ppp(interface)) {
+				sin = (struct sockaddr_in *) &ifreq->ifr_broadaddr;
+				sin->sin_addr.s_addr = interface->ip_addr.addr | ~(interface->netmask.addr);
+			} else {
+				return -EOPNOTSUPP;
+			}
 			break;
 		case SIOCGIFDSTADDR:
-			return -EOPNOTSUPP;
+			if (netif_is_ppp(interface)) {
+				sin = (struct sockaddr_in *) &ifreq->ifr_dstaddr;
+				sin->sin_addr.s_addr = netif_ip4_gw(interface)->addr;
+			} else {
+				return -EOPNOTSUPP;
+			}
+			break;
 		}
 
 		return EOK;
@@ -438,6 +453,8 @@ static int socket_ioctl(int sock, unsigned long request, const void* in_data, vo
 
 		if (ip_addr_isloopback(&interface->ip_addr)) {
 			ifreq->ifr_hwaddr.sa_family = ARPHRD_LOOPBACK;
+		} else if (netif_is_ppp(interface)) {
+			ifreq->ifr_hwaddr.sa_family = ARPHRD_PPP;
 		} else {
 			ifreq->ifr_hwaddr.sa_family = ARPHRD_ETHER;
 			ifreq->ifr_hwaddr.sa_len = interface->hwaddr_len;
