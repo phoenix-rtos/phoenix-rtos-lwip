@@ -140,6 +140,7 @@ static void socket_thread(void *arg)
 			err = lwip_accept(sock, (void *)smo->sockname.addr, &salen);
 			if (err >= 0) {
 				sa_convert_lwip_to_sys(smo->sockname.addr);
+				smo->sockname.addrlen = salen;
 				err = wrap_socket(&new_port, err, smi->send.flags);
 				smo->ret = err < 0 ? err : new_port;
 			} else {
@@ -739,8 +740,8 @@ static void socketsrv_thread(void *arg)
 
 			smo->ret = do_getnameinfo(sa_convert_sys_to_lwip(smi->send.addr, smi->send.addrlen), smi->send.addrlen, msg.o.data, sz, msg.o.data + sz, msg.o.size - sz, smi->send.flags);
 			smo->sys.errno = smo->ret == EAI_SYSTEM ? errno : 0;
-			smo->nameinfo.hostlen = strlen(msg.o.data) + 1;
-			smo->nameinfo.servlen = strlen(msg.o.data + sz) + 1;
+			smo->nameinfo.hostlen = sz > 0 ? strlen(msg.o.data) + 1  : 0;
+			smo->nameinfo.servlen = msg.o.size - sz > 0 ? strlen(msg.o.data + sz) + 1 : 0;
 			break;
 
 		case sockmGetAddrInfo:
