@@ -70,7 +70,7 @@ typedef struct
 
 	eth_phy_state_t phy;
 
-	u32 irq_stack[256] __attribute__((aligned(16))), mdio_stack[256];
+	u32 irq_stack[1024] __attribute__((aligned(16))), mdio_stack[1024];
 } enet_priv_t;
 
 

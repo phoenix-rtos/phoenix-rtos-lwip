@@ -385,7 +385,7 @@ static void pppos_do_rx(pppos_priv_t* state)
 		}
 	}
 
-	log_warn("%s: exitnig\n");
+	log_warn("%s: exiting\n", __func__);
 }
 
 
