@@ -459,6 +459,7 @@ static void pppos_mainLoop(void* _state)
 
 		//serial_set_blocking(state);
 		pppos_do_rx(state);
+		ppp_close(state->ppp, 1);
 
 fail:
 		log_error("connection has failed, retrying");
