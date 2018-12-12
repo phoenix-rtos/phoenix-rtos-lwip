@@ -27,7 +27,7 @@
 
 
 #define SOCKTHREAD_PRIO 4
-#define SOCKTHREAD_STACKSZ (SIZE_PAGE/2)
+#define SOCKTHREAD_STACKSZ (2 * SIZE_PAGE)
 
 
 struct sock_start {
