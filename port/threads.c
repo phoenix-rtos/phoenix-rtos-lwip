@@ -28,6 +28,7 @@ static struct {
 
 	char collector_stack[4096] __attribute__((aligned(8)));
 	rbtree_t stacks;
+	handle_t lock;
 } global;
 
 
@@ -66,23 +67,29 @@ static void thread_register_stack(handle_t tid, void *stack)
 	ts->tid = tid;
 	ts->stack = stack;
 
+	mutexLock(global.lock);
 	lib_rbInsert(&global.stacks, &ts->linkage);
+	mutexUnlock(global.lock);
 }
 
 
 static void thread_waittid_thr(void *arg)
 {
-	handle_t tid;
 	thread_stack_t *stack, s;
 
 	for (;;) {
 		s.tid = waittid(-1, 0);
+		mutexLock(global.lock);
 		stack = lib_treeof(thread_stack_t, linkage, lib_rbFind(&global.stacks, &s.linkage));
-
 		if (stack != NULL) {
 			lib_rbRemove(&global.stacks, &stack->linkage);
+			mutexUnlock(global.lock);
+
 			free(stack->stack);
 			free(stack);
+		}
+		else {
+			mutexUnlock(global.lock);
 		}
 	}
 }
@@ -132,6 +139,10 @@ sys_thread_t sys_thread_new(const char *name, void (* thread)(void *arg), void *
 void init_lwip_threads(void)
 {
 	int err;
+
+	err = mutexCreate(&global.lock);
+	if (err)
+		errout(err, "mutexCreate(thread.start_sem)");
 
 	err = semaphoreCreate(&global.start_sem, 1);
 	if (err)
