@@ -68,7 +68,7 @@ static void pppos_printf(pppos_priv_t *state, const char *format, ...)
 	vsnprintf(buf, sizeof(buf), format, arg);
 	va_end(arg);
 
-	printf("PPPoS (%s): %s\n", state->serialdev_fn, buf);
+	printf("lwip: ppp@%s %s\n", state->serialdev_fn, buf);
 }
 
 /****** serial handling ******/
@@ -514,7 +514,7 @@ static int pppos_netifInit(struct netif *netif, char *cfg)
 	if (!cfg)
 		return ERR_ARG;
 
-	log_debug("preinit");
+	log_debug("Preinit");
 
 	beginthread(pppos_mainLoop, 4, (void *)state->main_loop_stack, sizeof(state->main_loop_stack), state);
 

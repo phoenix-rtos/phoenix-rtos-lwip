@@ -88,7 +88,7 @@ int net_initRings(net_bufdesc_ring_t *rings, const size_t *sizes, size_t nrings,
 		return -ENODEV;
 	}
 
-	printf("descriptor rings: virt 0x%zx phys 0x%zx\n", (size_t)p, (size_t)phys);
+	/*printf("descriptor rings: virt 0x%zx phys 0x%zx\n", (size_t)p, (size_t)phys);*/
 
 	memset(p, 0, sz);
 

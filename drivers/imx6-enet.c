@@ -43,6 +43,7 @@
 #define ENET_BUFFER_SIZE		(2048 - 64)
 #define MDC_ALWAYS_ON			1
 #define MDIO_DEBUG			0
+/* #define ENET_VERBOSE */
 
 
 #if USE_ENET_EXT_DESCRIPTORS
@@ -91,7 +92,7 @@ static void enet_printf(enet_priv_t *state, const char *format, ...)
 	va_start(arg, format);
 	vsnprintf(buf, sizeof(buf), format, arg);
 	va_end(arg);
-	printf("%s: %s\n", state->name, buf);
+	printf("lwip: %s %s\n", state->name, buf);
 }
 
 
@@ -164,6 +165,7 @@ static void enet_start(enet_priv_t *state)
 	/* trigger HW RX */
 	state->mmio->RDAR = ~0u;
 
+#ifdef ENET_VERBOSE
 	enet_printf(state, "regs:   ECR   ,  EIMR  ,  TACC  ,  RACC  ,  TCR   ,  RCR   ,  MRBR  ,  FTRL  ");
 	enet_printf(state, "regs: %08x %08x %08x %08x %08x %08x %08x %08x",
 		state->mmio->ECR, state->mmio->EIMR, state->mmio->TACC, state->mmio->RACC,
@@ -172,6 +174,7 @@ static void enet_start(enet_priv_t *state)
 	enet_printf(state, "regs: %08x %08x %08x %08x %08x %08x %08x %08x",
 		hwdebug_read(0x20c80e0), hwdebug_read(0x20c4068), hwdebug_read(0x20e4004), hwdebug_read(0x20e00dc),
 		hwdebug_read(0x20e0368), hwdebug_read(0x20e0574), hwdebug_read(0x20c8150), hwdebug_read(0x20c8270));
+#endif
 }
 
 
@@ -267,7 +270,7 @@ static void enet_readCardMac(enet_priv_t *state)
 static void enet_showCardId(enet_priv_t *state)
 {
 	u8 *mac = (void *)&state->netif->hwaddr;
-	enet_printf(state, "MAC: %02x:%02x:%02x:%02x:%02x:%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+	enet_printf(state, "MAC=%02x:%02x:%02x:%02x:%02x:%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 }
 
 
@@ -727,7 +730,9 @@ static int enet_initDevice(enet_priv_t *state, int irq, int mdio)
 	if ((err = enet_initRings(state)))
 		return err;
 
+#ifdef ENET_VERBOSE
 	enet_printf(state, "mmio 0x%x irq %d", state->devphys, irq);
+#endif
 
 	interrupt(irq, enet_irq_handler, state, state->irq_cond, &state->irq_handle);
 	beginthread(enet_irq_thread, 0, state->irq_stack, sizeof(state->irq_stack), state);

@@ -60,7 +60,7 @@ static void ephy_reset(eth_phy_state_t *phy)
 		}
 
 		if (err & 0x8000)
-			printf("ephy%u.%u: soft-reset timed out\n", phy->bus, phy->addr);
+			printf("lwip: ephy%u.%u soft-reset timed out\n", phy->bus, phy->addr);
 	}
 }
 
@@ -79,13 +79,13 @@ static u32 ephy_show_id(eth_phy_state_t *phy)
 	phyid |= ret;
 	oui |= (ret & 0xFC00) << (18-10);
 
-	printf("ephy%u.%u: id 0x%08x (vendor 0x%06x model 0x%02x rev %u)\n",
+	printf("lwip: ephy%u.%u id 0x%08x (vendor 0x%06x model 0x%02x rev %u)\n",
 		phy->bus, phy->addr, phyid, oui, (ret >> 4) & 0x3F, ret & 0x0F);
 
 	oui = ephy_reg_read(phy, 0x10);
 	ret = ephy_reg_read(phy, 0x11);
 
-	printf("ephy%u.%u: DigCtl 0x%04x AFECtl1 0x%04x\n",
+	printf("lwip: ephy%u.%u DigCtl 0x%04x AFECtl1 0x%04x\n",
 		phy->bus, phy->addr, oui, ret);
 
 	return phyid;
@@ -109,8 +109,10 @@ static void ephy_show_link_state(eth_phy_state_t *phy)
 	if (phy->link_state_callback)
 		phy->link_state_callback(phy->link_state_callback_arg, linkup);
 
-	printf("ephy%u.%u: link is %s (ctl %04x, status %04x, adv %04x, lpa %04x, pctl %04x,%04x)\n",
+/*
+	printf("lwip: ephy%u.%u link is %s (ctl %04x, status %04x, adv %04x, lpa %04x, pctl %04x,%04x)\n",
 		phy->bus, phy->addr, linkup ? "UP  " : "DOWN", bctl, bstat, adv, lpa, pc1, pc2);
+*/
 }
 
 
@@ -135,12 +137,12 @@ static void ephy_link_thread(void *arg)
 
 		stat = ephy_reg_read(phy, 0x1b);
 		if (stat >= 0 && (stat & 0xFF)) {
-			printf("ephy%u.%u: irq status = 0x%04x\n", phy->bus, phy->addr, stat);
+			/*printf("ephy%u.%u: irq status = 0x%04x\n", phy->bus, phy->addr, stat);*/
 			ephy_show_link_state(phy);
 		}
 	}
 
-	printf("ephy%u.%u: thread finished.\n", phy->bus, phy->addr);
+	printf("lwip ephy%u.%u thread finished.\n", phy->bus, phy->addr);
 	endthread();
 }
 
@@ -184,7 +186,7 @@ static int ephy_config(eth_phy_state_t *phy, char *cfg)
 	if (!*cfg)
 		return -EINVAL;
 
-	printf("ephy: config: %s\n", cfg);
+	/*printf("ephy: config: %s\n", cfg);*/
 
 	phy->addr = strtoul(cfg, &p, 0);
 	if (*p == '.') {

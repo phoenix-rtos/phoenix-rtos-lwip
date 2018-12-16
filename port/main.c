@@ -51,7 +51,7 @@ int main(int argc, char **argv)
 			printf("can't init netif from cfg \"%s\": %s\n", *argv, strerror(err));
 	}
 
-	printf("netsrv: %zu interface%s\n", have_intfs, have_intfs == 1 ? "" : "s");
+	/* printf("netsrv: %zu interface%s\n", have_intfs, have_intfs == 1 ? "" : "s"); */
 	if (!have_intfs)
 		exit(1);
 

@@ -122,7 +122,7 @@ int create_netif(char *conf)
 		*arg++ = 0;
 
 	is_ppp = (arg != NULL) && (strncmp(conf, "ppp", 3) == 0);
-	printf("netif: driver '%s' args '%s' is_ppp=%d\n", conf, arg, is_ppp);
+	//printf("netif: driver '%s' args '%s' is_ppp=%d\n", conf, arg, is_ppp);
 
 	for (drv = net_driver_list; drv != NULL; drv = drv->next)
 		if (!strcmp(conf, drv->name))
