@@ -22,7 +22,7 @@ LIBS = -lphoenix -lgcc
 include Makefile.$(TARGET)
 
 .PHONY: clean all
-all: netsrv
+all: lwip
 
 OUT_LIBS := lwip lwip-port netdrivers
 OBJS := $(addprefix build/lib,$(addsuffix .a,$(OUT_LIBS)))
@@ -74,11 +74,11 @@ build/libnetdrivers.a: $(NDRV_OBJS)
 	$(AR) $(ARFLAGS) $@ $^
 
 
-netsrv: $(OBJS)
+lwip: $(OBJS)
 	$(CC) $(CFLAGS) $(addprefix -Wl$(comma),$(LDFLAGS) -Map=$@.map) -o $@ -Wl,-\( $(LIBS) $(OBJS) -Wl,-\)
 
 
 clean:
-	rm -rf netsrv netsrv.s build
+	rm -rf lwip lwip.s build
 
 comma = ,
