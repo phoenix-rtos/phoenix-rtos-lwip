@@ -21,6 +21,7 @@
 #include <sys/sockport.h>
 #include <sys/sockios.h>
 #include <net/if.h>
+#include <net/route.h>
 #include <net/if_arp.h>
 #include <sys/threads.h>
 #include <posix/utils.h>
@@ -562,7 +563,6 @@ static int socket_ioctl(int sock, unsigned long request, const void* in_data, vo
 
 		return EOK;
 	}
-#if 0 //TODO
 	/** ROUTING
 	 * We support only 1 route per device + default device for all other routing.
 	 * Because of that we only support changing gateways and default routing device.
@@ -570,13 +570,16 @@ static int socket_ioctl(int sock, unsigned long request, const void* in_data, vo
 	 * Route deletion is not supported (apart from removing default device).
 	 */
 	case SIOCADDRT: {
-		struct rtentry *rt = (struct rtentry *) arg;
+		struct rtentry *rt = (struct rtentry *) in_data;
 		struct netif *interface = netif_find(rt->rt_dev);
 		struct sockaddr_in* sin;
 		ip_addr_t ipaddr;
 
-		if (interface == NULL)
+		if (interface == NULL) {
+			free(rt->rt_dev);
+			free(rt);
 			return -ENXIO;
+		}
 
 		if (rt->rt_flags & RTF_GATEWAY) {
 			sin = (struct sockaddr_in*) &rt->rt_gateway;
@@ -588,24 +591,28 @@ static int socket_ioctl(int sock, unsigned long request, const void* in_data, vo
 		if (sin->sin_addr.s_addr == 0) { // change the default device
 			netif_set_default(interface);
 		}
-
+		free(rt->rt_dev);
+		free(rt);
 		/* NOTE: ignoring other params */
 
 		return EOK;
 	}
 	case SIOCDELRT: {
-		struct rtentry *rt = (struct rtentry *) arg;
+		struct rtentry *rt = (struct rtentry *) in_data;
 		struct sockaddr_in* sin;
 
 		sin = (struct sockaddr_in*) &rt->rt_dst;
 		if (sin->sin_addr.s_addr == 0) {
 			netif_set_default(NULL);
+			free(rt->rt_dev);
+			free(rt);
 			return EOK;
 		}
 
+		free(rt->rt_dev);
+		free(rt);
 		return -EOPNOTSUPP;
 	}
-#endif
 	}
 
 	return -EINVAL;
