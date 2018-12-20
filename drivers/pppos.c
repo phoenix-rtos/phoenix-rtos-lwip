@@ -34,6 +34,7 @@ typedef struct
 	ppp_pcb* ppp;
 
 	const char* serialdev_fn;
+	const char *apn;
 	int fd;
 
 	volatile int conn_state;
@@ -107,6 +108,7 @@ static int serial_write(pppos_priv_t* state, const u8_t* data, u32_t len)
 	while (off < len) {
 		int to_write = len - off;
 		int res = write(state->fd, data + off, to_write);
+
 		if (res < 0) {
 			if (errno == EINTR) {
 				//log_sys_err("%s() : write(%d)\n", __func__, to_write);
@@ -401,7 +403,6 @@ const char* at_init_cmds[] = {
 	"AT+WS46=29\r\n",		// disable LTE
 	"AT+CREG?\r\n", 		// check network registration (just for debug)
 	"AT+COPS?\r\n", 		// check operator registration (just for debug)
-	"AT+CGDCONT=1,\"IP\",\"m2m.plusgsm.pl\"\r\n", // setup APN
 	NULL,
 };
 
@@ -436,7 +437,18 @@ static void pppos_mainLoop(void* _state)
 			at_cmd += 1;
 		}
 
-		// TODO: parametrize setting up APN
+		{ /* Configure APN */
+			char at_set_apn[256];
+			if (snprintf(at_set_apn, sizeof(at_set_apn), "AT+CGDCONT=1,\"IP\",\"%s\"\r\n", state->apn) >= sizeof(at_set_apn)) {
+				log_error("APN name too long");
+				goto fail;
+			}
+
+			if ((res = at_send_cmd(state, at_set_apn, 3000)) != AT_RESULT_OK) {
+				log_warn("failed to set APN, retrying");
+				goto fail;
+			}
+		}
 
 		if ((res = at_send_cmd(state, "AT+CGDATA=\"PPP\",1\r\n", 3000)) != AT_RESULT_CONNECT) {
 			log_warn("failed to dial PPP, res=%d, retrying", *at_cmd, res);
@@ -504,6 +516,19 @@ static int pppos_netifInit(struct netif *netif, char *cfg)
 	memset(state, 0, sizeof(pppos_priv_t));
 	state->netif = netif;
 	state->serialdev_fn = cfg;
+
+	while (*cfg && *cfg != ':')
+		++cfg;
+
+	if (*cfg != ':') {
+		log_error("APN is not configured");
+		return ERR_ARG;
+	}
+
+	*cfg = 0;
+	cfg++;
+
+	state->apn = cfg;
 	state->fd = -1;
 	mutexCreate(&state->lock);
 	condCreate(&state->cond);
