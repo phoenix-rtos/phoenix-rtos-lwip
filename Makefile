@@ -1,12 +1,14 @@
 #!make -f
 
-TARGET ?= ia32
+TARGET ?= arm-imx
 NET_DRIVERS ?= $(if $(filter ia32%,$(TARGET)),rtl) $(if $(filter arm-imx%,$(TARGET)),enet) pppos
 
+SIL = @
 
 CC = $(CROSS)gcc
 AR = $(CROSS)ar
 STRIP = $(CROSS)strip
+OBJDUMP = $(CROSS)objdump
 
 
 MAKEFLAGS += --no-print-directory --output-sync
@@ -18,6 +20,8 @@ CFLAGS += -nostartfiles -nostdlib
 
 LDFLAGS += --gc-sections -nostdlib
 LIBS = -lphoenix -lgcc
+
+ARFLAGS = -r
 
 include Makefile.$(TARGET)
 
@@ -39,10 +43,12 @@ LWIP_OBJS := $(patsubst $(LWIPDIR)/%.c,build/lwip/%.o,$(LWIP_SRCS))
 
 build/lwip/%.o: $(LWIPDIR)/%.c include/lwipopts.h $(filter clean,$(MAKECMDGOALS))
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c -o $@ $<
+	@(printf "CC  lib-lwip/src/%s/%-24s\n" "$(notdir $(@D))" "$(@F)")
+	$(SIL)$(CC) $(CFLAGS) -c -o $@ $<
 
 build/liblwip.a: $(LWIP_OBJS)
-	$(AR) $(ARFLAGS) $@ $^
+	@(printf "AR  %s/%-24s\n" "$(notdir $(@D))" "$(@F)")
+	$(SIL)$(AR) $(ARFLAGS) $@ $^ 2>/dev/null
 
 #
 # LwIP system wrapper
@@ -53,10 +59,12 @@ PORT_OBJS := $(patsubst %.c,build/%.o,$(PORT_SRCS))
 
 build/port/%.o: port/%.c $(filter clean,$(MAKECMDGOALS))
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c -o $@ $<
+	@(printf "CC  %s/%-24s\n" "$(notdir $(@D))" "$(@F)")
+	$(SIL)$(CC) $(CFLAGS) -c -o $@ $<
 
 build/liblwip-port.a: $(PORT_OBJS)
-	$(AR) $(ARFLAGS) $@ $^
+	@(printf "AR  %s/%-24s\n" "$(notdir $(@D))" "$(@F)")
+	$(SIL)$(AR) $(ARFLAGS) $@ $^ 2>/dev/null
 
 #
 # netif drivers
@@ -68,14 +76,45 @@ CFLAGS += $(addprefix -DHAVE_DRIVER_,$(sort $(NET_DRIVERS)))
 
 build/drivers/%.o: drivers/%.c $(filter clean,$(MAKECMDGOALS))
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c -o $@ $<
+	@(printf "CC  %s/%-24s\n" "$(notdir $(@D))" "$(@F)")
+	$(SIL)$(CC) $(CFLAGS) -c -o $@ $<
 
 build/libnetdrivers.a: $(NDRV_OBJS)
-	$(AR) $(ARFLAGS) $@ $^
+	@(printf "AR  %s/%-24s\n" "$(notdir $(@D))" "$(@F)")
+	$(SIL)$(AR) $(ARFLAGS) $@ $^ 2>/dev/null
 
 
 lwip: $(OBJS)
-	$(CC) $(CFLAGS) $(addprefix -Wl$(comma),$(LDFLAGS) -Map=$@.map) -o $@ -Wl,-\( $(LIBS) $(OBJS) -Wl,-\)
+	@echo "\033[1;34mLD $@\033[0m"
+	
+	@(\
+	printf "Subsystem                  | text    | rodata  | data\n";\
+	printf "=========================================================\n";\
+	for f in $(ARCHS) $(OBJS); do\
+	 	datasz=0;\
+		textsz=0;\
+		rodatasz=0;\
+		file=$$f;\
+		for i in `$(OBJDUMP) -t $$file | grep -e " O " | grep -v ".rodata" | awk '{ print $$1 }'`; do\
+			datasz=`echo $$(($$datasz + 0x$$i))`;\
+		done;\
+		for i in `$(OBJDUMP) -t $$file | grep -e " O " | grep ".rodata" | awk '{ print $$1 }'`; do \
+			rodatasz=`echo $$(($$rodatasz + 0x$$i))`;\
+		done; \
+		for i in `$(OBJDUMP) -t $$file | grep -e " F " | awk '{ print $$5 }'`; do \
+			textsz=`echo $$(($$textsz + 0x$$i))`;\
+		done;\
+		n=`dirname $$f`;\
+		n=`basename $$n | sed "s/libphoenix/./"`;\
+		f=`basename $$f`;\
+		printf "%-26s | %-7d | %-7d | %-7d\n" $$n/$$f $$textsz $$rodatasz $$datasz;\
+	done;)
+	
+	$(SIL)$(CC) $(CFLAGS) $(addprefix -Wl$(comma),$(LDFLAGS) -Map=$@.map) -o $@ -Wl,-\( $(LIBS) $(OBJS) -Wl,-\)
+	
+	@(echo "";\
+	echo "=> lwip for [$(TARGET)] has been created";\
+	echo "")
 
 
 clean:
