@@ -61,6 +61,15 @@ void errout(int err, const char *format, ...);
 #define LWIP_PLATFORM_ASSERT	bail
 
 
+/* atomics */
+
+#ifdef __GNUC__
+#if __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 7)
+#define HAVE_BUILTIN_ATOMICS
+#endif
+#endif
+
+
 /* initialization */
 
 #ifndef HAVE_WORKING_INIT_ARRAY

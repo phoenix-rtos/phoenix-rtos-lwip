@@ -23,23 +23,32 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/file.h>
-#include <sys/sockport.h>
+#include <sys/ioctl.h>
 #include <sys/sockios.h>
 #include <net/if.h>
 #include <net/route.h>
 #include <net/if_arp.h>
-#include <sys/threads.h>
 #include <posix/utils.h>
 
 #include "route.h"
+#include "sockets.h"
+
 
 struct poll_state {
-	int socket;
 	fd_set rd, wr, ex;
 };
 
 
-int wrap_socket(oid_t *oid, int sock, int flags);
+static struct {
+	/* polling thread */
+	struct poll_state poll[2];
+	int poll_flip;
+	int max_watched_fd;
+	struct deferred_msg *watch_list;
+
+	/* server thread */
+	struct poll_state poll_one; // FIXME: cache-aligned for SMP
+} sglobal;
 
 
 static ssize_t map_errno(ssize_t ret)
@@ -49,39 +58,63 @@ static ssize_t map_errno(ssize_t ret)
 
 
 // oh crap, there is no lwip_poll() ...
-static int poll_one(struct poll_state *p, int events, time_t timeout)
+static int do_poll_status(int fd, int events)
 {
-	struct timeval to;
+	struct timeval to = { 0, 0 };
 	int err;
 
 	if (events & POLLIN)
-		FD_SET(p->socket, &p->rd);
+		FD_SET(fd, &sglobal.poll_one.rd);
 	else
-		FD_CLR(p->socket, &p->rd);
+		FD_CLR(fd, &sglobal.poll_one.rd);
 	if (events & POLLOUT)
-		FD_SET(p->socket, &p->wr);
+		FD_SET(fd, &sglobal.poll_one.wr);
 	else
-		FD_CLR(p->socket, &p->wr);
+		FD_CLR(fd, &sglobal.poll_one.wr);
 	if (events & POLLPRI)
-		FD_SET(p->socket, &p->ex);
+		FD_SET(fd, &sglobal.poll_one.ex);
 	else
-		FD_CLR(p->socket, &p->ex);
+		FD_CLR(fd, &sglobal.poll_one.ex);
 
-	to.tv_sec = timeout / 1000000;
-	to.tv_usec = timeout % 1000000;
-
-	if ((err = lwip_select(p->socket + 1, &p->rd, &p->wr, &p->ex, timeout >= 0 ? &to : NULL)) <= 0)
+	if ((err = lwip_select(fd + 1, &sglobal.poll_one.rd, &sglobal.poll_one.wr, &sglobal.poll_one.ex, &to)) <= 0)
 		return err ? -errno : 0;
 
 	events = 0;
-	if (FD_ISSET(p->socket, &p->rd))
+	if (FD_ISSET(fd, &sglobal.poll_one.rd)) {
+		FD_CLR(fd, &sglobal.poll_one.rd);
 		events |= POLLIN;
-	if (FD_ISSET(p->socket, &p->wr))
+	}
+	if (FD_ISSET(fd, &sglobal.poll_one.wr)) {
+		FD_CLR(fd, &sglobal.poll_one.wr);
 		events |= POLLOUT;
-	if (FD_ISSET(p->socket, &p->ex))
+	}
+	if (FD_ISSET(fd, &sglobal.poll_one.ex)) {
+		FD_CLR(fd, &sglobal.poll_one.ex);
 		events |= POLLPRI;
+	}
 
 	return events;
+}
+
+
+static int do_init_socket(oid_t *oid, int sock_fd, int flags, unsigned int pid)
+{
+	if (sock_fd >= FD_SETSIZE)
+		return -ENOMEM;
+
+	if (lwip_fcntl(sock_fd, F_SETFL, O_NONBLOCK) < 0)
+		return -errno;
+
+	return init_socket(oid, sock_fd, flags, pid);
+}
+
+
+static int wrap_socket(oid_t *oid, int sock_fd, int flags, unsigned int pid)
+{
+	int err = do_init_socket(oid, sock_fd, flags, pid);
+	if (err)
+		lwip_close(sock_fd);
+	return err;
 }
 
 
@@ -477,108 +510,296 @@ static void do_socket_ioctl(msg_t *msg, int sock)
 	unsigned long request;
 	void *out_data = NULL;
 	const void *in_data = ioctl_unpackEx(msg, &request, NULL, &out_data);
+	int err;
 
-	int err = socket_ioctl(sock, request, in_data, out_data);
+	if (sock >= 0)
+		err = socket_ioctl(sock, request, in_data, out_data);
+	else
+		err = sock;
+
 	ioctl_setResponseErr(msg, request, err);
 }
 
 
-int socket_op(msg_t *msg, int sock)
+static int do_accept(int sock, oid_t *oid, void *addr, size_t *addrlen, int flags, unsigned int pid)
+{
+	socklen_t salen = *addrlen;
+	int err;
+
+	err = map_errno(lwip_accept(sock, addr, &salen));
+	if (err < 0)
+		return err;
+
+	sa_convert_lwip_to_sys(addr);
+	*addrlen = salen;
+	return wrap_socket(oid, err, flags, pid);
+}
+
+
+ssize_t socket_op(msg_t *msg, int sock, struct sock_info *sock_info)
 {
 	const sockport_msg_t *smi = (const void *)msg->i.raw;
 	sockport_resp_t *smo = (void *)msg->o.raw;
-	struct poll_state polls = {0};
 	socklen_t salen;
 	int err;
 
-	polls.socket = sock;
-	salen = MAX_SOCKNAME_LEN;
-
 	switch (msg->type) {
 	case sockmConnect:
-		smo->ret = map_errno(lwip_connect(sock, sa_convert_sys_to_lwip(smi->send.addr, smi->send.addrlen), smi->send.addrlen));
-		break;
+		return map_errno(lwip_connect(sock, sa_convert_sys_to_lwip(smi->send.addr, smi->send.addrlen), smi->send.addrlen));
 	case sockmBind:
-		smo->ret = map_errno(lwip_bind(sock, sa_convert_sys_to_lwip(smi->send.addr, smi->send.addrlen), smi->send.addrlen));
-		break;
+		return map_errno(lwip_bind(sock, sa_convert_sys_to_lwip(smi->send.addr, smi->send.addrlen), smi->send.addrlen));
 	case sockmListen:
-		smo->ret = map_errno(lwip_listen(sock, smi->listen.backlog));
-		break;
+		return map_errno(lwip_listen(sock, smi->listen.backlog));
 	case sockmAccept:
-		err = lwip_accept(sock, (void *)smo->sockname.addr, &salen);
-		if (err >= 0) {
-			sa_convert_lwip_to_sys(smo->sockname.addr);
-			smo->sockname.addrlen = salen;
-			smo->ret = wrap_socket(&smo->sockname.socket, err, smi->send.flags);
-		} else {
-			smo->ret = -errno;
-		}
-		break;
+		return do_accept(sock, &smo->sockname.socket, smo->sockname.addr, &smo->sockname.addrlen, smi->send.flags, msg->pid);
 	case sockmSend:
-		smo->ret = map_errno(lwip_sendto(sock, msg->i.data, msg->i.size, smi->send.flags,
+		return map_errno(lwip_sendto(sock, msg->i.data, msg->i.size, smi->send.flags,
 			sa_convert_sys_to_lwip(smi->send.addr, smi->send.addrlen), smi->send.addrlen));
-		break;
 	case sockmRecv:
 		smo->ret = map_errno(lwip_recvfrom(sock, msg->o.data, msg->o.size, smi->send.flags, (void *)smo->sockname.addr, &salen));
 		if (smo->ret >= 0)
 			sa_convert_lwip_to_sys(smo->sockname.addr);
 		smo->sockname.addrlen = salen;
-		break;
+		return smo->ret;
 	case sockmGetSockName:
 		smo->ret = map_errno(lwip_getsockname(sock, (void *)smo->sockname.addr, &salen));
 		if (smo->ret >= 0)
 			sa_convert_lwip_to_sys(smo->sockname.addr);
 		smo->sockname.addrlen = salen;
-		break;
+		return smo->ret;
 	case sockmGetPeerName:
 		smo->ret = map_errno(lwip_getpeername(sock, (void *)smo->sockname.addr, &salen));
 		if (smo->ret >= 0)
 			sa_convert_lwip_to_sys(smo->sockname.addr);
 		smo->sockname.addrlen = salen;
-		break;
+		return smo->ret;
 	case sockmGetFl:
-		smo->ret = map_errno(lwip_fcntl(sock, F_GETFL, 0));
-		break;
+		err = map_errno(lwip_fcntl(sock, F_GETFL, 0));
+		if (err >= 0 && sock_info->is_blocking)
+			err &= ~O_NONBLOCK;
+		return err;
 	case sockmSetFl:
-		smo->ret = map_errno(lwip_fcntl(sock, F_SETFL, smi->send.flags));
-		break;
+		err = map_errno(lwip_fcntl(sock, F_SETFL, smi->send.flags | O_NONBLOCK));
+		if (err >= 0)
+			sock_info->is_blocking = !(smi->send.flags & O_NONBLOCK);
+		return err;
 	case sockmGetOpt:
 		salen = msg->o.size;
-		smo->ret = lwip_getsockopt(sock, smi->opt.level, smi->opt.optname, msg->o.data, &salen) < 0 ? -errno : salen;
-		break;
+		return lwip_getsockopt(sock, smi->opt.level, smi->opt.optname, msg->o.data, &salen) < 0 ? -errno : salen;
 	case sockmSetOpt:
-		smo->ret = map_errno(lwip_setsockopt(sock, smi->opt.level, smi->opt.optname, msg->i.data, msg->i.size));
-		break;
+		return map_errno(lwip_setsockopt(sock, smi->opt.level, smi->opt.optname, msg->i.data, msg->i.size));
 	case sockmShutdown:
-		smo->ret = map_errno(lwip_shutdown(sock, smi->send.flags));
-		break;
+		return map_errno(lwip_shutdown(sock, smi->send.flags));
 	case mtRead:
-		if (msg->o.size < 1ull << (8 * sizeof(int) - 1))
-			msg->o.io.err = map_errno(lwip_read(sock, msg->o.data, msg->o.size));
-		else
-			msg->o.io.err = -EINVAL;
-		break;
+		if (msg->o.size >= 1ull << (8 * sizeof(msg->o.io.err) - 1))
+			return -EINVAL;
+		return map_errno(lwip_read(sock, msg->o.data, msg->o.size));
 	case mtWrite:
-		if (msg->o.size < 1ull << (8 * sizeof(int) - 1))
-			msg->o.io.err = map_errno(lwip_write(sock, msg->i.data, msg->i.size));
-		else
-			msg->o.io.err = -EINVAL;
-		break;
+		if (msg->i.size >= 1ull << (8 * sizeof(msg->o.io.err) - 1))
+			return -EINVAL;
+		return map_errno(lwip_write(sock, msg->i.data, msg->i.size));
 	case mtGetAttr:
-		if (msg->i.attr.type == atPollStatus)
-			msg->o.attr.val = poll_one(&polls, msg->i.attr.val, 0);
-		else
-			msg->o.attr.val = -EINVAL;
-		break;
+		if (msg->i.attr.type != atPollStatus)
+			return -EINVAL;
+		return do_poll_status(sock, msg->i.attr.val);
 	case mtClose:
-		msg->o.io.err = map_errno(lwip_close(sock));
-		return 1;
+		err = map_errno(lwip_close(sock));
+		remove_socket(sock_info);
+		return err;
 	case mtDevCtl:
 		do_socket_ioctl(msg, sock);
+		return /* ignored */ 0;
+	}
+
+	return -EINVAL;
+}
+
+
+static void poll_mark(struct poll_state *poll, int fd, int type)
+{
+	FD_SET(fd, &poll->ex);
+
+	switch (type) {
+	case sockmConnect:
+	case sockmSend:
+	case mtWrite:
+		FD_SET(fd, &poll->wr);
 		break;
+
+	case sockmAccept:
+	case sockmRecv:
+	case mtRead:
+		FD_SET(fd, &poll->rd);
+		break;
+
 	default:
-		smo->ret = -EINVAL;
+		__builtin_unreachable();
 		break;
+	}
+}
+
+
+static int may_retry_op(const struct poll_state *poll, int fd, int type)
+{
+	if (FD_ISSET(fd, &poll->ex))
+		return 1;
+
+	switch (type) {
+	case sockmConnect:
+	case sockmSend:
+	case mtWrite:
+		return FD_ISSET(fd, &poll->wr);
+
+	case sockmAccept:
+	case sockmRecv:
+	case mtRead:
+		return FD_ISSET(fd, &poll->rd);
+
+	default:
+		__builtin_unreachable();
+		return 0;
+	}
+}
+
+
+static ssize_t exec_deferred_call(struct deferred_msg *dm)
+{
+	socklen_t salen;
+	ssize_t err;
+	int flags = dm->oid.port;
+	int sock = dm->oid.id;
+
+	switch (dm->type) {
+	case sockmConnect:
+		salen = sizeof(flags);
+		err = map_errno(lwip_getsockopt(sock, SOL_SOCKET, SO_ERROR, &flags, &salen));
+		return err ? err : flags;
+	case sockmAccept:
+		return do_accept(sock, &dm->oid, dm->addr, &dm->addrlen, flags, dm->pid);
+	case sockmSend:
+		return map_errno(lwip_sendto(sock, dm->buf, dm->buflen, flags, (void *)dm->addr, dm->addrlen));
+	case sockmRecv:
+		salen = dm->addrlen;
+		err = map_errno(lwip_recvfrom(sock, dm->buf, dm->buflen, flags, (void *)dm->addr, &salen));
+		if (err >= 0) {
+			sa_convert_lwip_to_sys(dm->addr);
+			dm->addrlen = salen;
+		}
+		return err;
+	case mtRead:
+		return map_errno(lwip_read(sock, dm->buf, dm->buflen));
+	case mtWrite:
+		return map_errno(lwip_write(sock, dm->buf, dm->buflen));
+	default:
+		__builtin_unreachable();
+		return -EINVAL;
+	}
+}
+
+
+void dm_set_next(struct deferred_msg **where, struct deferred_msg *next)
+{
+	*where = next;
+	if (next)
+		next->prevnp = where;
+}
+
+
+static struct deferred_msg *dm_move(struct deferred_msg **where, struct deferred_msg *what)
+{
+	struct deferred_msg *next = what->next;
+
+	what->next = *where;
+	dm_set_next(what->prevnp, next);
+	dm_set_next(where, what);
+
+	return next;
+}
+
+
+struct deferred_msg *poll_add(struct deferred_msg *list)
+{
+	struct deferred_msg *dm, *last = NULL, *rejected = NULL;
+	struct poll_state *poll = sglobal.poll + sglobal.poll_flip;
+
+	list->prevnp = &list;
+	dm = list;
+	while (dm) {
+		int sock = dm->oid.id;
+
+		if (sock >= FD_SETSIZE) {
+			dm = dm_move(&rejected, dm);
+			continue;
+		}
+
+		if (sglobal.max_watched_fd < sock)
+			sglobal.max_watched_fd = sock;
+
+		poll_mark(poll, sock, dm->type);
+
+		last = dm;
+		dm = dm->next;
+	}
+
+	if (!last)
+		return rejected;
+
+	dm_set_next(&last->next, sglobal.watch_list);
+	dm_set_next(&sglobal.watch_list, list);
+
+	return rejected;
+}
+
+
+// oh crap, there is no lwip_epoll() either ...
+ssize_t poll_wait(useconds_t timeout_us)
+{
+	struct deferred_msg *completed, *dm;
+	struct poll_state *poll = sglobal.poll + sglobal.poll_flip;
+	struct poll_state *new_poll = sglobal.poll + !sglobal.poll_flip;
+	struct timeval tv, *timeout;
+	ssize_t err;
+
+	timeout = ~timeout_us ? &tv : NULL;
+	if (timeout) {
+		tv.tv_usec = timeout_us % 1000000;
+		tv.tv_sec = timeout_us / 1000000;
+	}
+
+	do {
+		// FIXME: has no bound on sleep time if not using Linux semantics for non-NULL timeout
+		err = sglobal.watch_list ? sglobal.max_watched_fd + 1 : 0;
+		err = map_errno(lwip_select(err, &poll->rd, &poll->wr, &poll->ex, timeout));
+	} while (err == -EINTR);
+
+	if (err < 0)
+		return err;	// FIXME: handle EBADF
+
+	sglobal.poll_flip = !sglobal.poll_flip;
+	FD_ZERO(&new_poll->rd);
+	FD_ZERO(&new_poll->wr);
+	FD_ZERO(&new_poll->ex);
+
+	dm = sglobal.watch_list;
+	while (dm) {
+		int sock = dm->oid.id;
+
+		if (may_retry_op(poll, sock, dm->type))
+			err = exec_deferred_call(dm);
+		else
+			err = -EAGAIN;
+
+		// FIXME: blocking vs partial read
+
+		if (err == -EAGAIN) {
+			poll_mark(new_poll, sock, dm->type);
+			dm = dm->next;
+			continue;
+		}
+
+		completed = NULL;
+		dm = dm_move(&completed, dm);
+		finish_deferred_call(completed, err);
 	}
 
 	return 0;
@@ -677,7 +898,7 @@ static int do_getaddrinfo(const char *name, const char *serv, const struct addri
 }
 
 
-void network_op(msg_t *msg)
+int network_op(msg_t *msg)
 {
 	const sockport_msg_t *smi = (const void *)msg->i.raw;
 	sockport_resp_t *smo = (void *)msg->o.raw;
@@ -692,7 +913,7 @@ void network_op(msg_t *msg)
 		if ((sock = lwip_socket(smi->socket.domain, sock, smi->socket.protocol)) < 0)
 			msg->o.lookup.err = -errno;
 		else {
-			msg->o.lookup.err = wrap_socket(&msg->o.lookup.dev, sock, smi->socket.type);
+			msg->o.lookup.err = wrap_socket(&msg->o.lookup.dev, sock, smi->socket.type, msg->pid);
 			msg->o.lookup.fil = msg->o.lookup.dev;
 		}
 		break;
@@ -731,7 +952,8 @@ void network_op(msg_t *msg)
 		break;
 
 	default:
-		msg->o.io.err = -EINVAL;
-		break;
+		return 0;
 	}
+
+	return 1;
 }
