@@ -47,6 +47,12 @@ struct poll_state {
 static int wrap_socket(u32 *port, int sock, int flags);
 
 
+static ssize_t map_errno(ssize_t ret)
+{
+	return ret < 0 ? -errno : ret;
+}
+
+
 // oh crap, there is no lwip_poll() ...
 static int poll_one(struct poll_state *p, int events, time_t timeout)
 {
@@ -116,12 +122,9 @@ static int socket_ioctl(int sock, unsigned long request, const void* in_data, vo
 #endif
 	switch (request) {
 	case FIONREAD:
-		/* implemented in LWiP socket layer */
-		return lwip_ioctl(sock, request, out_data);
-
 	case FIONBIO:
 		/* implemented in LWiP socket layer */
-		return lwip_ioctl(sock, request, out_data);
+		return map_errno(lwip_ioctl(sock, request, out_data));
 
 	case SIOCGIFNAME: {
 		struct ifreq *ifreq = (struct ifreq *) out_data;
@@ -458,13 +461,13 @@ static int socket_op(msg_t *msg, int sock)
 
 	switch (msg->type) {
 	case sockmConnect:
-		smo->ret = lwip_connect(sock, sa_convert_sys_to_lwip(smi->send.addr, smi->send.addrlen), smi->send.addrlen) < 0 ? -errno : 0;
+		smo->ret = map_errno(lwip_connect(sock, sa_convert_sys_to_lwip(smi->send.addr, smi->send.addrlen), smi->send.addrlen));
 		break;
 	case sockmBind:
-		smo->ret = lwip_bind(sock, sa_convert_sys_to_lwip(smi->send.addr, smi->send.addrlen), smi->send.addrlen) < 0 ? -errno : 0;
+		smo->ret = map_errno(lwip_bind(sock, sa_convert_sys_to_lwip(smi->send.addr, smi->send.addrlen), smi->send.addrlen));
 		break;
 	case sockmListen:
-		smo->ret = lwip_listen(sock, smi->listen.backlog) < 0 ? -errno : 0;
+		smo->ret = map_errno(lwip_listen(sock, smi->listen.backlog));
 		break;
 	case sockmAccept:
 		err = lwip_accept(sock, (void *)smo->sockname.addr, &salen);
@@ -478,43 +481,39 @@ static int socket_op(msg_t *msg, int sock)
 		}
 		break;
 	case sockmSend:
-		smo->ret = lwip_sendto(sock, msg->i.data, msg->i.size, smi->send.flags,
-			sa_convert_sys_to_lwip(smi->send.addr, smi->send.addrlen), smi->send.addrlen);
-		if (smo->ret < 0)
-			smo->ret = -errno;
+		smo->ret = map_errno(lwip_sendto(sock, msg->i.data, msg->i.size, smi->send.flags,
+			sa_convert_sys_to_lwip(smi->send.addr, smi->send.addrlen), smi->send.addrlen));
 		break;
 	case sockmRecv:
-		smo->ret = lwip_recvfrom(sock, msg->o.data, msg->o.size, smi->send.flags, (void *)smo->sockname.addr, &salen);
-		if (smo->ret < 0)
-			smo->ret = -errno;
-		else
+		smo->ret = map_errno(lwip_recvfrom(sock, msg->o.data, msg->o.size, smi->send.flags, (void *)smo->sockname.addr, &salen));
+		if (smo->ret >= 0)
 			sa_convert_lwip_to_sys(smo->sockname.addr);
 		smo->sockname.addrlen = salen;
 		break;
 	case sockmGetSockName:
-		smo->ret = lwip_getsockname(sock, (void *)smo->sockname.addr, &salen) < 0 ? -errno : 0;
+		smo->ret = map_errno(lwip_getsockname(sock, (void *)smo->sockname.addr, &salen));
 		if (smo->ret >= 0)
 			sa_convert_lwip_to_sys(smo->sockname.addr);
 		smo->sockname.addrlen = salen;
 		break;
 	case sockmGetPeerName:
-		smo->ret = lwip_getpeername(sock, (void *)smo->sockname.addr, &salen) < 0 ? -errno : 0;
+		smo->ret = map_errno(lwip_getpeername(sock, (void *)smo->sockname.addr, &salen));
 		if (smo->ret >= 0)
 			sa_convert_lwip_to_sys(smo->sockname.addr);
 		smo->sockname.addrlen = salen;
 		break;
 	case sockmGetFl:
-		smo->ret = lwip_fcntl(sock, F_GETFL, 0);
+		smo->ret = map_errno(lwip_fcntl(sock, F_GETFL, 0));
 		break;
 	case sockmSetFl:
-		smo->ret = lwip_fcntl(sock, F_SETFL, smi->send.flags);
+		smo->ret = map_errno(lwip_fcntl(sock, F_SETFL, smi->send.flags));
 		break;
 	case sockmGetOpt:
 		salen = msg->o.size;
 		smo->ret = lwip_getsockopt(sock, smi->opt.level, smi->opt.optname, msg->o.data, &salen) < 0 ? -errno : salen;
 		break;
 	case sockmSetOpt:
-		smo->ret = lwip_setsockopt(sock, smi->opt.level, smi->opt.optname, msg->i.data, msg->i.size) < 0 ? -errno : 0;
+		smo->ret = map_errno(lwip_setsockopt(sock, smi->opt.level, smi->opt.optname, msg->i.data, msg->i.size));
 		break;
 	case sockmShutdown:
 		if (smi->send.flags < 0 || smi->send.flags > SHUT_RDWR) {
@@ -522,19 +521,15 @@ static int socket_op(msg_t *msg, int sock)
 			break;
 		}
 
-		smo->ret = lwip_shutdown(sock, smi->send.flags) < 0 ? -errno : 0;
-		if (!smo->ret)
+		smo->ret = map_errno(lwip_shutdown(sock, smi->send.flags));
+		if (smo->ret >= 0)
 			return smi->send.flags + 1;
 		break;
 	case mtRead:
-		msg->o.io.err = lwip_read(sock, msg->o.data, msg->o.size);
-		if (msg->o.io.err < 0)
-			msg->o.io.err = -errno;
+		msg->o.io.err = map_errno(lwip_read(sock, msg->o.data, msg->o.size));
 		break;
 	case mtWrite:
-		msg->o.io.err = lwip_write(sock, msg->i.data, msg->i.size);
-		if (msg->o.io.err < 0)
-			msg->o.io.err = -errno;
+		msg->o.io.err = map_errno(lwip_write(sock, msg->i.data, msg->i.size));
 		break;
 	case mtGetAttr:
 		if (msg->i.attr.type == atPollStatus)
@@ -543,7 +538,7 @@ static int socket_op(msg_t *msg, int sock)
 			msg->o.attr.val = -EINVAL;
 		break;
 	case mtClose:
-		msg->o.io.err = lwip_close(sock) < 0 ? -errno : 0;
+		msg->o.io.err = map_errno(lwip_close(sock));
 		return 3;	// == SHUT_RDWR ok
 	case mtDevCtl:
 		do_socket_ioctl(msg, sock);
