@@ -516,14 +516,7 @@ static int socket_op(msg_t *msg, int sock)
 		smo->ret = map_errno(lwip_setsockopt(sock, smi->opt.level, smi->opt.optname, msg->i.data, msg->i.size));
 		break;
 	case sockmShutdown:
-		if (smi->send.flags < 0 || smi->send.flags > SHUT_RDWR) {
-			smo->ret = -EINVAL;
-			break;
-		}
-
 		smo->ret = map_errno(lwip_shutdown(sock, smi->send.flags));
-		if (smo->ret >= 0)
-			return smi->send.flags + 1;
 		break;
 	case mtRead:
 		msg->o.io.err = map_errno(lwip_read(sock, msg->o.data, msg->o.size));
@@ -539,7 +532,7 @@ static int socket_op(msg_t *msg, int sock)
 		break;
 	case mtClose:
 		msg->o.io.err = map_errno(lwip_close(sock));
-		return 3;	// == SHUT_RDWR ok
+		return 1;
 	case mtDevCtl:
 		do_socket_ioctl(msg, sock);
 		break;
@@ -557,20 +550,20 @@ static void socket_thread(void *arg)
 	struct sock_start *ss = arg;
 	unsigned respid;
 	u32 port = ss->port;
-	int sock = ss->sock, shutmode = 0, err;
+	int sock = ss->sock, err;
 	msg_t msg;
 
 	free(ss);
 
 	while ((err = msgRecv(port, &msg, &respid)) >= 0) {
-		shutmode |= socket_op(&msg, sock);
+		err = socket_op(&msg, sock);
 		msgRespond(port, &msg, respid);
-		if (shutmode == 3)
+		if (err)
 			break;
 	}
 
 	portDestroy(port);
-	if (shutmode != 3)
+	if (err >= 0)
 		lwip_close(sock);
 }
 
