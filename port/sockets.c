@@ -519,10 +519,16 @@ static int socket_op(msg_t *msg, int sock)
 		smo->ret = map_errno(lwip_shutdown(sock, smi->send.flags));
 		break;
 	case mtRead:
-		msg->o.io.err = map_errno(lwip_read(sock, msg->o.data, msg->o.size));
+		if (msg->o.size < 1ull << (8 * sizeof(int) - 1))
+			msg->o.io.err = map_errno(lwip_read(sock, msg->o.data, msg->o.size));
+		else
+			msg->o.io.err = -EINVAL;
 		break;
 	case mtWrite:
-		msg->o.io.err = map_errno(lwip_write(sock, msg->i.data, msg->i.size));
+		if (msg->o.size < 1ull << (8 * sizeof(int) - 1))
+			msg->o.io.err = map_errno(lwip_write(sock, msg->i.data, msg->i.size));
+		else
+			msg->o.io.err = -EINVAL;
 		break;
 	case mtGetAttr:
 		if (msg->i.attr.type == atPollStatus)
