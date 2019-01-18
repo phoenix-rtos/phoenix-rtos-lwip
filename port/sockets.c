@@ -33,23 +33,13 @@
 
 #include "route.h"
 
-#define SOCKTHREAD_PRIO 4
-#define SOCKTHREAD_STACKSZ (2 * SIZE_PAGE)
-
-
-struct sock_start {
-	u32 port;
-	int sock;
-};
-
-
 struct poll_state {
 	int socket;
 	fd_set rd, wr, ex;
 };
 
 
-static int wrap_socket(u32 *port, int sock, int flags);
+int wrap_socket(u32 *port, int sock, int flags);
 
 
 static ssize_t map_errno(ssize_t ret)
@@ -493,7 +483,7 @@ static void do_socket_ioctl(msg_t *msg, int sock)
 }
 
 
-static int socket_op(msg_t *msg, int sock)
+int socket_op(msg_t *msg, int sock)
 {
 	const sockport_msg_t *smi = (const void *)msg->i.raw;
 	sockport_resp_t *smo = (void *)msg->o.raw;
@@ -597,65 +587,6 @@ static int socket_op(msg_t *msg, int sock)
 }
 
 
-static void socket_thread(void *arg)
-{
-	struct sock_start *ss = arg;
-	unsigned respid;
-	u32 port = ss->port;
-	int sock = ss->sock, err;
-	msg_t msg;
-
-	free(ss);
-
-	while ((err = msgRecv(port, &msg, &respid)) >= 0) {
-		err = socket_op(&msg, sock);
-		msgRespond(port, &msg, respid);
-		if (err)
-			break;
-	}
-
-	portDestroy(port);
-	if (err >= 0)
-		lwip_close(sock);
-}
-
-
-static int wrap_socket(u32 *port, int sock, int flags)
-{
-	struct sock_start *ss;
-	int err;
-
-	if ((flags & SOCK_NONBLOCK) && (err = lwip_fcntl(sock, F_SETFL, O_NONBLOCK)) < 0) {
-		lwip_close(sock);
-		return err;
-	}
-
-	ss = malloc(sizeof(*ss));
-	if (!ss) {
-		lwip_close(sock);
-		return -ENOMEM;
-	}
-
-	ss->sock = sock;
-
-	if ((err = portCreate(&ss->port)) < 0) {
-		lwip_close(ss->sock);
-		free(ss);
-		return err;
-	}
-
-	*port = ss->port;
-
-	if ((err = sys_thread_opt_new("socket", socket_thread, ss, SOCKTHREAD_STACKSZ, SOCKTHREAD_PRIO, NULL))) {
-		portDestroy(ss->port);
-		lwip_close(ss->sock);
-		free(ss);
-		return err;
-	}
-
-	return EOK;
-}
-
 static int do_getnameinfo(const struct sockaddr *sa, socklen_t addrlen, char *host, socklen_t hostsz, char *serv, socklen_t servsz, int flags)
 {
 
@@ -748,91 +679,60 @@ static int do_getaddrinfo(const char *name, const char *serv, const struct addri
 }
 
 
-static void socketsrv_thread(void *arg)
+void network_op(msg_t *msg)
 {
+	const sockport_msg_t *smi = (const void *)msg->i.raw;
+	sockport_resp_t *smo = (void *)msg->o.raw;
 	struct addrinfo hint = { 0 };
-	unsigned respid;
 	char *node, *serv;
 	size_t sz;
-	msg_t msg;
-	u32 port;
-	int err, sock;
+	int sock;
 
-	port = (unsigned)arg;
+	switch (msg->type) {
+	case sockmSocket:
+		sock = smi->socket.type & ~(SOCK_NONBLOCK|SOCK_CLOEXEC);
+		if ((sock = lwip_socket(smi->socket.domain, sock, smi->socket.protocol)) < 0)
+			msg->o.lookup.err = -errno;
+		else {
+			msg->o.lookup.err = wrap_socket(&msg->o.lookup.dev.port, sock, smi->socket.type);
+			msg->o.lookup.fil = msg->o.lookup.dev;
+		}
+		break;
 
-	while ((err = msgRecv(port, &msg, &respid)) >= 0) {
-		const sockport_msg_t *smi = (const void *)msg.i.raw;
-		sockport_resp_t *smo = (void *)msg.o.raw;
-
-		switch (msg.type) {
-		case sockmSocket:
-			sock = smi->socket.type & ~(SOCK_NONBLOCK|SOCK_CLOEXEC);
-			if ((sock = lwip_socket(smi->socket.domain, sock, smi->socket.protocol)) < 0)
-				msg.o.lookup.err = -errno;
-			else {
-				msg.o.lookup.err = wrap_socket(&msg.o.lookup.dev.port, sock, smi->socket.type);
-				msg.o.lookup.fil = msg.o.lookup.dev;
-			}
+	case sockmGetNameInfo:
+		if (msg->i.size != sizeof(size_t) || (sz = *(size_t *)msg->i.data) > msg->o.size) {
+			smo->ret = EAI_SYSTEM;
+			smo->sys.errno = -EINVAL;
 			break;
-
-		case sockmGetNameInfo:
-			if (msg.i.size != sizeof(size_t) || (sz = *(size_t *)msg.i.data) > msg.o.size) {
-				smo->ret = EAI_SYSTEM;
-				smo->sys.errno = -EINVAL;
-				break;
-			}
-
-			smo->ret = do_getnameinfo(sa_convert_sys_to_lwip(smi->send.addr, smi->send.addrlen), smi->send.addrlen, msg.o.data, sz, msg.o.data + sz, msg.o.size - sz, smi->send.flags);
-			smo->sys.errno = smo->ret == EAI_SYSTEM ? errno : 0;
-			smo->nameinfo.hostlen = sz > 0 ? strlen(msg.o.data) + 1  : 0;
-			smo->nameinfo.servlen = msg.o.size - sz > 0 ? strlen(msg.o.data + sz) + 1 : 0;
-			break;
-
-		case sockmGetAddrInfo:
-			node = smi->socket.ai_node_sz ? msg.i.data : NULL;
-			serv = msg.i.size > smi->socket.ai_node_sz ? msg.i.data + smi->socket.ai_node_sz : NULL;
-
-			if (smi->socket.ai_node_sz > msg.i.size || (node && node[smi->socket.ai_node_sz - 1]) || (serv && ((char *)msg.i.data)[msg.i.size - 1])) {
-				smo->ret = EAI_SYSTEM;
-				smo->sys.errno = -EINVAL;
-				break;
-			}
-
-			hint.ai_flags = smi->socket.flags;
-			hint.ai_family = smi->socket.domain;
-			hint.ai_socktype = smi->socket.type;
-			hint.ai_protocol = smi->socket.protocol;
-			smo->sys.buflen = msg.o.size;
-			smo->ret = do_getaddrinfo(node, serv, &hint, msg.o.data, &smo->sys.buflen);
-			smo->sys.errno = smo->ret == EAI_SYSTEM ? errno : 0;
-			break;
-
-		default:
-			msg.o.io.err = -EINVAL;
 		}
 
-		msgRespond(port, &msg, respid);
-	}
+		smo->ret = do_getnameinfo(sa_convert_sys_to_lwip(smi->send.addr, smi->send.addrlen), smi->send.addrlen, msg->o.data, sz, msg->o.data + sz, msg->o.size - sz, smi->send.flags);
+		smo->sys.errno = smo->ret == EAI_SYSTEM ? errno : 0;
+		smo->nameinfo.hostlen = sz > 0 ? strlen(msg->o.data) + 1  : 0;
+		smo->nameinfo.servlen = msg->o.size - sz > 0 ? strlen(msg->o.data + sz) + 1 : 0;
+		break;
 
-	errout(err, "msgRecv(socketsrv)");
-}
+	case sockmGetAddrInfo:
+		node = smi->socket.ai_node_sz ? msg->i.data : NULL;
+		serv = msg->i.size > smi->socket.ai_node_sz ? msg->i.data + smi->socket.ai_node_sz : NULL;
 
+		if (smi->socket.ai_node_sz > msg->i.size || (node && node[smi->socket.ai_node_sz - 1]) || (serv && ((char *)msg->i.data)[msg->i.size - 1])) {
+			smo->ret = EAI_SYSTEM;
+			smo->sys.errno = -EINVAL;
+			break;
+		}
 
-__constructor__(1000)
-void init_lwip_sockets(void)
-{
-	oid_t oid = { 0 };
-	int err;
+		hint.ai_flags = smi->socket.flags;
+		hint.ai_family = smi->socket.domain;
+		hint.ai_socktype = smi->socket.type;
+		hint.ai_protocol = smi->socket.protocol;
+		smo->sys.buflen = msg->o.size;
+		smo->ret = do_getaddrinfo(node, serv, &hint, msg->o.data, &smo->sys.buflen);
+		smo->sys.errno = smo->ret == EAI_SYSTEM ? errno : 0;
+		break;
 
-	if ((err = portCreate(&oid.port)) < 0)
-		errout(err, "portCreate(socketsrv)");
-
-	if ((err = create_dev(&oid, PATH_SOCKSRV))) {
-		errout(err, "create_dev(%s)", PATH_SOCKSRV);
-	}
-
-	if ((err = sys_thread_opt_new("socketsrv", socketsrv_thread, (void *)oid.port, SOCKTHREAD_STACKSZ, SOCKTHREAD_PRIO, NULL))) {
-		portDestroy(oid.port);
-		errout(err, "thread(socketsrv)");
+	default:
+		msg->o.io.err = -EINVAL;
+		break;
 	}
 }
