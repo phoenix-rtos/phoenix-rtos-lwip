@@ -1,7 +1,7 @@
 #!make -f
 
-TARGET ?= arm-imx
-NET_DRIVERS ?= $(if $(filter ia32%,$(TARGET)),rtl) $(if $(filter arm-imx%,$(TARGET)),enet) pppos
+TARGET ?= arm-imx6ull
+NET_DRIVERS ?= $(if $(filter ia32%,$(TARGET)),rtl) $(if $(filter arm-imx6ull%,$(TARGET)),enet) pppos
 
 SIL = @
 
