@@ -21,6 +21,7 @@
 #include <unistd.h>
 #include <sys/threads.h>
 #include <sys/msg.h>
+#include <syslog.h>
 
 enum {
 	CONN_STATE_DISCONNECTED,
@@ -48,17 +49,12 @@ typedef struct
 #define COL_YELLOW  "\033[1;33m"
 #define COL_NORMAL  "\033[0m"
 
+#if 0
 #define log_debug(fmt, ...)     do { if (1) pppos_printf(state, fmt, ##__VA_ARGS__); } while (0)
 #define log_at(fmt, ...)     	do { if (1) pppos_printf(state, COL_CYAN fmt COL_NORMAL, ##__VA_ARGS__); } while (0)
 #define log_info(fmt, ...)      do { if (1) pppos_printf(state, COL_CYAN fmt COL_NORMAL, ##__VA_ARGS__); } while (0)
 #define log_warn(fmt, ...)      do { if (1) pppos_printf(state, COL_YELLOW fmt COL_NORMAL, ##__VA_ARGS__); } while (0)
 #define log_error(fmt, ...)     do { if (1) pppos_printf(state, COL_RED  fmt COL_NORMAL, ##__VA_ARGS__); } while (0)
-
-#define PPPOS_READ_AT_TIMEOUT_STEP_MS 		5
-#define PPPOS_READ_DATA_TIMEOUT_STEP_MS 	2
-
-#define PPPOS_TRYOPEN_SERIALDEV_SEC 		3
-#define PPPOS_CONNECT_RETRY_SEC 		5
 
 static void pppos_printf(pppos_priv_t *state, const char *format, ...)
 {
@@ -71,6 +67,21 @@ static void pppos_printf(pppos_priv_t *state, const char *format, ...)
 
 	printf("lwip: ppp@%s %s\n", state->serialdev_fn, buf);
 }
+#else
+
+#define log_debug(fmt, ...) syslog(LOG_DEBUG, fmt, ##__VA_ARGS__)
+#define log_at(fmt, ...)    syslog(LOG_INFO, fmt, ##__VA_ARGS__)
+#define log_info(fmt, ...)  syslog(LOG_INFO, fmt, ##__VA_ARGS__)
+#define log_warn(fmt, ...)  syslog(LOG_WARNING, fmt, ##__VA_ARGS__)
+#define log_error(fmt, ...) syslog(LOG_ERR, fmt, ##__VA_ARGS__)
+
+#endif
+
+#define PPPOS_READ_AT_TIMEOUT_STEP_MS 		5
+#define PPPOS_READ_DATA_TIMEOUT_STEP_MS 	2
+
+#define PPPOS_TRYOPEN_SERIALDEV_SEC 		3
+#define PPPOS_CONNECT_RETRY_SEC 		5
 
 /****** serial handling ******/
 
