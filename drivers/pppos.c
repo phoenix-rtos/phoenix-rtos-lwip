@@ -414,6 +414,7 @@ const char* at_init_cmds[] = {
 	"AT+WS46=29\r\n",		// disable LTE
 	"AT+CREG?\r\n", 		// check network registration (just for debug)
 	"AT+COPS?\r\n", 		// check operator registration (just for debug)
+	"AT+CSQ\r\n",       // check signal quality (for debug)
 	NULL,
 };
 
