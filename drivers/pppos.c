@@ -477,7 +477,7 @@ static void pppos_mainLoop(void* _state)
 			}
 
 			// NOTE: for PPP to work correctly, it has to be the default routing device (!!!)
-			pppapi_set_default(state->ppp);
+			// pppapi_set_default(state->ppp);
 		}
 
 		// TODO: provide authentication params externally
