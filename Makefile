@@ -71,8 +71,6 @@ $(PREFIX_PROG_STRIPPED)%: $(PREFIX_PROG)%
 include Makefile.$(TARGET)
 
 all: $(PREFIX_PROG_STRIPPED)lwip
-#$(addprefix $(PREFIX_H), libusb.h usb.h usbd.h usb_cdc.h)
-
 
 LWIPDIR := lib-lwip/src
 include $(LWIPDIR)/Filelists.mk
@@ -86,29 +84,14 @@ PORT_OBJS := $(patsubst %.c,$(PREFIX_O)%.o,$(PORT_SRCS))
 DRIVERS_SRCS = netif-driver.c
 DRIVERS_SRCS_UTIL = bdring.c pktmem.c physmmap.c res-create.c
 DRIVERS_SRCS_PPPOS = pppos.c
-
 include Makefile.$(TARGET)
-
 DRIVERS_OBJS := $(patsubst %.c,$(PREFIX_O)%.o,$(addprefix drivers/, $(DRIVERS_SRCS)))
+
 
 $(PREFIX_PROG_STRIPPED)lwip: $(LWIP_OBJS) $(PORT_OBJS) $(DRIVERS_OBJS)
 	$(LINK)
-	
-#$(PREFIX_PROG)usb: $(PREFIX_O)usbd.o 
-#	$(LINK) $(HCD_DRIVERS)
-#	
-#$(PREFIX_H)libusb.h: libusb.h
-#	$(HEADER)
-#	
-#$(PREFIX_H)usb.h: usb.h
-#	$(HEADER)
-	
-#$(PREFIX_H)usbd.h: usbd.h
-#	$(HEADER)
 
-#$(PREFIX_H)usb_cdc.h: usb_cdc.h
-#	$(HEADER)
-	
+
 .PHONY: clean
 clean:
 	@echo "rm -rf $(BUILD_DIR)"
