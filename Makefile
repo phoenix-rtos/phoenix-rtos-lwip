@@ -46,7 +46,7 @@ ARCH =  $(SIL)@mkdir -p $(@D); \
 LINK = $(SIL)mkdir -p $(@D); \
 	(printf "LD  %-24s\n" "$(@F)"); \
 	$(LD) $(LDFLAGS) -o "$@"  $^ $(LDLIBS)
-	
+
 HEADER = $(SIL)mkdir -p $(@D); \
 	(printf "HEADER %-24s\n" "$<"); \
 	cp -pR "$<" "$@"
@@ -62,12 +62,12 @@ $(PREFIX_O)%.o: %.S
 	$(SIL)(printf "ASM %s/%-24s\n" "$(notdir $(@D))" "$<")
 	$(SIL)$(CC) -c $(CFLAGS) "$<" -o "$@"
 	$(SIL)$(CC) -M  -MD -MP -MF $(PREFIX_O)$*.S.d -MT "$@" $(CFLAGS) $<
-	
+
 $(PREFIX_PROG_STRIPPED)%: $(PREFIX_PROG)%
 	@mkdir -p $(@D)
 	@(printf "STR %-24s\n" "$(@F)")
 	$(SIL)$(STRIP) -o $@ $<
-	
+
 include Makefile.$(TARGET)
 
 all: $(PREFIX_PROG_STRIPPED)lwip
@@ -87,8 +87,9 @@ DRIVERS_SRCS_PPPOS = pppos.c
 include Makefile.$(TARGET)
 DRIVERS_OBJS := $(patsubst %.c,$(PREFIX_O)%.o,$(addprefix drivers/, $(DRIVERS_SRCS)))
 
+CFLAGS += $(addprefix -DHAVE_DRIVER_,$(sort $(NET_DRIVERS)))
 
-$(PREFIX_PROG_STRIPPED)lwip: $(LWIP_OBJS) $(PORT_OBJS) $(DRIVERS_OBJS)
+$(PREFIX_PROG)lwip: $(LWIP_OBJS) $(PORT_OBJS) $(DRIVERS_OBJS)
 	$(LINK)
 
 
