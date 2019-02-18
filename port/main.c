@@ -16,6 +16,87 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <errno.h>
+
+#include <sys/msg.h>
+#include <posix/utils.h>
+
+
+static int writeRoutes(char *buffer, size_t bufSize, size_t offset)
+{
+	struct netif *netif;
+	size_t write, size = bufSize, retval;
+
+	const char *format = "    %2s%d    %08x    %08x    %08x    %8x    %8d\n";
+
+#define SNPRINTF_APPEND(fmt, ...) do { \
+		write = snprintf(buffer, size, fmt, ##__VA_ARGS__); \
+		if (offset > write) { \
+			offset -= write; \
+			write = 0; \
+		} else if (write > size) { \
+			return -ERANGE; \
+		} else if (offset) { \
+			write -= offset; \
+			memmove(buffer, buffer + offset, write); \
+			offset = 0; \
+		} \
+		size -= write; \
+		buffer += write; \
+	} while (0)
+
+	SNPRINTF_APPEND("%7s%12s%12s%12s%12s%12s\n", "Iface", "Dest", "Mask", "Gateway", "Flags", "MTU");
+
+	for (netif = netif_list; netif != NULL; netif = netif->next) {
+		SNPRINTF_APPEND(format, netif->name, netif->num, ntohl(ip_addr_get_ip4_u32(&netif->ip_addr)),
+			ntohl(ip_addr_get_ip4_u32(&netif->netmask)), ntohl(ip_addr_get_ip4_u32(&netif->gw)),
+			netif->flags, netif->mtu);
+	}
+
+	if (netif_default != NULL) {
+		SNPRINTF_APPEND(format, netif_default->name, netif_default->num, 0, 0,
+			ntohl(ip_addr_get_ip4_u32(&netif_default->gw)), netif_default->flags, netif_default->mtu);
+	}
+
+#undef ROUTE_APPEND
+
+	retval = bufSize - size;
+	return retval;
+}
+
+
+static void mainLoop(void)
+{
+	msg_t msg = {0};
+	unsigned int rid;
+	oid_t oid = {0, 0};
+
+	if (portCreate(&oid.port) < 0) {
+		printf("can't create port\n");
+		return;
+	}
+
+	if (create_dev(&oid, "/dev/route") < 0) {
+		printf("can't create /dev/route\n");
+		return;
+	}
+
+	for (;;) {
+		if (msgRecv(oid.port, &msg, &rid) < 0)
+			continue;
+
+		switch (msg.type) {
+		case mtRead:
+			msg.o.io.err = writeRoutes(msg.o.data, msg.o.size, msg.i.io.offs);
+			break;
+
+		default:
+			break;
+		}
+
+		msgRespond(oid.port, &msg, rid);
+	}
+}
 
 
 int main(int argc, char **argv)
@@ -55,6 +136,5 @@ int main(int argc, char **argv)
 	if (!have_intfs)
 		exit(1);
 
-	for (;;)
-		usleep(120000000);
+	mainLoop();
 }
