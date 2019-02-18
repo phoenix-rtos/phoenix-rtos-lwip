@@ -1,123 +1,118 @@
-#!make -f
+#
+# Makefile for phoenix-rtos-usb
+#
+# Copyright 2019 Phoenix Systems
+#
+# %LICENSE%
+#
 
-TARGET ?= arm-imx
-NET_DRIVERS ?= $(if $(filter ia32%,$(TARGET)),rtl) $(if $(filter arm-imx%,$(TARGET)),enet) pppos
+SIL ?= @
+MAKEFLAGS += --no-print-directory
 
-SIL = @
+#TARGET ?= ia32-qemu
+#TARGET ?= armv7-stm32
+TARGET ?= arm-imx6ull
 
-CC = $(CROSS)gcc
-AR = $(CROSS)ar
-STRIP = $(CROSS)strip
-OBJDUMP = $(CROSS)objdump
+TOPDIR := $(CURDIR)
+BUILD_PREFIX ?= ../build/$(TARGET)
+BUILD_PREFIX := $(abspath $(BUILD_PREFIX))
+BUILD_DIR ?= $(BUILD_PREFIX)/$(notdir $(TOPDIR))
+BUILD_DIR := $(abspath $(BUILD_DIR))
 
+# Compliation options for various architectures
+TARGET_FAMILY = $(firstword $(subst -, ,$(TARGET)-))
+include Makefile.$(TARGET_FAMILY)
 
-MAKEFLAGS += --no-print-directory --output-sync
+# build artifacts dir
+CURR_SUFFIX := $(patsubst $(TOPDIR)/%,%,$(abspath $(CURDIR))/)
+PREFIX_O := $(BUILD_DIR)/$(CURR_SUFFIX)
 
-CFLAGS += -O3 -g -Wall -Wstrict-prototypes
-CFLAGS += -Iinclude -Ilib-lwip/src/include
-CFLAGS += -static -ffunction-sections -fdata-sections
-CFLAGS += -nostartfiles -nostdlib
+# target install paths, can be provided exterally
+PREFIX_A ?= $(BUILD_PREFIX)/lib/
+PREFIX_H ?= $(BUILD_PREFIX)/include/
+PREFIX_PROG ?= $(BUILD_PREFIX)/prog/
+PREFIX_PROG_STRIPPED ?= $(BUILD_PREFIX)/prog.stripped/
 
-LDFLAGS += --gc-sections -nostdlib
-LIBS = -lphoenix -lgcc
+CFLAGS += -I"$(PREFIX_H)" -Iinclude -Ilib-lwip/src/include
+LDFLAGS += -L"$(PREFIX_A)"
 
-ARFLAGS = -r
+# add include path for auto-generated files
+CFLAGS += -I"$(BUILD_DIR)/$(CURR_SUFFIX)"
 
+ARCH =  $(SIL)@mkdir -p $(@D); \
+	(printf "AR  %-24s\n" "$(@F)"); \
+	$(AR) $(ARFLAGS) $@ $^ 2>/dev/null
+
+LINK = $(SIL)mkdir -p $(@D); \
+	(printf "LD  %-24s\n" "$(@F)"); \
+	$(LD) $(LDFLAGS) -o "$@"  $^ $(LDLIBS)
+	
+HEADER = $(SIL)mkdir -p $(@D); \
+	(printf "HEADER %-24s\n" "$<"); \
+	cp -pR "$<" "$@"
+
+$(PREFIX_O)%.o: %.c
+	@mkdir -p $(@D)
+	$(SIL)(printf "CC  %-24s\n" "$<")
+	$(SIL)$(CC) -c $(CFLAGS) "$<" -o "$@"
+	$(SIL)$(CC) -M  -MD -MP -MF $(PREFIX_O)$*.c.d -MT "$@" $(CFLAGS) $<
+
+$(PREFIX_O)%.o: %.S
+	@mkdir -p $(@D)
+	$(SIL)(printf "ASM %s/%-24s\n" "$(notdir $(@D))" "$<")
+	$(SIL)$(CC) -c $(CFLAGS) "$<" -o "$@"
+	$(SIL)$(CC) -M  -MD -MP -MF $(PREFIX_O)$*.S.d -MT "$@" $(CFLAGS) $<
+	
+$(PREFIX_PROG_STRIPPED)%: $(PREFIX_PROG)%
+	@mkdir -p $(@D)
+	@(printf "STR %-24s\n" "$(@F)")
+	$(SIL)$(STRIP) -o $@ $<
+	
 include Makefile.$(TARGET)
 
-.PHONY: clean all
-all: lwip
+all: $(PREFIX_PROG_STRIPPED)lwip
+#$(addprefix $(PREFIX_H), libusb.h usb.h usbd.h usb_cdc.h)
 
-OUT_LIBS := lwip lwip-port netdrivers
-OBJS := $(addprefix build/lib,$(addsuffix .a,$(OUT_LIBS)))
-
-#
-# LwIP sources
-#
 
 LWIPDIR := lib-lwip/src
 include $(LWIPDIR)/Filelists.mk
 LWIP_EXCLUDE := netif/slipif.c
 LWIP_SRCS := $(filter-out $(addprefix $(LWIPDIR)/,$(LWIP_EXCLUDE)),$(LWIPNOAPPSFILES))
-LWIP_OBJS := $(patsubst $(LWIPDIR)/%.c,build/lwip/%.o,$(LWIP_SRCS))
+LWIP_OBJS := $(patsubst %.c,$(PREFIX_O)%.o,$(LWIP_SRCS))
 
-build/lwip/%.o: $(LWIPDIR)/%.c include/lwipopts.h $(filter clean,$(MAKECMDGOALS))
-	@mkdir -p $(dir $@)
-	@(printf "CC  lib-lwip/src/%s/%-24s\n" "$(notdir $(@D))" "$(@F)")
-	$(SIL)$(CC) $(CFLAGS) -c -o $@ $<
-
-build/liblwip.a: $(LWIP_OBJS)
-	@(printf "AR  %s/%-24s\n" "$(notdir $(@D))" "$(@F)")
-	$(SIL)$(AR) $(ARFLAGS) $@ $^ 2>/dev/null
-
-#
-# LwIP system wrapper
-#
-#
 PORT_SRCS := $(wildcard port/*.c)
-PORT_OBJS := $(patsubst %.c,build/%.o,$(PORT_SRCS))
+PORT_OBJS := $(patsubst %.c,$(PREFIX_O)%.o,$(PORT_SRCS))
 
-build/port/%.o: port/%.c $(filter clean,$(MAKECMDGOALS))
-	@mkdir -p $(dir $@)
-	@(printf "CC  %s/%-24s\n" "$(notdir $(@D))" "$(@F)")
-	$(SIL)$(CC) $(CFLAGS) -c -o $@ $<
+DRIVERS_SRCS = netif-driver.c
+DRIVERS_SRCS_UTIL = bdring.c pktmem.c physmmap.c res-create.c
+DRIVERS_SRCS_PPPOS = pppos.c
 
-build/liblwip-port.a: $(PORT_OBJS)
-	@(printf "AR  %s/%-24s\n" "$(notdir $(@D))" "$(@F)")
-	$(SIL)$(AR) $(ARFLAGS) $@ $^ 2>/dev/null
+include Makefile.$(TARGET)
 
-#
-# netif drivers
-#
-include drivers/Makefile.inc
-NDRV_SRCS := $(addprefix drivers/,$(sort $(foreach v,common $(NET_DRIVERS),$(DRIVER_SRCS_$(v)))))
-NDRV_OBJS := $(patsubst %.c,build/%.o,$(NDRV_SRCS))
-CFLAGS += $(addprefix -DHAVE_DRIVER_,$(sort $(NET_DRIVERS)))
+DRIVERS_OBJS := $(patsubst %.c,$(PREFIX_O)%.o,$(addprefix drivers/, $(DRIVERS_SRCS)))
 
-build/drivers/%.o: drivers/%.c $(filter clean,$(MAKECMDGOALS))
-	@mkdir -p $(dir $@)
-	@(printf "CC  %s/%-24s\n" "$(notdir $(@D))" "$(@F)")
-	$(SIL)$(CC) $(CFLAGS) -c -o $@ $<
-
-build/libnetdrivers.a: $(NDRV_OBJS)
-	@(printf "AR  %s/%-24s\n" "$(notdir $(@D))" "$(@F)")
-	$(SIL)$(AR) $(ARFLAGS) $@ $^ 2>/dev/null
-
-
-lwip: $(OBJS)
-	@echo "\033[1;34mLD $@\033[0m"
+$(PREFIX_PROG_STRIPPED)lwip: $(LWIP_OBJS) $(PORT_OBJS) $(DRIVERS_OBJS)
+	$(LINK)
 	
-	@(\
-	printf "Subsystem                  | text    | rodata  | data\n";\
-	printf "=========================================================\n";\
-	for f in $(ARCHS) $(OBJS); do\
-	 	datasz=0;\
-		textsz=0;\
-		rodatasz=0;\
-		file=$$f;\
-		for i in `$(OBJDUMP) -t $$file | grep -e " O " | grep -v ".rodata" | awk '{ print $$1 }'`; do\
-			datasz=`echo $$(($$datasz + 0x$$i))`;\
-		done;\
-		for i in `$(OBJDUMP) -t $$file | grep -e " O " | grep ".rodata" | awk '{ print $$1 }'`; do \
-			rodatasz=`echo $$(($$rodatasz + 0x$$i))`;\
-		done; \
-		for i in `$(OBJDUMP) -t $$file | grep -e " F " | awk '{ print $$5 }'`; do \
-			textsz=`echo $$(($$textsz + 0x$$i))`;\
-		done;\
-		n=`dirname $$f`;\
-		n=`basename $$n | sed "s/libphoenix/./"`;\
-		f=`basename $$f`;\
-		printf "%-26s | %-7d | %-7d | %-7d\n" $$n/$$f $$textsz $$rodatasz $$datasz;\
-	done;)
+#$(PREFIX_PROG)usb: $(PREFIX_O)usbd.o 
+#	$(LINK) $(HCD_DRIVERS)
+#	
+#$(PREFIX_H)libusb.h: libusb.h
+#	$(HEADER)
+#	
+#$(PREFIX_H)usb.h: usb.h
+#	$(HEADER)
 	
-	$(SIL)$(CC) $(CFLAGS) $(addprefix -Wl$(comma),$(LDFLAGS) -Map=$@.map) -o $@ -Wl,-\( $(LIBS) $(OBJS) -Wl,-\)
+#$(PREFIX_H)usbd.h: usbd.h
+#	$(HEADER)
+
+#$(PREFIX_H)usb_cdc.h: usb_cdc.h
+#	$(HEADER)
 	
-	@(echo "";\
-	echo "=> lwip for [$(TARGET)] has been created";\
-	echo "")
-
-
+.PHONY: clean
 clean:
-	rm -rf lwip lwip.s build
+	@echo "rm -rf $(BUILD_DIR)"
 
-comma = ,
+ifneq ($(filter clean,$(MAKECMDGOALS)),)
+	$(shell rm -rf $(BUILD_DIR))
+endif

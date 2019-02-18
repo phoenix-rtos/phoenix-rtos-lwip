@@ -1,6 +1,0 @@
-############ ARMv7 (Cortex-M3/M4) ############
-
-CROSS ?= arm-phoenix-
-
-CFLAGS += -mcpu=cortex-m3 -mthumb -fpic -fpie -msingle-pic-base -mno-pic-data-is-text-relative \
-	-fomit-frame-pointer -DNOMMU

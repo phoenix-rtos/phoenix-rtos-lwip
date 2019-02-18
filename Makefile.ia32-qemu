@@ -1,0 +1,10 @@
+#
+# Makefile for phoenix-rtos-lwsip
+#
+# IA32 qemu dependend part
+#
+# Copyright 2019 Phoenix Systems
+#
+
+DRIVER_SRCS_RTL = rtl8139cp.c $(SRCS_ia32_pci) $(DRIVERS_SRCS_UTIL)
+DRIVERS_SRCS += $(DRIVERS_SRCS_PPPOS) $(DRIVERS_SRCS_RTL)

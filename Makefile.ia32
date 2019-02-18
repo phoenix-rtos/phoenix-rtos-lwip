@@ -1,7 +1,0 @@
-############ IA32 ############
-
-CROSS ?= i386-pc-phoenix-
-
-CFLAGS += -m32 -mtune=generic -mno-mmx -mno-sse -fno-pic -fno-pie
-
-LDFLAGS += -m elf_i386

@@ -1,0 +1,12 @@
+#
+# Makefile for phoenix-rtos-lwsip
+#
+# iMX6ULL dependend part
+#
+# Copyright 2019 Phoenix Systems
+#
+
+DRIVERS_SRCS_ENET = imx6-enet.c ephy.c gpio.c imx6ull-gpio.c $(DRIVERS_SRCS_UTIL) hw-debug.c
+DRIVERS_SRCS += $(DRIVERS_SRCS_PPPOS) $(DRIVERS_SRCS_ENET)
+
+#DRIVER_SRCS_rtl = rtl8139cp.c $(SRCS_util) $(SRCS_ia32_pci)
