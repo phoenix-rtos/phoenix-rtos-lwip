@@ -1,5 +1,5 @@
 #
-# Makefile for phoenix-rtos-usb
+# Makefile for phoenix-rtos-lwip
 #
 # Copyright 2019 Phoenix Systems
 #
