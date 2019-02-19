@@ -81,19 +81,24 @@ static err_t netif_dev_init(struct netif *netif)
 	idata = netif->state;
 	LWIP_ASSERT("initdata != NULL", (idata != NULL));
 
-	MIB2_INIT_NETIF(netif, snmp_ifType_ethernet_csmacd, 10000000);
+	if (!strcmp(idata->drv->name, "enet")) {
+		MIB2_INIT_NETIF(netif, snmp_ifType_ethernet_csmacd, 10000000);
 
-	netif->mtu = 1500;
-	netif->hwaddr_len = ETH_HWADDR_LEN;
-	netif->flags = NETIF_FLAG_UP | NETIF_FLAG_LINK_UP | NETIF_FLAG_BROADCAST |
+		netif->mtu = 1500;
+		netif->hwaddr_len = ETH_HWADDR_LEN;
+		netif->flags = NETIF_FLAG_UP | NETIF_FLAG_LINK_UP | NETIF_FLAG_BROADCAST |
 		NETIF_FLAG_ETHARP | NETIF_FLAG_ETHERNET;
-	netif->name[0] = 'e';
-	netif->name[1] = 'n';
 
-	netif->output = etharp_output;
+		netif->name[0] = 'e';
+		netif->name[1] = 'n';
+	}
+
+	if (strcmp(idata->drv->name, "tun")) {
+		netif->output = etharp_output;
 #if LWIP_IPV6
-	netif->output_ip6 = ethip6_output;
+		netif->output_ip6 = ethip6_output;
 #endif /* LWIP_IPV6 */
+	}
 
 	switch (idata->drv->init(netif, idata->cfg)) {
 	case -ENOMEM:
