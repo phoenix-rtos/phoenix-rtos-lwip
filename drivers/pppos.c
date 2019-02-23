@@ -78,7 +78,7 @@ static void pppos_printf(pppos_priv_t *state, const char *format, ...)
 #endif
 
 #define PPPOS_READ_AT_TIMEOUT_STEP_MS 		5
-#define PPPOS_READ_DATA_TIMEOUT_STEP_MS 	2
+#define PPPOS_READ_DATA_TIMEOUT_STEP_MS 	10
 
 #define PPPOS_TRYOPEN_SERIALDEV_SEC 		3
 #define PPPOS_CONNECT_RETRY_SEC 		5
