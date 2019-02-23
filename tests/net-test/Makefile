@@ -23,16 +23,16 @@ SRCS := $(wildcard src/*.c)
 #LDLIBS := -ltty $(LDLIBS)
 
 ### build/install dirs ###
-BUILD_PREFIX ?= ../build/$(TARGET)
-BUILD_PREFIX := $(abspath $(BUILD_PREFIX))
-BUILD_DIR ?= $(BUILD_PREFIX)/$(notdir $(TOPDIR))
+PREFIX_BUILD ?= ../_build/$(TARGET)
+PREFIX_BUILD := $(abspath $(PREFIX_BUILD))
+BUILD_DIR ?= $(PREFIX_BUILD)/$(notdir $(TOPDIR))
 BUILD_DIR := $(abspath $(BUILD_DIR))
 
 PREFIX_O := $(BUILD_DIR)/$(PROG)/
-PREFIX_A ?= $(BUILD_PREFIX)/lib/
-PREFIX_H ?= $(BUILD_PREFIX)/include/
-PREFIX_PROG ?= $(BUILD_PREFIX)/prog/
-PREFIX_PROG_STRIPPED ?= $(BUILD_PREFIX)/prog.stripped/
+PREFIX_A ?= $(PREFIX_BUILD)/lib/
+PREFIX_H ?= $(PREFIX_BUILD)/include/
+PREFIX_PROG ?= $(PREFIX_BUILD)/prog/
+PREFIX_PROG_STRIPPED ?= $(PREFIX_BUILD)/prog.stripped/
 
 # setup paths
 CFLAGS += -I$(PREFIX_H)
