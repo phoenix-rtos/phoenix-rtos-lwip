@@ -334,8 +334,6 @@ static void pppos_link_status_cb(ppp_pcb *pcb, int err_code, void *ctx)
 	case PPPERR_USER:              /* User interrupt. */
 		log_info("ppp_link_status_cb: PPPERR_USER");
 		state->conn_state = CONN_STATE_DISCONNECTED;
-		ppp_free(state->ppp);
-		state->ppp = NULL;
 		break;
 
 	case PPPERR_CONNECT:           /* Connection lost. */
