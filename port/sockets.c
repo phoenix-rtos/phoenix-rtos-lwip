@@ -281,6 +281,7 @@ static int wrap_socket(u32 *port, int sock, int flags)
 }
 
 #define netif_is_ppp(_netif) (((_netif)->name[0] == 'p') && ((_netif)->name[1] == 'p'))
+#define netif_is_tun(_netif) (((_netif)->name[0] == 't') && ((_netif)->name[1] == 'u'))
 
 static int socket_ioctl(int sock, unsigned long request, const void* in_data, void* out_data)
 {
@@ -351,7 +352,7 @@ static int socket_ioctl(int sock, unsigned long request, const void* in_data, vo
 		ifreq->ifr_flags |= netif_is_link_up(interface) ? IFF_RUNNING : 0;
 		ifreq->ifr_flags |= ip_addr_isloopback(&interface->ip_addr) ? IFF_LOOPBACK : 0;
 		ifreq->ifr_flags |= (interface->flags & NETIF_FLAG_IGMP) ? IFF_MULTICAST : 0;
-		if (netif_is_ppp(interface)) {
+		if (netif_is_ppp(interface) || netif_is_tun(interface)) {
 			ifreq->ifr_flags |= IFF_POINTOPOINT;
 		} else {
 			ifreq->ifr_flags |= IFF_BROADCAST;
@@ -404,7 +405,7 @@ static int socket_ioctl(int sock, unsigned long request, const void* in_data, vo
 			}
 			break;
 		case SIOCGIFDSTADDR:
-			if (netif_is_ppp(interface)) {
+			if (netif_is_ppp(interface) || netif_is_tun(interface)) {
 				sin = (struct sockaddr_in *) &ifreq->ifr_dstaddr;
 				sin->sin_addr.s_addr = netif_ip4_gw(interface)->addr;
 			} else {
@@ -441,6 +442,12 @@ static int socket_ioctl(int sock, unsigned long request, const void* in_data, vo
 		case SIOCSIFBRDADDR:
 			return -EOPNOTSUPP;
 		case SIOCSIFDSTADDR:
+			if (netif_is_tun(interface)) {
+				sin = (struct sockaddr_in *) &ifreq->ifr_dstaddr;
+				ipaddr.addr = sin->sin_addr.s_addr;
+				netif_set_gw(interface, &ipaddr);
+				break;
+			}
 			return -EOPNOTSUPP;
 		}
 
@@ -457,6 +464,9 @@ static int socket_ioctl(int sock, unsigned long request, const void* in_data, vo
 			ifreq->ifr_hwaddr.sa_family = ARPHRD_LOOPBACK;
 		} else if (netif_is_ppp(interface)) {
 			ifreq->ifr_hwaddr.sa_family = ARPHRD_PPP;
+		} else if (netif_is_tun(interface)) {
+			/* encap: UNSPEC that's what we want */
+			ifreq->ifr_hwaddr.sa_family = -1;
 		} else {
 			ifreq->ifr_hwaddr.sa_family = ARPHRD_ETHER;
 			ifreq->ifr_hwaddr.sa_len = interface->hwaddr_len;
@@ -611,7 +621,7 @@ static int socket_ioctl(int sock, unsigned long request, const void* in_data, vo
 
 		free(rt->rt_dev);
 		free(rt);
-		return -EOPNOTSUPP;
+		return EOK;
 	}
 	}
 
