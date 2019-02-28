@@ -89,7 +89,6 @@ static err_t tap_output_cb(struct netif *netif, struct pbuf *p)
 static int _tuntap_write(tuntap_priv_t *state, void *data, size_t size)
 {
 	struct pbuf *p;
-	static int i = 0;
 
 	TUN_TRACE("%c%c%d write size %llu\n", state->netif->name[0], state->netif->name[1], state->netif->num, size);
 

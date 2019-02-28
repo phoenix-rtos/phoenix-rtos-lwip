@@ -6,6 +6,6 @@
 # Copyright 2019 Phoenix Systems
 #
 
-NET_DRIVERS += pppos enet
+NET_DRIVERS += pppos enet tuntap
 DRIVERS_SRCS_ENET = imx6-enet.c ephy.c gpio.c imx6ull-gpio.c $(DRIVERS_SRCS_UTIL) hw-debug.c
-DRIVERS_SRCS += $(DRIVERS_SRCS_PPPOS) $(DRIVERS_SRCS_ENET)
+DRIVERS_SRCS += $(DRIVERS_SRCS_PPPOS) $(DRIVERS_SRCS_ENET) $(DRIVERS_SRCS_TUNTAP)

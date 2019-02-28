@@ -84,6 +84,7 @@ PORT_OBJS := $(patsubst %.c,$(PREFIX_O)%.o,$(PORT_SRCS))
 DRIVERS_SRCS = netif-driver.c
 DRIVERS_SRCS_UTIL = bdring.c pktmem.c physmmap.c res-create.c
 DRIVERS_SRCS_PPPOS = pppos.c
+DRIVERS_SRCS_TUNTAP = tuntap.c
 include Makefile.$(TARGET)
 DRIVERS_OBJS := $(patsubst %.c,$(PREFIX_O)%.o,$(addprefix drivers/, $(DRIVERS_SRCS)))
 
