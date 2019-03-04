@@ -21,10 +21,13 @@
 #include <sys/msg.h>
 #include <posix/utils.h>
 
+#include<lwip/sockets.h>
+#include "route.h"
 
 static int writeRoutes(char *buffer, size_t bufSize, size_t offset)
 {
-	struct netif *netif;
+	int i;
+	rt_entry_t *entry;
 	size_t write, size = bufSize, retval;
 
 	const char *format = "    %2s%d    %08x    %08x    %08x    %8x    %8d\n";
@@ -47,10 +50,11 @@ static int writeRoutes(char *buffer, size_t bufSize, size_t offset)
 
 	SNPRINTF_APPEND("%7s%12s%12s%12s%12s%12s\n", "Iface", "Dest", "Mask", "Gateway", "Flags", "MTU");
 
-	for (netif = netif_list; netif != NULL; netif = netif->next) {
-		SNPRINTF_APPEND(format, netif->name, netif->num, ntohl(ip_addr_get_ip4_u32(&netif->ip_addr)),
-			ntohl(ip_addr_get_ip4_u32(&netif->netmask)), ntohl(ip_addr_get_ip4_u32(&netif->gw)),
-			netif->flags, netif->mtu);
+	for (i = 0; i < rt_table.used; i++) {
+		entry = rt_table.entries[i];
+		SNPRINTF_APPEND(format, entry->netif->name, entry->netif->num, ntohl(ip_addr_get_ip4_u32(&entry->dst)),
+			ntohl(ip_addr_get_ip4_u32(&entry->genmask)), ntohl(ip_addr_get_ip4_u32(&entry->gw)),
+			entry->flags, entry->netif->mtu);
 	}
 
 	if (netif_default != NULL) {

@@ -26,6 +26,7 @@
 #include <sys/threads.h>
 #include <posix/utils.h>
 
+#include "route.h"
 
 #define SOCKTHREAD_PRIO 4
 #define SOCKTHREAD_STACKSZ (2 * SIZE_PAGE)
@@ -574,16 +575,13 @@ static int socket_ioctl(int sock, unsigned long request, const void* in_data, vo
 		return EOK;
 	}
 	/** ROUTING
-	 * We support only 1 route per device + default device for all other routing.
-	 * Because of that we only support changing gateways and default routing device.
-	 *
-	 * Route deletion is not supported (apart from removing default device).
+	 * net and host routing is supported and multiple gateways with ethernet interfaces
+	 * TODO: support metric
 	 */
-	case SIOCADDRT: {
+	case SIOCADDRT:
+	case SIOCDELRT: {
 		struct rtentry *rt = (struct rtentry *) in_data;
 		struct netif *interface = netif_find(rt->rt_dev);
-		struct sockaddr_in* sin;
-		ip_addr_t ipaddr;
 
 		if (interface == NULL) {
 			free(rt->rt_dev);
@@ -591,36 +589,19 @@ static int socket_ioctl(int sock, unsigned long request, const void* in_data, vo
 			return -ENXIO;
 		}
 
-		if (rt->rt_flags & RTF_GATEWAY) {
-			sin = (struct sockaddr_in*) &rt->rt_gateway;
-			ipaddr.addr = sin->sin_addr.s_addr;
-			netif_set_gw(interface, &ipaddr);
-		}
+		switch (request) {
 
-		sin = (struct sockaddr_in*) &rt->rt_dst;
-		if (sin->sin_addr.s_addr == 0) { // change the default device
-			netif_set_default(interface);
-		}
-		free(rt->rt_dev);
-		free(rt);
-		/* NOTE: ignoring other params */
-
-		return EOK;
-	}
-	case SIOCDELRT: {
-		struct rtentry *rt = (struct rtentry *) in_data;
-		struct sockaddr_in* sin;
-
-		sin = (struct sockaddr_in*) &rt->rt_dst;
-		if (sin->sin_addr.s_addr == 0) {
-			netif_set_default(NULL);
-			free(rt->rt_dev);
-			free(rt);
-			return EOK;
+		case SIOCADDRT:
+			route_add(interface, rt);
+			break;
+		case SIOCDELRT:
+			route_del(interface, rt);
+			break;
 		}
 
 		free(rt->rt_dev);
 		free(rt);
+
 		return EOK;
 	}
 	}
