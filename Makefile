@@ -90,6 +90,10 @@ DRIVERS_OBJS := $(patsubst %.c,$(PREFIX_O)%.o,$(addprefix drivers/, $(DRIVERS_SR
 
 CFLAGS += $(addprefix -DHAVE_DRIVER_,$(sort $(NET_DRIVERS)))
 
+ifneq ($(EPHY_KSZ8081RND),)
+	CFLAGS += -DEPHY_KSZ8081RND
+endif
+
 $(PREFIX_PROG)lwip: $(LWIP_OBJS) $(PORT_OBJS) $(DRIVERS_OBJS)
 	$(LINK)
 
