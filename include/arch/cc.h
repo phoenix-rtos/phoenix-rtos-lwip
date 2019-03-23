@@ -19,6 +19,7 @@
 #include <fcntl.h>
 #include <features.h>
 #include <netdb.h>
+#include <sys/time.h>
 
 
 /* types used by LwIP */
