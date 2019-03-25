@@ -16,6 +16,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
+#include <sys/stat.h>
 #include <sys/threads.h>
 #include <posix/utils.h>
 
@@ -428,6 +429,9 @@ void init_lwip_sockets(void)
 #endif
 	if ((err = portCreate(&oid.port)) < 0)
 		errout(err, "portCreate(socketsrv)");
+
+	// in case /dev doesn't exist yet (eg. on just dummyfs)
+	mkdir("/dev", 0777);
 
 	if ((err = create_dev(&oid, PATH_SOCKSRV)))
 		errout(err, "create_dev(%s)", PATH_SOCKSRV);
