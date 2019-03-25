@@ -17,7 +17,9 @@
 #include <stdlib.h>
 #include <endian.h>
 #include <fcntl.h>
+#include <features.h>
 #include <netdb.h>
+#include <sys/time.h>
 
 
 /* types used by LwIP */
