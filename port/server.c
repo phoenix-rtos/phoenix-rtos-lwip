@@ -64,7 +64,7 @@ static void socket_thread(void *arg)
 }
 
 
-int wrap_socket(u32 *port, int sock, int flags)
+int wrap_socket(oid_t *oid, int sock, int flags)
 {
 	struct sock_start *ss;
 	int err;
@@ -88,7 +88,8 @@ int wrap_socket(u32 *port, int sock, int flags)
 		return err;
 	}
 
-	*port = ss->port;
+	oid->port = ss->port;
+	oid->id = 0;
 
 	if ((err = sys_thread_opt_new("socket", socket_thread, ss, SOCKTHREAD_STACKSZ, SOCKTHREAD_PRIO, NULL))) {
 		portDestroy(ss->port);

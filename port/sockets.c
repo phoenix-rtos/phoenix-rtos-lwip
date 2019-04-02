@@ -39,7 +39,7 @@ struct poll_state {
 };
 
 
-int wrap_socket(u32 *port, int sock, int flags);
+int wrap_socket(oid_t *oid, int sock, int flags);
 
 
 static ssize_t map_errno(ssize_t ret)
@@ -488,12 +488,11 @@ int socket_op(msg_t *msg, int sock)
 	const sockport_msg_t *smi = (const void *)msg->i.raw;
 	sockport_resp_t *smo = (void *)msg->o.raw;
 	struct poll_state polls = {0};
-	u32 new_port;
 	socklen_t salen;
 	int err;
 
 	polls.socket = sock;
-	salen = sizeof(smo->sockname.addr);
+	salen = MAX_SOCKNAME_LEN;
 
 	switch (msg->type) {
 	case sockmConnect:
@@ -510,8 +509,7 @@ int socket_op(msg_t *msg, int sock)
 		if (err >= 0) {
 			sa_convert_lwip_to_sys(smo->sockname.addr);
 			smo->sockname.addrlen = salen;
-			err = wrap_socket(&new_port, err, smi->send.flags);
-			smo->ret = err < 0 ? err : new_port;
+			smo->ret = wrap_socket(&smo->sockname.socket, err, smi->send.flags);
 		} else {
 			smo->ret = -errno;
 		}
@@ -694,7 +692,7 @@ void network_op(msg_t *msg)
 		if ((sock = lwip_socket(smi->socket.domain, sock, smi->socket.protocol)) < 0)
 			msg->o.lookup.err = -errno;
 		else {
-			msg->o.lookup.err = wrap_socket(&msg->o.lookup.dev.port, sock, smi->socket.type);
+			msg->o.lookup.err = wrap_socket(&msg->o.lookup.dev, sock, smi->socket.type);
 			msg->o.lookup.fil = msg->o.lookup.dev;
 		}
 		break;
@@ -702,12 +700,13 @@ void network_op(msg_t *msg)
 	case sockmGetNameInfo:
 		if (msg->i.size != sizeof(size_t) || (sz = *(size_t *)msg->i.data) > msg->o.size) {
 			smo->ret = EAI_SYSTEM;
-			smo->sys.errno = -EINVAL;
+			smo->sys.error = -EINVAL;
 			break;
 		}
 
-		smo->ret = do_getnameinfo(sa_convert_sys_to_lwip(smi->send.addr, smi->send.addrlen), smi->send.addrlen, msg->o.data, sz, msg->o.data + sz, msg->o.size - sz, smi->send.flags);
-		smo->sys.errno = smo->ret == EAI_SYSTEM ? errno : 0;
+		smo->ret = do_getnameinfo(sa_convert_sys_to_lwip(smi->send.addr, smi->send.addrlen), smi->send.addrlen,
+			msg->o.data, sz, msg->o.data + sz, msg->o.size - sz, smi->send.flags);
+		smo->sys.error = smo->ret == EAI_SYSTEM ? errno : 0;
 		smo->nameinfo.hostlen = sz > 0 ? strlen(msg->o.data) + 1  : 0;
 		smo->nameinfo.servlen = msg->o.size - sz > 0 ? strlen(msg->o.data + sz) + 1 : 0;
 		break;
@@ -718,7 +717,7 @@ void network_op(msg_t *msg)
 
 		if (smi->socket.ai_node_sz > msg->i.size || (node && node[smi->socket.ai_node_sz - 1]) || (serv && ((char *)msg->i.data)[msg->i.size - 1])) {
 			smo->ret = EAI_SYSTEM;
-			smo->sys.errno = -EINVAL;
+			smo->sys.error = -EINVAL;
 			break;
 		}
 
@@ -728,7 +727,7 @@ void network_op(msg_t *msg)
 		hint.ai_protocol = smi->socket.protocol;
 		smo->sys.buflen = msg->o.size;
 		smo->ret = do_getaddrinfo(node, serv, &hint, msg->o.data, &smo->sys.buflen);
-		smo->sys.errno = smo->ret == EAI_SYSTEM ? errno : 0;
+		smo->sys.error = smo->ret == EAI_SYSTEM ? errno : 0;
 		break;
 
 	default:
