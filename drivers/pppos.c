@@ -256,14 +256,17 @@ retry:
 
 
 // NOTE: this only disconnects the AT modem from the data connection
-static void at_disconnect(pppos_priv_t* state) {
+static int at_disconnect(pppos_priv_t* state) {
 	// TODO: do it better (finite retries? broken?)
 	int res;
+	int retries = 3;
 	do {
 		serial_write(state, (u8_t*) "+++", 3);	// ATS2 - escape char (default '+')
 		usleep(1000 * 1000);		// ATS12 - escape prompt delay (default: 1s)
 		res = at_send_cmd(state, "ATH\r\n", 3000);
-	} while (res != AT_RESULT_OK);
+	} while (res != AT_RESULT_OK && --retries);
+
+	return res;
 }
 
 
@@ -434,7 +437,9 @@ static void pppos_mainLoop(void* _state)
 
 
 		serial_set_non_blocking(state);
-		at_disconnect(state);
+		if (at_disconnect(state) != AT_RESULT_OK)
+			goto fail;
+
 		state->conn_state = CONN_STATE_DISCONNECTED;
 
 		const char** at_cmd = at_init_cmds;
