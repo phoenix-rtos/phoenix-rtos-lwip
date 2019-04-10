@@ -23,6 +23,7 @@
 
 #include<lwip/sockets.h>
 #include "route.h"
+#include "filter.h"
 
 static int writeRoutes(char *buffer, size_t bufSize, size_t offset)
 {
@@ -131,6 +132,10 @@ int main(int argc, char **argv)
 	register_driver_tun();
 	register_driver_tap();
 #endif
+#endif
+
+#ifdef HAVE_IP_FILTER
+	ip_filter_init();
 #endif
 
 	while (++argv, --argc) {

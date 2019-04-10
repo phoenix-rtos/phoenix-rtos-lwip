@@ -60,3 +60,4 @@
 #define DEFAULT_TCP_RECVMBOX_SIZE 32
 #define DEFAULT_ACCEPTMBOX_SIZE 32
 #define LWIP_HOOK_FILENAME "phoenix-hooks.h"
+#define HAVE_IP_FILTER 1
