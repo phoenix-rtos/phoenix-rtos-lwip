@@ -148,8 +148,6 @@ int main(int argc, char **argv)
 	}
 
 	/* printf("netsrv: %zu interface%s\n", have_intfs, have_intfs == 1 ? "" : "s"); */
-	if (!have_intfs)
-		exit(1);
 
 	mainLoop();
 }
