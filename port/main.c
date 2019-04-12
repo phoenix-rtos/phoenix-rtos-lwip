@@ -134,8 +134,8 @@ int main(int argc, char **argv)
 #endif
 #endif
 
-#ifdef HAVE_IP_FILTER
-	ip_filter_init();
+#if defined(HAVE_IP_FILTER) || defined(HAVE_MAC_FILTER)
+	init_filters();
 #endif
 
 	while (++argv, --argc) {

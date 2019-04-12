@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include LWIP_HOOK_FILENAME
 
 #define MAX_TX_FRAGMENTS 8
 
@@ -137,7 +138,14 @@ size_t net_receivePackets(net_bufdesc_ring_t *ring, struct netif *ni, unsigned e
 
 		if (ring->ops->pktRxFinished(ring, i)) {
 			pbuf_header_force(p, ETH_PAD_SIZE - ethpad);
-			ni->input(pkt, ni);
+#ifdef LWIP_HOOK_ETH_INPUT
+			if (LWIP_HOOK_ETH_INPUT(p, ni))
+				pbuf_free(p);
+			else
+#endif
+			{
+				ni->input(pkt, ni);
+			}
 			pkt = NULL;
 		}
 

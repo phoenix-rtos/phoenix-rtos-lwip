@@ -24,4 +24,8 @@
 #define LWIP_HOOK_IP4_INPUT(pbuf, input_netif) ip_filter(pbuf, input_netif)
 #endif
 
+#ifdef HAVE_MAC_FILTER
+#define LWIP_HOOK_ETH_INPUT(pbuf, input_netif) mac_filter(pbuf, input_netif)
+#endif
+
 #endif /* PHOENIX_HOOKS_H_ */

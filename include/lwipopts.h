@@ -61,3 +61,4 @@
 #define DEFAULT_ACCEPTMBOX_SIZE 32
 #define LWIP_HOOK_FILENAME "phoenix-hooks.h"
 #define HAVE_IP_FILTER 1
+#define HAVE_MAC_FILTER 1

@@ -12,15 +12,22 @@
 #include <stdio.h>
 #include <sys/threads.h>
 #include <sys/msg.h>
+#include <sys/rb.h>
 #include <posix/utils.h>
 
 #include "lwip/ip_addr.h"
+#include "lwip/prot/ethernet.h"
 #include "filter.h"
 
 
 #define IP_FILTER_PATH "/local/ip_whitelist"
 #define IP_FILTER_FORMAT "%u.%u.%u.%u/%u"
-#define IP_FILTER_STACKSZ 4096
+
+#define MAC_FILTER_PATH "/local/mac_whitelist"
+#define MAC_FILTER_FORMAT "%02x:%02x:%02x:%02x:%02x:%02x"
+
+#define FILTER_STACKSZ 4096
+
 
 struct ip_tree_node {
 	struct ip_tree_node *parent;
@@ -29,17 +36,42 @@ struct ip_tree_node {
 };
 
 
-static struct {
+struct {
 	struct ip_tree_node root;
 	handle_t lock;
 	int init;
 } ip_tree = { 0 };
 
 
-static char ip_filter_stack[IP_FILTER_STACKSZ];
+struct mac_node {
+	u64 mac;
+	rbnode_t node;
+};
 
 
-void ip_tree_add(unsigned int addr, unsigned char mask)
+struct {
+	rbtree_t rb_tree;
+	handle_t lock;
+	int init;
+} mac_tree = { 0 };
+
+
+static char ip_filter_stack[FILTER_STACKSZ];
+
+
+static int mac_node_cmp(rbnode_t *n1, rbnode_t *n2)
+{
+	struct mac_node *mc1 = lib_treeof(struct mac_node, node, n1);
+	struct mac_node *mc2 = lib_treeof(struct mac_node, node, n2);
+
+	if (mc1->mac == mc2->mac)
+		return 0;
+
+	return mc1->mac > mc2->mac ? 1 : -1;
+}
+
+
+static void ip_tree_add(unsigned int addr, unsigned char mask)
 {
     struct ip_tree_node *node = &ip_tree.root;
     struct ip_tree_node *child;
@@ -74,7 +106,7 @@ void ip_tree_add(unsigned int addr, unsigned char mask)
 }
 
 
-int ip_tree_find(unsigned int addr)
+static int ip_tree_find(unsigned int addr)
 {
     struct ip_tree_node *node = &ip_tree.root;
     struct ip_tree_node *child;
@@ -84,15 +116,12 @@ int ip_tree_find(unsigned int addr)
 	if (addr == IPADDR_ANY || addr == IPADDR_LOOPBACK)
 		return 0;
 
-	mutexLock(ip_tree.lock);
     for(i = 0; i <= 32; i++) {
 
 		child = node->child[!!(addr & bit)];
 
-        if (!ip_tree.init || node->valid) {
-			mutexUnlock(ip_tree.lock);
+        if (node->valid)
 			return 0;
-		}
 
         if (child == NULL)
             break;
@@ -101,7 +130,23 @@ int ip_tree_find(unsigned int addr)
 		node = child;
     }
 
-	mutexUnlock(ip_tree.lock);
+	return 1;
+}
+
+
+int mac_filter(struct pbuf *pbuf, struct netif *netif)
+{
+	struct eth_hdr *ethhdr = (struct eth_hdr *)pbuf->payload;
+	struct mac_node *node = calloc(1, sizeof(struct mac_node));
+
+	memcpy(&node->mac, ethhdr->src.addr, sizeof(ethhdr->src.addr));
+
+	mutexLock(mac_tree.lock);
+	if (!mac_tree.init || lib_rbFind(&mac_tree.rb_tree, &node->node) != NULL) {
+		mutexUnlock(mac_tree.lock);
+		return 0;
+	}
+	mutexUnlock(mac_tree.lock);
 	return 1;
 }
 
@@ -110,15 +155,31 @@ int ip_filter(struct pbuf *pbuf, struct netif *netif)
 {
 	struct ip_hdr *iphdr = (struct ip_hdr *)pbuf->payload;
 
-	if (!ip_tree.init || !ip_tree_find(htonl(iphdr->src.addr)))
+	mutexLock(ip_tree.lock);
+	if (!ip_tree.init || !ip_tree_find(htonl(iphdr->src.addr))) {
+		mutexUnlock(ip_tree.lock);
 		return 0;
+	}
 
+	mutexUnlock(ip_tree.lock);
 	pbuf_free(pbuf);
 	return 1;
 }
 
 
-void ip_filter_remove_downward(struct ip_tree_node *node)
+static void mac_filter_remove_downward(void)
+{
+	struct mac_node *root_node;
+
+	while (mac_tree.rb_tree.root != NULL) {
+		root_node = lib_treeof(struct mac_node, node, mac_tree.rb_tree.root);
+		lib_rbRemove(&mac_tree.rb_tree, mac_tree.rb_tree.root);
+		free(root_node);
+	}
+}
+
+
+static void ip_filter_remove_downward(struct ip_tree_node *node)
 {
 	if (node == NULL)
 		return;
@@ -132,7 +193,33 @@ void ip_filter_remove_downward(struct ip_tree_node *node)
 }
 
 
-void ip_filter_load(void)
+static void mac_filter_load(void)
+{
+	int res;
+	u8 a[6];
+	FILE *file = fopen(MAC_FILTER_PATH, "r");
+	struct mac_node *node;
+
+	if (file == NULL) {
+		mac_tree.init = 0;
+		return;
+	}
+
+	while ((res = fscanf(file, MAC_FILTER_FORMAT, (u32 *)&a[0], (u32 *)&a[1], (u32 *)&a[2],
+					(u32 *)&a[3], (u32 *)&a[4], (u32 *)&a[5])) != EOF) {
+		if (res == 6) {
+			node = calloc(1, sizeof(struct mac_node));
+			memcpy(&node->mac, a, sizeof(a));
+			lib_rbInsert(&mac_tree.rb_tree, &node->node);
+		}
+	}
+
+	fclose(file);
+	mac_tree.init = 1;
+}
+
+
+static void ip_filter_load(void)
 {
 	int res;
 	ip4_addr_t ip4;
@@ -153,11 +240,19 @@ void ip_filter_load(void)
 
 	fclose(file);
 	ip_tree.init = 1;
-
 }
 
 
-void ip_filter_reload(void)
+static void mac_filter_reload(void)
+{
+	mutexLock(mac_tree.lock);
+	mac_filter_remove_downward();
+	mac_filter_load();
+	mutexUnlock(mac_tree.lock);
+}
+
+
+static void ip_filter_reload(void)
 {
 	mutexLock(ip_tree.lock);
 	ip_filter_remove_downward(&ip_tree.root);
@@ -166,7 +261,18 @@ void ip_filter_reload(void)
 }
 
 
-void ip_filter_thread(void *arg)
+static void reload_filters(void)
+{
+#ifdef HAVE_IP_FILTER
+	ip_filter_reload();
+#endif
+#ifdef HAVE_MAC_FILTER
+	mac_filter_reload();
+#endif
+}
+
+
+static void filter_thread(void *arg)
 {
 	msg_t msg = {0};
 	unsigned int rid;
@@ -177,8 +283,8 @@ void ip_filter_thread(void *arg)
 		return;
 	}
 
-	if (create_dev(&oid, "/dev/ip_whitelist") < 0) {
-		printf("can't create /dev/ip_whitelist\n");
+	if (create_dev(&oid, "/dev/whitelist") < 0) {
+		printf("can't create /dev/whitelist\n");
 		return;
 	}
 
@@ -192,7 +298,7 @@ void ip_filter_thread(void *arg)
 			break;
 		case mtWrite:
 			msg.o.io.err = msg.i.size;
-			ip_filter_reload();
+			reload_filters();
 			break;
 		default:
 			break;
@@ -203,14 +309,36 @@ void ip_filter_thread(void *arg)
 }
 
 
-void ip_filter_init(void)
+static void mac_filter_init(void)
+{
+	mutexCreate(&mac_tree.lock);
+	lib_rbInit(&mac_tree.rb_tree, mac_node_cmp, NULL);
+	mutexLock(mac_tree.lock);
+	mac_filter_load();
+	mutexUnlock(mac_tree.lock);
+}
+
+
+static void ip_filter_init(void)
 {
 	mutexCreate(&ip_tree.lock);
 	mutexLock(ip_tree.lock);
 	ip_filter_load();
 	mutexUnlock(ip_tree.lock);
 
-	beginthread(ip_filter_thread, 4, ip_filter_stack, IP_FILTER_STACKSZ, NULL);
 }
 
 
+void init_filters(void)
+{
+#ifdef HAVE_IP_FILTER
+	ip_filter_init();
+#endif
+#ifdef HAVE_MAC_FILTER
+	mac_filter_init();
+#endif
+
+#if defined(HAVE_IP_FILTER) || defined (HAVE_MAC_FILTER)
+	beginthread(filter_thread, 4, ip_filter_stack, FILTER_STACKSZ, NULL);
+#endif
+}

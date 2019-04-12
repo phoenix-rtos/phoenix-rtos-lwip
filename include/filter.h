@@ -14,13 +14,13 @@
 
 #include "lwip/ip.h"
 
-void ip_filter_init(void);
 
-
-void ip_filter_reload(void);
+void init_filters(void);
 
 
 int ip_filter(struct pbuf *pbuf, struct netif *netif);
 
+
+int mac_filter(struct pbuf *pbuf, struct netif *netif);
 
 #endif
