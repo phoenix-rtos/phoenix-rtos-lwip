@@ -435,7 +435,6 @@ static void pppos_mainLoop(void* _state)
 			log_info("open success!");
 		}
 
-
 		serial_set_non_blocking(state);
 		if (at_disconnect(state) != AT_RESULT_OK)
 			goto fail;
@@ -468,19 +467,6 @@ static void pppos_mainLoop(void* _state)
 		if ((res = at_send_cmd(state, "AT+CGDATA=\"PPP\",1\r\n", 3000)) != AT_RESULT_CONNECT) {
 			log_warn("failed to dial PPP, res=%d, retrying", *at_cmd, res);
 			goto fail;
-		}
-
-		if (!state->ppp) {
-			log_debug("pppos_create");
-			state->ppp = pppapi_pppos_create(state->netif, pppos_output_cb, pppos_link_status_cb, state);
-
-			if (!state->ppp) {
-				log_error("could not create PPP control interface");
-				goto fail; // TODO: maybe permanent broken state?
-			}
-
-			// NOTE: for PPP to work correctly, it has to be the default routing device (!!!)
-			// pppapi_set_default(state->ppp);
 		}
 
 		// TODO: provide authentication params externally
@@ -555,6 +541,17 @@ static int pppos_netifInit(struct netif *netif, char *cfg)
 		return ERR_ARG;
 
 	log_debug("Preinit");
+
+	if (!state->ppp) {
+		log_debug("pppos_create");
+		state->ppp = pppapi_pppos_create(state->netif, pppos_output_cb, pppos_link_status_cb, state);
+
+		if (!state->ppp) {
+			log_error("could not create PPP control interface");
+			return ERR_IF ; // TODO: maybe permanent broken state?
+		}
+	}
+
 
 	beginthread(pppos_mainLoop, 4, (void *)state->main_loop_stack, sizeof(state->main_loop_stack), state);
 
