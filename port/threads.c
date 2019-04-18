@@ -11,6 +11,7 @@
 #include "arch/cc.h"
 #include "arch/sys_arch.h"
 
+#include <sys/mman.h>
 #include <sys/rb.h>
 #include <sys/wait.h>
 #include <sys/threads.h>

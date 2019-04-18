@@ -12,7 +12,6 @@
 #include "netif-driver.h"
 #include "lwip/netifapi.h"
 
-#include <errno.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdarg.h>

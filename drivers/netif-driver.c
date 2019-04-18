@@ -15,7 +15,6 @@
 #include "lwip/snmp.h"
 
 #include <sys/threads.h>
-#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 

@@ -18,7 +18,6 @@
 #include <lwip/prot/dhcp.h>
 #undef ifreq
 
-#include <errno.h>
 #include <poll.h>
 #include <stdlib.h>
 #include <string.h>
@@ -53,7 +52,7 @@ static struct {
 
 static ssize_t map_errno(ssize_t ret)
 {
-	return ret < 0 ? -errno : ret;
+	return ret < 0 ? lwip_neg_errno : ret;
 }
 
 
@@ -76,8 +75,8 @@ static int do_poll_status(int fd, int events)
 	else
 		FD_CLR(fd, &sglobal.poll_one.ex);
 
-	if ((err = lwip_select(fd + 1, &sglobal.poll_one.rd, &sglobal.poll_one.wr, &sglobal.poll_one.ex, &to)) <= 0)
-		return err ? -errno : 0;
+	if ((err = map_errno(lwip_select(fd + 1, &sglobal.poll_one.rd, &sglobal.poll_one.wr, &sglobal.poll_one.ex, &to))) <= 0)
+		return err;
 
 	events = 0;
 	if (FD_ISSET(fd, &sglobal.poll_one.rd)) {
@@ -103,7 +102,7 @@ static int do_init_socket(oid_t *oid, int sock_fd, int flags, unsigned int pid)
 		return -ENOMEM;
 
 	if (lwip_fcntl(sock_fd, F_SETFL, O_NONBLOCK) < 0)
-		return -errno;
+		return map_errno(-1);
 
 	return init_socket(oid, sock_fd, flags, pid);
 }
@@ -585,7 +584,7 @@ ssize_t socket_op(msg_t *msg, int sock, struct sock_info *sock_info)
 		return err;
 	case sockmGetOpt:
 		salen = msg->o.size;
-		return lwip_getsockopt(sock, smi->opt.level, smi->opt.optname, msg->o.data, &salen) < 0 ? -errno : salen;
+		return lwip_getsockopt(sock, smi->opt.level, smi->opt.optname, msg->o.data, &salen) < 0 ? map_errno(-1) : salen;
 	case sockmSetOpt:
 		return map_errno(lwip_setsockopt(sock, smi->opt.level, smi->opt.optname, msg->i.data, msg->i.size));
 	case sockmShutdown:
@@ -910,9 +909,9 @@ int network_op(msg_t *msg)
 	switch (msg->type) {
 	case sockmSocket:
 		sock = smi->socket.type & ~(SOCK_NONBLOCK|SOCK_CLOEXEC);
-		if ((sock = lwip_socket(smi->socket.domain, sock, smi->socket.protocol)) < 0)
-			msg->o.lookup.err = -errno;
-		else {
+		if ((sock = lwip_socket(smi->socket.domain, sock, smi->socket.protocol)) < 0) {
+			msg->o.lookup.err = map_errno(-1);
+		} else {
 			msg->o.lookup.err = wrap_socket(&msg->o.lookup.dev, sock, smi->socket.type, msg->pid);
 			msg->o.lookup.fil = msg->o.lookup.dev;
 		}
@@ -927,7 +926,7 @@ int network_op(msg_t *msg)
 
 		smo->ret = do_getnameinfo(sa_convert_sys_to_lwip(smi->send.addr, smi->send.addrlen), smi->send.addrlen,
 			msg->o.data, sz, msg->o.data + sz, msg->o.size - sz, smi->send.flags);
-		smo->sys.error = smo->ret == EAI_SYSTEM ? errno : 0;
+		smo->sys.error = map_errno(-(smo->ret == EAI_SYSTEM));
 		smo->nameinfo.hostlen = sz > 0 ? strlen(msg->o.data) + 1  : 0;
 		smo->nameinfo.servlen = msg->o.size - sz > 0 ? strlen(msg->o.data + sz) + 1 : 0;
 		break;
@@ -948,7 +947,7 @@ int network_op(msg_t *msg)
 		hint.ai_protocol = smi->socket.protocol;
 		smo->sys.buflen = msg->o.size;
 		smo->ret = do_getaddrinfo(node, serv, &hint, msg->o.data, &smo->sys.buflen);
-		smo->sys.error = smo->ret == EAI_SYSTEM ? errno : 0;
+		smo->sys.error = map_errno(-(smo->ret == EAI_SYSTEM));
 		break;
 
 	default:
