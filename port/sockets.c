@@ -8,6 +8,7 @@
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
+#define ifreq lwip_ifreq
 #include <lwip/netdb.h>
 #include <lwip/sockets.h>
 #include <lwip/sys.h>
@@ -15,6 +16,7 @@
 #include <lwip/netifapi.h>
 #include <lwip/dhcp.h>
 #include <lwip/prot/dhcp.h>
+#undef ifreq
 
 #include <errno.h>
 #include <poll.h>
