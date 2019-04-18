@@ -26,7 +26,6 @@
 //TODO// #define HAVE_EVENTFD
 #define POLL_WAIT_INTERVAL_US 1000
 #define SOCKTHREAD_PRIO 4
-#define SOCKTHREAD_STACKSZ (2 * SIZE_PAGE)
 #define SOCK_TAB_INCREMENT 16
 
 
@@ -436,9 +435,9 @@ void init_lwip_sockets(void)
 
 	global.port = oid.port;
 
-	if ((err = sys_thread_opt_new("socketsrv", socketsrv_thread, NULL, SOCKTHREAD_STACKSZ, SOCKTHREAD_PRIO, NULL)))
+	if ((err = sys_thread_opt_new("socketsrv", socketsrv_thread, NULL, 0, SOCKTHREAD_PRIO, NULL)))
 		errout(err, "thread(socketsrv)");
 
-	if ((err = sys_thread_opt_new("socketpoll", socketpoll_thread, NULL, SOCKTHREAD_STACKSZ, SOCKTHREAD_PRIO, NULL)))
+	if ((err = sys_thread_opt_new("socketpoll", socketpoll_thread, NULL, 0, SOCKTHREAD_PRIO, NULL)))
 		errout(err, "thread(socketpoll)");
 }
