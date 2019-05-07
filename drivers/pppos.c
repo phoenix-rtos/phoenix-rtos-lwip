@@ -19,6 +19,7 @@
 #include <stdarg.h>
 #include <string.h>
 #include <unistd.h>
+#include <strings.h>
 #include <sys/threads.h>
 #include <sys/msg.h>
 #include <syslog.h>
@@ -35,7 +36,8 @@ typedef struct
 	ppp_pcb* ppp;
 
 	const char* serialdev_fn;
-	const char *apn;
+	const char *config_path;
+	char *apn;
 	int fd;
 
 	volatile int conn_state;
@@ -439,7 +441,10 @@ static void pppos_mainLoop(void* _state)
 		if (at_disconnect(state) != AT_RESULT_OK)
 			goto fail;
 
-		state->conn_state = CONN_STATE_DISCONNECTED;
+		mutexLock(state->lock);
+		while (state->apn == NULL)
+			condWait(state->cond, state->lock, 0);
+		mutexUnlock(state->lock);
 
 		const char** at_cmd = at_init_cmds;
 		while (*at_cmd) {
@@ -505,6 +510,56 @@ fail:
 	endthread();
 }
 
+
+static int pppos_netifUp(pppos_priv_t *state)
+{
+	char lcfg[256];
+	FILE *fcfg = fopen(state->config_path, "r");
+
+	if (fcfg == NULL)
+		return 1;
+
+	if (state->apn != NULL)
+		return 0;
+
+	mutexLock(state->lock);
+	while (fscanf(fcfg, "%s\n", lcfg) != EOF) {
+		if (!strncasecmp(lcfg, "apn=", 4)) {
+			state->apn = malloc(strlen(lcfg + 4));
+			strcpy(state->apn, lcfg + 4);
+			break;
+		}
+	}
+
+	condSignal(state->cond);
+	mutexUnlock(state->lock);
+	return 0;
+}
+
+
+static int pppos_netifDown(pppos_priv_t *state)
+{
+	if (state->apn != NULL) {
+		free(state->apn);
+		state->apn = NULL;
+		pppapi_close(state->ppp, 0);
+	}
+	return 0;
+}
+
+
+static void pppos_statusCallback(struct netif *netif)
+{
+	pppos_priv_t *state = (void *)((unsigned int)(((void *)netif) + sizeof(struct netif) + (_Alignof(pppos_priv_t) - 1)) & ~(_Alignof(pppos_priv_t) - 1));
+
+	if (netif->flags & NETIF_FLAG_UP) {
+		if (pppos_netifUp(state))
+			netif->flags &= ~NETIF_FLAG_UP;
+	} else if (pppos_netifDown(state)) {
+		netif->flags |= NETIF_FLAG_UP;
+	}
+}
+
 static int pppos_netifInit(struct netif *netif, char *cfg)
 {
 	pppos_priv_t* state;
@@ -529,8 +584,10 @@ static int pppos_netifInit(struct netif *netif, char *cfg)
 	*cfg = 0;
 	cfg++;
 
-	state->apn = cfg;
+	state->config_path = cfg;
 	state->fd = -1;
+	state->apn = NULL;
+
 	mutexCreate(&state->lock);
 	condCreate(&state->cond);
 
@@ -550,8 +607,9 @@ static int pppos_netifInit(struct netif *netif, char *cfg)
 			log_error("could not create PPP control interface");
 			return ERR_IF ; // TODO: maybe permanent broken state?
 		}
+		netif->flags &= ~NETIF_FLAG_UP;
+		ppp_set_netif_statuscallback(state->ppp, pppos_statusCallback);
 	}
-
 
 	beginthread(pppos_mainLoop, 4, (void *)state->main_loop_stack, sizeof(state->main_loop_stack), state);
 

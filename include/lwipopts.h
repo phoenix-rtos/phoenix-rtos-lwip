@@ -62,3 +62,4 @@
 #define LWIP_HOOK_FILENAME "phoenix-hooks.h"
 #define HAVE_IP_FILTER 1
 #define HAVE_MAC_FILTER 1
+#define LWIP_NETIF_STATUS_CALLBACK 1
