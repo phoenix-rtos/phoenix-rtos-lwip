@@ -513,8 +513,10 @@ fail:
 
 static int pppos_netifUp(pppos_priv_t *state)
 {
-	char lcfg[256];
+	char lcfg[256] = { 0 };
 	FILE *fcfg = fopen(state->config_path, "r");
+	size_t apnsz;
+	off_t apnoff;
 
 	if (fcfg == NULL)
 		return 1;
@@ -525,8 +527,16 @@ static int pppos_netifUp(pppos_priv_t *state)
 	mutexLock(state->lock);
 	while (fscanf(fcfg, "%s\n", lcfg) != EOF) {
 		if (!strncasecmp(lcfg, "apn=", 4)) {
-			state->apn = malloc(strlen(lcfg + 4));
-			strcpy(state->apn, lcfg + 4);
+			if (lcfg[4] != '"') {
+				apnsz = strlen(lcfg + 4);
+				apnoff = 4;
+			} else {
+				apnsz = strlen(lcfg + 4) - 2;
+				apnoff = 5;
+			}
+
+			state->apn = malloc(apnsz);
+			strncpy(state->apn, lcfg + apnoff, apnsz);
 			break;
 		}
 	}
