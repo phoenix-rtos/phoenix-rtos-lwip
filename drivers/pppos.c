@@ -37,7 +37,7 @@ typedef struct
 
 	const char* serialdev_fn;
 	const char *config_path;
-	char *apn;
+	char apn[64];
 	int fd;
 
 	volatile int conn_state;
@@ -442,7 +442,7 @@ static void pppos_mainLoop(void* _state)
 			goto fail;
 
 		mutexLock(state->lock);
-		while (state->apn == NULL)
+		while (!state->apn[0])
 			condWait(state->cond, state->lock, 0);
 		mutexUnlock(state->lock);
 
@@ -514,44 +514,56 @@ fail:
 static int pppos_netifUp(pppos_priv_t *state)
 {
 	char lcfg[256] = { 0 };
+	int line = 0;
 	FILE *fcfg = fopen(state->config_path, "r");
-	size_t apnsz;
-	off_t apnoff;
+	char *cfgval;
+	char *eq;
 
 	if (fcfg == NULL)
 		return 1;
 
-	if (state->apn != NULL)
+	if (state->apn[0])
 		return 0;
 
 	mutexLock(state->lock);
-	while (fscanf(fcfg, "%s\n", lcfg) != EOF) {
-		if (!strncasecmp(lcfg, "apn=", 4)) {
-			if (lcfg[4] != '"') {
-				apnsz = strlen(lcfg + 4);
-				apnoff = 4;
-			} else {
-				apnsz = strlen(lcfg + 4) - 2;
-				apnoff = 5;
-			}
+	while (fgets(lcfg, sizeof(lcfg), fcfg) != NULL) {
+		line++;
+		if (lcfg[0] == '#')
+			continue;
 
-			state->apn = malloc(apnsz);
-			strncpy(state->apn, lcfg + apnoff, apnsz);
-			break;
+		if ((eq = strchr(lcfg, '=')) == NULL) {
+			log_error("[line %d] invalid format - missing '='", line);
+			continue;
 		}
+
+		lcfg[strcspn(lcfg, "\r\n")] = 0;
+
+		*eq = 0;
+		cfgval = eq + 1;
+
+		if (cfgval[0] == '"' || cfgval[0] == '\'') {
+			cfgval++;
+			cfgval[strlen(cfgval) - 1] = 0;
+		}
+
+		if (!strcasecmp(lcfg, "apn"))
+			strncpy(state->apn, cfgval, sizeof(state->apn) - 1);
+		else
+			log_warn("[line %d] unsupported option: %s (val: %s)", line, lcfg, cfgval);
 	}
 
 	condSignal(state->cond);
 	mutexUnlock(state->lock);
+	fclose(fcfg);
+
 	return 0;
 }
 
 
 static int pppos_netifDown(pppos_priv_t *state)
 {
-	if (state->apn != NULL) {
-		free(state->apn);
-		state->apn = NULL;
+	if (state->apn[0]) {
+		state->apn[0] = 0;
 		pppapi_close(state->ppp, 0);
 	}
 	return 0;
@@ -596,7 +608,6 @@ static int pppos_netifInit(struct netif *netif, char *cfg)
 
 	state->config_path = cfg;
 	state->fd = -1;
-	state->apn = NULL;
 
 	mutexCreate(&state->lock);
 	condCreate(&state->cond);
