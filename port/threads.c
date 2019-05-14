@@ -15,6 +15,7 @@
 #include <sys/wait.h>
 #include <sys/threads.h>
 #include <stdlib.h>
+#include <errno.h>
 
 typedef struct {
 	rbnode_t linkage;
@@ -26,7 +27,7 @@ static struct {
 	semaphore_t start_sem;
 	void (*th_main)(void *arg);
 
-	char collector_stack[4096] __attribute__((aligned(8)));
+	char collector_stack[2 * 4096] __attribute__((aligned(8)));
 	rbtree_t stacks;
 	handle_t lock;
 } global;
@@ -78,7 +79,9 @@ static void thread_waittid_thr(void *arg)
 	thread_stack_t *stack, s;
 
 	for (;;) {
-		s.tid = waittid(-1, 0);
+		while ((s.tid = threadJoin(0)) == -EINTR)
+			;
+
 		mutexLock(global.lock);
 		stack = lib_treeof(thread_stack_t, linkage, lib_rbFind(&global.stacks, &s.linkage));
 		if (stack != NULL) {
