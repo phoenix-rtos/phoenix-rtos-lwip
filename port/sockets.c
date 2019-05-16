@@ -12,6 +12,9 @@
 #include <lwip/sockets.h>
 #include <lwip/sys.h>
 #include <lwip/netif.h>
+#include <lwip/netifapi.h>
+#include <lwip/dhcp.h>
+#include <lwip/prot/dhcp.h>
 
 #include <errno.h>
 #include <poll.h>
@@ -113,6 +116,18 @@ static const struct sockaddr *sa_convert_sys_to_lwip(const void *sa, socklen_t s
 #define netif_is_ppp(_netif) (((_netif)->name[0] == 'p') && ((_netif)->name[1] == 'p'))
 #define netif_is_tun(_netif) (((_netif)->name[0] == 't') && ((_netif)->name[1] == 'u'))
 
+#ifdef LWIP_DHCP
+static inline int netif_is_dhcp(struct netif *netif)
+{
+		struct dhcp *dhcp;
+		dhcp = netif_dhcp_data(netif);
+		if (dhcp != NULL && dhcp->pcb_allocated != 0)
+			return 1;
+		else
+			return 0;
+}
+#endif
+
 static int socket_ioctl(int sock, unsigned long request, const void* in_data, void* out_data)
 {
 
@@ -185,6 +200,10 @@ static int socket_ioctl(int sock, unsigned long request, const void* in_data, vo
 			ifreq->ifr_flags |= IFF_BROADCAST;
 		}
 
+#ifdef LWIP_DHCP
+		if (netif_is_dhcp(interface))
+			ifreq->ifr_flags |= IFF_DYNAMIC;
+#endif
 		return EOK;
 	}
 	case SIOCSIFFLAGS: {
@@ -196,11 +215,33 @@ static int socket_ioctl(int sock, unsigned long request, const void* in_data, vo
 		// only IFF_UP flag supported
 		if ((ifreq->ifr_flags & IFF_UP) && !netif_is_up(interface)) {
 			netif_set_up(interface);
+#ifdef LWIP_DHCP
+			if (netif_is_dhcp(interface))
+				netifapi_dhcp_start(interface);
+#endif
 		}
 		if (!(ifreq->ifr_flags & IFF_UP) && netif_is_up(interface)) {
+#ifdef LWIP_DHCP
+			if (netif_is_dhcp(interface))
+				netifapi_dhcp_release(interface);
+#endif
 			netif_set_down(interface);
 		}
 
+#ifdef LWIP_DHCP
+		if (!netif_is_ppp(interface) && !netif_is_tun(interface)) {
+			/* can't start dhcp when interface is down and since we do not keep
+			 * any information about dynamic flag it is not possible to 'set' interface
+			 * as dynamic when it is downfc */
+			if (netif_is_up(interface) && (ifreq->ifr_flags & IFF_DYNAMIC) && !netif_is_dhcp(interface))
+				netifapi_dhcp_start(interface);
+
+			if (!(ifreq->ifr_flags & IFF_DYNAMIC) && netif_is_dhcp(interface)) {
+				netifapi_dhcp_release(interface);
+				netifapi_dhcp_stop(interface);
+			}
+		}
+#endif
 		return EOK;
 	}
 
@@ -278,6 +319,9 @@ static int socket_ioctl(int sock, unsigned long request, const void* in_data, vo
 			return -EOPNOTSUPP;
 		}
 
+#ifdef LWIP_DHCP
+		netifapi_dhcp_inform(interface);
+#endif
 		return EOK;
 	}
 
