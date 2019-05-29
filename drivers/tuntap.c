@@ -148,6 +148,12 @@ static void tuntap_mainLoop(void* _state)
 
 		mutexLock(state->lock);
 		switch (msg.type) {
+		case mtOpen:
+			state->netif->flags |= NETIF_FLAG_LINK_UP;
+			break;
+		case mtClose:
+			state->netif->flags &= ~NETIF_FLAG_LINK_UP;
+			break;
 		case mtWrite:
 			msg.o.io.err = _tuntap_write(state, msg.i.data, msg.i.size);
 			break;
@@ -214,7 +220,7 @@ static int tun_init(struct netif *netif, char *cfg)
 	netif->name[0] = 't';
 	netif->name[1] = 'u';
 	netif->mtu = 1500;
-	netif->flags = NETIF_FLAG_UP | NETIF_FLAG_LINK_UP;
+	netif->flags = NETIF_FLAG_UP;
 	netif->output = tun_output_cb;
 	return _tuntap_init(netif, cfg);
 }
@@ -226,7 +232,7 @@ static int tap_init(struct netif *netif, char *cfg)
 	netif->name[1] = 'a';
 	netif->mtu = 1500;
 	netif->hwaddr_len = ETH_HWADDR_LEN;
-	netif->flags = NETIF_FLAG_UP | NETIF_FLAG_LINK_UP | NETIF_FLAG_ETHARP | NETIF_FLAG_BROADCAST;
+	netif->flags = NETIF_FLAG_UP | NETIF_FLAG_ETHARP | NETIF_FLAG_BROADCAST;
 	netif->linkoutput = tap_output_cb;
 	return _tuntap_init(netif, cfg);
 }
