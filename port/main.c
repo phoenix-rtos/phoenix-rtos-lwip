@@ -22,16 +22,12 @@
 #include <posix/utils.h>
 
 #include<lwip/sockets.h>
+#include<lwip/inet.h>
+
+#include "netif.h"
 #include "route.h"
 #include "filter.h"
 
-static int writeRoutes(char *buffer, size_t bufSize, size_t offset)
-{
-	int i;
-	rt_entry_t *entry;
-	size_t write, size = bufSize, retval;
-
-	const char *format = "    %2s%d    %08x    %08x    %08x    %8x    %8d\n";
 
 #define SNPRINTF_APPEND(fmt, ...) do { \
 		write = snprintf(buffer, size, fmt, ##__VA_ARGS__); \
@@ -48,6 +44,15 @@ static int writeRoutes(char *buffer, size_t bufSize, size_t offset)
 		size -= write; \
 		buffer += write; \
 	} while (0)
+
+
+static int writeRoutes(char *buffer, size_t bufSize, size_t offset)
+{
+	int i;
+	rt_entry_t *entry;
+	size_t write, size = bufSize, retval;
+
+	const char *format = "    %2s%d    %08x    %08x    %08x    %8x    %8d\n";
 
 	SNPRINTF_APPEND("%7s%12s%12s%12s%12s%12s\n", "Iface", "Dest", "Mask", "Gateway", "Flags", "MTU");
 
@@ -70,36 +75,72 @@ static int writeRoutes(char *buffer, size_t bufSize, size_t offset)
 }
 
 
+static int writeStatus(char *buffer, size_t bufSize, size_t offset)
+{
+	struct netif *netif;
+	size_t write, size = bufSize;
+
+	for (netif = netif_list; netif != NULL; netif = netif->next) {
+
+		SNPRINTF_APPEND("%2s%d_up=%u\n", netif->name, netif->num, netif_is_up(netif));
+		SNPRINTF_APPEND("%2s%d_link=%u\n", netif->name, netif->num, netif_is_link_up(netif));
+		SNPRINTF_APPEND("%2s%d_ip=%s\n", netif->name, netif->num, inet_ntoa(netif->ip_addr));
+		if (!netif_is_ppp(netif) && !netif_is_tun(netif)) {
+			SNPRINTF_APPEND("%2s%d_dhcp=%u\n", netif->name, netif->num, netif_is_dhcp(netif));
+			SNPRINTF_APPEND("%2s%d_netmask=%s\n", netif->name, netif->num, inet_ntoa(netif->netmask));
+			if (netif == netif_default)
+				SNPRINTF_APPEND("%2s%d_gateway=%s\n", netif->name, netif->num, inet_ntoa(netif->gw));
+		} else
+			SNPRINTF_APPEND("%2s%d_ptp=%s\n", netif->name, netif->num, inet_ntoa(netif->gw));
+	}
+
+	return bufSize - size;
+}
+
+
 static void mainLoop(void)
 {
 	msg_t msg = {0};
 	unsigned int rid;
-	oid_t oid = {0, 0};
+	unsigned port;
+	oid_t route_oid = {0, 0};
+	oid_t status_oid = {0, 1};
 
-	if (portCreate(&oid.port) < 0) {
+	if (portCreate(&port) < 0) {
 		printf("can't create port\n");
 		return;
 	}
 
-	if (create_dev(&oid, "/dev/route") < 0) {
+	route_oid.port = port;
+	status_oid.port = port;
+
+	if (create_dev(&route_oid, "/dev/route") < 0) {
 		printf("can't create /dev/route\n");
 		return;
 	}
 
+	if (create_dev(&status_oid, "/dev/ifstatus") < 0) {
+		printf("can't create /dev/ifstatus\n");
+		return;
+	}
+
 	for (;;) {
-		if (msgRecv(oid.port, &msg, &rid) < 0)
+		if (msgRecv(port, &msg, &rid) < 0)
 			continue;
 
 		switch (msg.type) {
 		case mtRead:
-			msg.o.io.err = writeRoutes(msg.o.data, msg.o.size, msg.i.io.offs);
+				if (msg.i.io.oid.id == route_oid.id)
+					msg.o.io.err = writeRoutes(msg.o.data, msg.o.size, msg.i.io.offs);
+				else
+					msg.o.io.err = writeStatus(msg.o.data, msg.o.size, msg.i.io.offs);
 			break;
 
 		default:
 			break;
 		}
 
-		msgRespond(oid.port, &msg, rid);
+		msgRespond(port, &msg, rid);
 	}
 }
 
