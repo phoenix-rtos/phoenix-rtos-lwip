@@ -15,7 +15,6 @@
 
 #include <sys/threads.h>
 #include <sys/time.h>
-#include <errno.h>
 #include <time.h>
 
 

@@ -16,7 +16,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <errno.h>
 
 #include <sys/msg.h>
 #include <posix/utils.h>
@@ -189,8 +188,6 @@ int main(int argc, char **argv)
 	}
 
 	/* printf("netsrv: %zu interface%s\n", have_intfs, have_intfs == 1 ? "" : "s"); */
-	if (!have_intfs)
-		exit(1);
 
 	mainLoop();
 }

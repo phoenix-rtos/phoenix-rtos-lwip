@@ -9,7 +9,6 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#include <errno.h>
 #include <string.h>
 #include <netinet/in.h>
 #include "route.h"

@@ -11,11 +11,14 @@
 #include "arch/cc.h"
 #include "arch/sys_arch.h"
 
+#include <sys/mman.h>
 #include <sys/rb.h>
 #include <sys/wait.h>
 #include <sys/threads.h>
 #include <stdlib.h>
 #include <errno.h>
+
+#define STACK_SIZE SIZE_PAGE
 
 typedef struct {
 	rbnode_t linkage;
@@ -27,11 +30,22 @@ static struct {
 	semaphore_t start_sem;
 	void (*th_main)(void *arg);
 
-	char collector_stack[2 * 4096] __attribute__((aligned(8)));
 	rbtree_t stacks;
 	handle_t lock;
 } global;
 
+
+static void *alloc_stack(void)
+{
+	void *stack = mmap(NULL, STACK_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, NULL, 0);
+
+	return stack != MAP_FAILED ? stack : NULL;
+}
+
+static void free_stack(void *stack)
+{
+	munmap(stack, STACK_SIZE);
+}
 
 static void thread_main(void *arg)
 {
@@ -88,7 +102,7 @@ static void thread_waittid_thr(void *arg)
 			lib_rbRemove(&global.stacks, &stack->linkage);
 			mutexUnlock(global.lock);
 
-			free(stack->stack);
+			free_stack(stack->stack);
 			free(stack);
 		}
 		else {
@@ -97,24 +111,22 @@ static void thread_waittid_thr(void *arg)
 	}
 }
 
-
-int sys_thread_opt_new(const char *name, void (* thread)(void *arg), void *arg, int stacksize, int prio, handle_t *id)
+int sys_thread_opt_new(const char *name, void (* thread)(void *arg), void *arg, int ignored_stacksize, int prio, handle_t *id)
 {
 	void *stack;
 	int err;
 	handle_t threadid;
 
-	stack = malloc(stacksize);
-	if (!stack)
+	if (!(stack = alloc_stack()))
 		bail("no memory for thread: %s\n", name);
 
 	semaphoreDown(&global.start_sem, 0);
 	global.th_main = thread;
 
-	err = beginthreadex(thread_main, prio, stack, stacksize, arg, &threadid);
+	err = beginthreadex(thread_main, prio, stack, STACK_SIZE, arg, &threadid);
 	if (err) {
 		semaphoreUp(&global.start_sem);
-		free(stack);
+		free_stack(stack);
 	}
 
 	thread_register_stack(threadid, stack);
@@ -141,6 +153,7 @@ sys_thread_t sys_thread_new(const char *name, void (* thread)(void *arg), void *
 
 void init_lwip_threads(void)
 {
+	void *stack;
 	int err;
 
 	err = mutexCreate(&global.lock);
@@ -151,6 +164,9 @@ void init_lwip_threads(void)
 	if (err)
 		errout(err, "semaphoreCreate(thread.start_sem)");
 
+	if (!(stack = alloc_stack()))
+		bail("no memory for stack collector thread\n");
+
 	lib_rbInit(&global.stacks, thread_stack_cmp, NULL);
-	beginthreadex(thread_waittid_thr, 4, global.collector_stack, sizeof(global.collector_stack), NULL, NULL);
+	beginthreadex(thread_waittid_thr, 4, stack, STACK_SIZE, NULL, NULL);
 }

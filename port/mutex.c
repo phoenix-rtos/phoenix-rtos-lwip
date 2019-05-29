@@ -12,7 +12,6 @@
 #include "lwip/err.h"
 
 #include <sys/threads.h>
-#include <errno.h>
 
 
 err_t sys_mutex_new(sys_mutex_t *mutex)
