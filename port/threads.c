@@ -17,39 +17,28 @@
 #include <stdlib.h>
 #include <errno.h>
 
+
 typedef struct {
 	rbnode_t linkage;
 	handle_t tid;
 	void *stack;
-} thread_stack_t;
+	void (*work)(void *arg);
+	void *arg;
+} thread_data_t;
+
 
 static struct {
-	semaphore_t start_sem;
-	void (*th_main)(void *arg);
-
-	char collector_stack[2 * 4096] __attribute__((aligned(8)));
-	rbtree_t stacks;
+	char collector_stack[4 * 4096] __attribute__((aligned(8)));
+	rbtree_t threads;
 	handle_t lock;
 } global;
 
 
-static void thread_main(void *arg)
+
+static int thread_cmp(rbnode_t *n1, rbnode_t *n2)
 {
-	void (*th_main)(void *arg);
-
-	th_main = global.th_main;
-	semaphoreUp(&global.start_sem);
-
-	th_main(arg);
-
-	endthread();
-}
-
-
-static int thread_stack_cmp(rbnode_t *n1, rbnode_t *n2)
-{
-	thread_stack_t *s1 = lib_treeof(thread_stack_t, linkage, n1);
-	thread_stack_t *s2 = lib_treeof(thread_stack_t, linkage, n2);
+	thread_data_t *s1 = lib_treeof(thread_data_t, linkage, n1);
+	thread_data_t *s2 = lib_treeof(thread_data_t, linkage, n2);
 
 	if (s1->tid == s2->tid)
 		return 0;
@@ -62,34 +51,42 @@ static int thread_stack_cmp(rbnode_t *n1, rbnode_t *n2)
 }
 
 
-static void thread_register_stack(handle_t tid, void *stack)
+static void thread_register(thread_data_t *ts)
 {
-	thread_stack_t *ts = malloc(sizeof(*ts));
-	ts->tid = tid;
-	ts->stack = stack;
+	thread_data_t *old, s;
+
+	s.tid = ts->tid;
 
 	mutexLock(global.lock);
-	lib_rbInsert(&global.stacks, &ts->linkage);
+	if ((old = lib_treeof(thread_data_t, linkage, lib_rbFind(&global.threads, &s.linkage))) != NULL)
+		lib_rbRemove(&global.threads, &old->linkage);
+
+	lib_rbInsert(&global.threads, &ts->linkage);
 	mutexUnlock(global.lock);
+
+	if (old != NULL) {
+		free(old->stack);
+		free(old);
+	}
 }
 
 
 static void thread_waittid_thr(void *arg)
 {
-	thread_stack_t *stack, s;
+	thread_data_t *data, s;
 
 	for (;;) {
 		while ((s.tid = threadJoin(0)) == -EINTR)
 			;
 
 		mutexLock(global.lock);
-		stack = lib_treeof(thread_stack_t, linkage, lib_rbFind(&global.stacks, &s.linkage));
-		if (stack != NULL) {
-			lib_rbRemove(&global.stacks, &stack->linkage);
+		data = lib_treeof(thread_data_t, linkage, lib_rbFind(&global.threads, &s.linkage));
+		if (data != NULL) {
+			lib_rbRemove(&global.threads, &data->linkage);
 			mutexUnlock(global.lock);
 
-			free(stack->stack);
-			free(stack);
+			free(data->stack);
+			free(data);
 		}
 		else {
 			mutexUnlock(global.lock);
@@ -98,29 +95,44 @@ static void thread_waittid_thr(void *arg)
 }
 
 
+static void thread_main(void *arg)
+{
+	thread_data_t *t = arg;
+	thread_register(t);
+	t->work(t->arg);
+	endthread();
+}
+
+
 int sys_thread_opt_new(const char *name, void (* thread)(void *arg), void *arg, int stacksize, int prio, handle_t *id)
 {
 	void *stack;
 	int err;
-	handle_t threadid;
+	thread_data_t *ts;
 
 	stack = malloc(stacksize);
 	if (!stack)
 		bail("no memory for thread: %s\n", name);
 
-	semaphoreDown(&global.start_sem, 0);
-	global.th_main = thread;
-
-	err = beginthreadex(thread_main, prio, stack, stacksize, arg, &threadid);
-	if (err) {
-		semaphoreUp(&global.start_sem);
+	ts = malloc(sizeof(*ts));
+	if (!ts) {
 		free(stack);
+		bail("no memory for thread: %s\n", name);
 	}
 
-	thread_register_stack(threadid, stack);
+	ts->work = thread;
+	ts->stack = stack;
+	ts->arg = arg;
+
+	err = beginthreadex(thread_main, prio, stack, stacksize, ts, &ts->tid);
+
+	if (err) {
+		free(stack);
+		free(ts);
+	}
 
 	if (id != NULL)
-		*id = threadid;
+		*id = ts->tid;
 
 	return err;
 }
@@ -147,10 +159,6 @@ void init_lwip_threads(void)
 	if (err)
 		errout(err, "mutexCreate(thread.start_sem)");
 
-	err = semaphoreCreate(&global.start_sem, 1);
-	if (err)
-		errout(err, "semaphoreCreate(thread.start_sem)");
-
-	lib_rbInit(&global.stacks, thread_stack_cmp, NULL);
+	lib_rbInit(&global.threads, thread_cmp, NULL);
 	beginthreadex(thread_waittid_thr, 4, global.collector_stack, sizeof(global.collector_stack), NULL, NULL);
 }
