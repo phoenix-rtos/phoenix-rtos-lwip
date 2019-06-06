@@ -13,12 +13,13 @@
 #include "pktmem.h"
 #include "lwip/netif.h"
 
+#include LWIP_HOOK_FILENAME
+
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include LWIP_HOOK_FILENAME
 
 #define MAX_TX_FRAGMENTS 8
 

@@ -762,12 +762,12 @@ static void socketsrv_thread(void *arg)
 		case sockmGetNameInfo:
 			if (msg.i.size != sizeof(size_t) || (sz = *(size_t *)msg.i.data) > msg.o.size) {
 				smo->ret = EAI_SYSTEM;
-				smo->sys.errno = -EINVAL;
+				smo->sys.err = -EINVAL;
 				break;
 			}
 
 			smo->ret = do_getnameinfo(sa_convert_sys_to_lwip(smi->send.addr, smi->send.addrlen), smi->send.addrlen, msg.o.data, sz, msg.o.data + sz, msg.o.size - sz, smi->send.flags);
-			smo->sys.errno = smo->ret == EAI_SYSTEM ? errno : 0;
+			smo->sys.err = smo->ret == EAI_SYSTEM ? errno : 0;
 			smo->nameinfo.hostlen = sz > 0 ? strlen(msg.o.data) + 1  : 0;
 			smo->nameinfo.servlen = msg.o.size - sz > 0 ? strlen(msg.o.data + sz) + 1 : 0;
 			break;
@@ -778,7 +778,7 @@ static void socketsrv_thread(void *arg)
 
 			if (smi->socket.ai_node_sz > msg.i.size || (node && node[smi->socket.ai_node_sz - 1]) || (serv && ((char *)msg.i.data)[msg.i.size - 1])) {
 				smo->ret = EAI_SYSTEM;
-				smo->sys.errno = -EINVAL;
+				smo->sys.err = -EINVAL;
 				break;
 			}
 
@@ -788,7 +788,7 @@ static void socketsrv_thread(void *arg)
 			hint.ai_protocol = smi->socket.protocol;
 			smo->sys.buflen = msg.o.size;
 			smo->ret = do_getaddrinfo(node, serv, &hint, msg.o.data, &smo->sys.buflen);
-			smo->sys.errno = smo->ret == EAI_SYSTEM ? errno : 0;
+			smo->sys.err = smo->ret == EAI_SYSTEM ? errno : 0;
 			break;
 
 		default:

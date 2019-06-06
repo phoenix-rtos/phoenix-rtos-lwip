@@ -24,6 +24,8 @@ typedef struct {
 	void *stack;
 	void (*work)(void *arg);
 	void *arg;
+
+	struct __errno_t err;
 } thread_data_t;
 
 
@@ -58,11 +60,14 @@ static void thread_register(thread_data_t *ts)
 	s.tid = ts->tid;
 
 	mutexLock(global.lock);
-	if ((old = lib_treeof(thread_data_t, linkage, lib_rbFind(&global.threads, &s.linkage))) != NULL)
+	if ((old = lib_treeof(thread_data_t, linkage, lib_rbFind(&global.threads, &s.linkage))) != NULL) {
+		_errno_remove(&old->err);
 		lib_rbRemove(&global.threads, &old->linkage);
+	}
 
 	lib_rbInsert(&global.threads, &ts->linkage);
 	mutexUnlock(global.lock);
+	_errno_new(&ts->err);
 
 	if (old != NULL) {
 		free(old->stack);
@@ -85,6 +90,7 @@ static void thread_waittid_thr(void *arg)
 			lib_rbRemove(&global.threads, &data->linkage);
 			mutexUnlock(global.lock);
 
+			_errno_remove(&data->err);
 			free(data->stack);
 			free(data);
 		}
