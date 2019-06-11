@@ -137,12 +137,12 @@ static int ip_tree_find(unsigned int addr)
 int mac_filter(struct pbuf *pbuf, struct netif *netif)
 {
 	struct eth_hdr *ethhdr = (struct eth_hdr *)pbuf->payload;
-	struct mac_node *node = calloc(1, sizeof(struct mac_node));
+	struct mac_node node;
 
-	memcpy(&node->mac, ethhdr->src.addr, sizeof(ethhdr->src.addr));
+	memcpy(&node.mac, ethhdr->src.addr, sizeof(ethhdr->src.addr));
 
 	mutexLock(mac_tree.lock);
-	if (!mac_tree.init || lib_rbFind(&mac_tree.rb_tree, &node->node) != NULL) {
+	if (!mac_tree.init || lib_rbFind(&mac_tree.rb_tree, &node.node) != NULL) {
 		mutexUnlock(mac_tree.lock);
 		return 0;
 	}
