@@ -106,6 +106,8 @@ int net_initRings(net_bufdesc_ring_t *rings, const size_t *sizes, size_t nrings,
 		p += sz;
 		bufp += sizes[i];
 		phys += sz;
+
+		mutexCreate(&(rings[i].lock));
 	}
 
 	return 0;
@@ -117,6 +119,7 @@ size_t net_receivePackets(net_bufdesc_ring_t *ring, struct netif *ni, unsigned e
 	struct pbuf *p, *pkt;
 	size_t n, i, sz;
 
+	mutexLock(ring->lock);
 	n = 0;
 	i = ring->head;
 	pkt = NULL;
@@ -155,6 +158,7 @@ size_t net_receivePackets(net_bufdesc_ring_t *ring, struct netif *ni, unsigned e
 	}
 
 	ring->head = i;
+	mutexUnlock(ring->lock);
 	return n;
 }
 
@@ -164,6 +168,7 @@ size_t net_refillRx(net_bufdesc_ring_t *ring, size_t ethpad)
 	struct pbuf *p;
 	size_t n, i, nxt, sz;
 	addr_t pa;
+	mutexLock(ring->lock);
 
 	n = 0;
 	i = ring->tail;
@@ -186,6 +191,7 @@ size_t net_refillRx(net_bufdesc_ring_t *ring, size_t ethpad)
 	}
 
 	ring->tail = i;
+	mutexUnlock(ring->lock);
 	return n;
 }
 
@@ -193,6 +199,7 @@ size_t net_refillRx(net_bufdesc_ring_t *ring, size_t ethpad)
 size_t net_reapTxFinished(net_bufdesc_ring_t *ring)
 {
 	size_t n, i, head;
+	mutexLock(ring->lock);
 
 	n = 0;
 	i = ring->tail;
@@ -212,6 +219,8 @@ size_t net_reapTxFinished(net_bufdesc_ring_t *ring)
 
 	if (n)
 		*(volatile unsigned *)&ring->tail = i;
+
+	mutexUnlock(ring->lock);
 	return n;
 }
 
@@ -261,6 +270,7 @@ size_t net_transmitPacket(net_bufdesc_ring_t *ring, struct pbuf *p)
 	if (!p)
 		return 0;
 
+	mutexLock(ring->lock);
 	// NOTE: 2^n ring size verified in net_initRings
 	n = *(volatile unsigned *)&ring->tail;	// access tail once - it may be advanced by tx_done thread
 	i = ring->head;
@@ -271,6 +281,7 @@ size_t net_transmitPacket(net_bufdesc_ring_t *ring, struct pbuf *p)
 	frags = n = net_fillFragments(p, pa, psz, n, ring->ops->max_tx_frag);
 	if (!frags) {
 		pbuf_free(p);
+		mutexUnlock(ring->lock);
 		return 0;	/* dropped: too many fragments or empty packet */
 	}
 
@@ -288,5 +299,6 @@ size_t net_transmitPacket(net_bufdesc_ring_t *ring, struct pbuf *p)
 
 	asm volatile ("" ::: "memory");
 	*(volatile unsigned *)&ring->head = ni;	// sync with read in net_reapTxFinished() run in tx_done thread
+	mutexUnlock(ring->lock);
 	return frags;
 }

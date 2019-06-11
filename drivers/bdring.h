@@ -48,6 +48,7 @@ struct net_bufdesc_ring_
 	unsigned head, tail, last;
 	addr_t phys;
 	const net_bufdesc_ops_t *ops;
+	handle_t lock;
 };
 
 
