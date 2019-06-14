@@ -8,6 +8,9 @@
  *
  * %LICENSE%
  */
+
+#include <sys/threads.h>
+
 #include "bdring.h"
 #include "physmmap.h"
 #include "pktmem.h"

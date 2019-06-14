@@ -33,7 +33,7 @@
 #include "route.h"
 
 #define SOCKTHREAD_PRIO 4
-#define SOCKTHREAD_STACKSZ (2 * SIZE_PAGE)
+#define SOCKTHREAD_STACKSZ (4 * SIZE_PAGE)
 
 
 struct sock_start {
