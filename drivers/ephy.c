@@ -116,6 +116,18 @@ static void ephy_show_link_state(eth_phy_state_t *phy)
 }
 
 
+int ephy_link_speed(eth_phy_state_t *phy, int *full_duplex)
+{
+	u16 pc1 = ephy_reg_read(phy, 0x1e);
+
+	if (!(pc1 & 7))
+		return 0;
+
+	*full_duplex = pc1 & 4;
+	return pc1 & 2 ? 10 : 100;
+}
+
+
 static void ephy_restart_an(eth_phy_state_t *phy)
 {
 	// adv: no-next-page, no-rem-fault, no-pause, no-T4, 100M-FD-only, 802.3

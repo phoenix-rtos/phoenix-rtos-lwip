@@ -79,6 +79,7 @@ static int writeStatus(char *buffer, size_t bufSize, size_t offset)
 {
 	struct netif *netif;
 	size_t write, size = bufSize;
+	netif_driver_t *drv;
 
 	for (netif = netif_list; netif != NULL; netif = netif->next) {
 
@@ -90,8 +91,12 @@ static int writeStatus(char *buffer, size_t bufSize, size_t offset)
 			SNPRINTF_APPEND("%2s%d_netmask=%s\n", netif->name, netif->num, inet_ntoa(netif->netmask));
 			if (netif == netif_default)
 				SNPRINTF_APPEND("%2s%d_gateway=%s\n", netif->name, netif->num, inet_ntoa(netif->gw));
-		} else
+		} else {
 			SNPRINTF_APPEND("%2s%d_ptp=%s\n", netif->name, netif->num, inet_ntoa(netif->gw));
+		}
+
+		if (strcmp("lo", netif->name) && (drv = netif_driver(netif)) && drv->media != NULL)
+			SNPRINTF_APPEND("%2s%d_media=%s\n", netif->name, netif->num, drv->media(netif));
 	}
 
 	return bufSize - size;

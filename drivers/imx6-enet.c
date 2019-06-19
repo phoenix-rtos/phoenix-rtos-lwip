@@ -835,11 +835,48 @@ static int enet_netifInit(struct netif *netif, char *cfg)
 }
 
 
+const char *enet_media(struct netif *netif)
+{
+	int full_duplex, speed;
+	enet_priv_t *priv;
+	priv = netif->state;
+
+	speed = ephy_link_speed(&priv->phy, &full_duplex);
+
+	switch (speed) {
+	case 0:
+		return "unspecified";
+		break;
+	case 10:
+		if (full_duplex)
+			return "10Mbps/full-duplex";
+		else
+			return "10Mbps/half-duplex";
+		break;
+	case 100:
+		if (full_duplex)
+			return "100Mbps/full-duplex";
+		else
+			return "100Mbps/half-duplex";
+		break;
+	case 1000:
+		if (full_duplex)
+			return "1000Mbps/full-duplex";
+		else
+			return "1000Mbps/half-duplex";
+		break;
+	default:
+		return "unrecognized";
+	}
+}
+
+
 static netif_driver_t enet_drv = {
 	.init = enet_netifInit,
 	.state_sz = sizeof(enet_priv_t),
 	.state_align = _Alignof(enet_priv_t),
 	.name = "enet",
+	.media = enet_media,
 };
 
 

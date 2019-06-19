@@ -33,6 +33,7 @@ typedef struct netif_driver_ {
 	int (*init)(struct netif *netif, char *cfg);
 	size_t state_sz, state_align;
 	const char *name;
+	const char *(*media)(struct netif *netif);
 } netif_driver_t;
 
 
@@ -45,6 +46,7 @@ typedef struct mdio_bus_ops_ {
 
 void register_netif_driver(netif_driver_t *drv);
 int create_netif(char *conf);
+netif_driver_t *netif_driver(struct netif *netif);
 
 int register_mdio_bus(const mdio_bus_ops_t *ops, void *arg);
 int mdio_setup(unsigned bus, unsigned max_khz, unsigned min_hold_ns, unsigned opt_preamble);

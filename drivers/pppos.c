@@ -643,6 +643,7 @@ static netif_driver_t pppos_drv = {
 	.state_sz = sizeof(pppos_priv_t),
 	.state_align = _Alignof(pppos_priv_t),
 	.name = "pppos",
+	.media = NULL,
 };
 
 

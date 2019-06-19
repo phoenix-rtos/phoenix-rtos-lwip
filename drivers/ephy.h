@@ -32,6 +32,6 @@ typedef struct {
 
 
 int ephy_init(eth_phy_state_t *phy, char *conf, link_state_cb_t cb, void *cb_arg);
-
+int ephy_link_speed(eth_phy_state_t *phy, int *full_duplex);
 
 #endif /* NET_EPHY_H_ */

@@ -25,8 +25,9 @@
 #endif
 
 
-struct netif_init {
-	const netif_driver_t *drv;
+struct netif_alloc {
+	struct netif netif;
+	netif_driver_t *drv;
 	char *cfg;
 };
 
@@ -75,13 +76,11 @@ int register_mdio_bus(const mdio_bus_ops_t *ops, void *arg)
 
 static err_t netif_dev_init(struct netif *netif)
 {
-	struct netif_init *idata;
+	struct netif_alloc *storage = (void *)netif;
 
 	LWIP_ASSERT("netif != NULL", (netif != NULL));
-	idata = netif->state;
-	LWIP_ASSERT("initdata != NULL", (idata != NULL));
 
-	if (!strcmp(idata->drv->name, "enet")) {
+	if (!strcmp(storage->drv->name, "enet")) {
 		MIB2_INIT_NETIF(netif, snmp_ifType_ethernet_csmacd, 10000000);
 
 		netif->mtu = 1500;
@@ -93,14 +92,14 @@ static err_t netif_dev_init(struct netif *netif)
 		netif->name[1] = 'n';
 	}
 
-	if (strcmp(idata->drv->name, "tun")) {
+	if (strcmp(storage->drv->name, "tun")) {
 		netif->output = etharp_output;
 #if LWIP_IPV6
 		netif->output_ip6 = ethip6_output;
 #endif /* LWIP_IPV6 */
 	}
 
-	switch (idata->drv->init(netif, idata->cfg)) {
+	switch (storage->drv->init(netif, storage->cfg)) {
 	case -ENOMEM:
 		return ERR_MEM;
 	case 0:
@@ -111,14 +110,21 @@ static err_t netif_dev_init(struct netif *netif)
 }
 
 
+netif_driver_t *netif_driver(struct netif *netif)
+{
+	struct netif_alloc *storage = (struct netif_alloc *)netif;
+	return storage->drv;
+}
+
+
 int create_netif(char *conf)
 {
-	struct netif_init *idata;
+	struct netif_alloc *storage;
 	netif_driver_t *drv;
 	struct netif *ni;
 	char *arg;
 	ip4_addr_t ipaddr, netmask, gw;
-	size_t sz, ssz;
+	size_t sz;
 	err_t err;
 	int is_ppp = 0;
 
@@ -139,28 +145,27 @@ int create_netif(char *conf)
 	netmask = default_mask;
 	gw = default_gw;
 
-	sz = sizeof(*ni);
+	sz = sizeof(*storage);
 	if (drv->state_align)
 		sz = (sz + drv->state_align - 1) & ~(drv->state_align - 1);
-	ssz = drv->state_sz >= sizeof(struct netif_init) ? drv->state_sz : sizeof(struct netif_init);
 
-	ni = malloc(sz + ssz);
-	if (!ni)
+	storage = malloc(sz + drv->state_sz);
+	if (!storage)
 		return -ENOMEM;
 
-	idata = (void *)ni + sz;
-	idata->cfg = arg;
-	idata->drv = drv;
+	ni = &storage->netif;
+	storage->cfg = arg;
+	storage->drv = drv;
 
 	if (!is_ppp) {
 		err = netifapi_netif_add(ni, &ipaddr, &netmask, &gw,
-			(void *)idata, netif_dev_init, tcpip_input);
+			(char *)storage + sz, netif_dev_init, tcpip_input);
 
 		ipaddr.addr = PP_HTONL(0x0A020000 + ni->num);
 		netif_set_ipaddr(ni, &ipaddr);
 	} else {
-		ni->state = idata;
-		err = idata->drv->init(ni, idata->cfg);
+		ni->state = (char *)storage + sz;
+		err = storage->drv->init(ni, storage->cfg);
 	}
 
 	if (err != ERR_OK)

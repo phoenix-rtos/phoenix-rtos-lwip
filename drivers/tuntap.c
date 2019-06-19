@@ -243,6 +243,7 @@ static netif_driver_t tun_drv = {
 	.state_sz = sizeof(tuntap_priv_t),
 	.state_align = _Alignof(tuntap_priv_t),
 	.name = "tun",
+	.media = NULL,
 };
 
 
@@ -251,6 +252,7 @@ static netif_driver_t tap_drv = {
 	.state_sz = sizeof(tuntap_priv_t),
 	.state_align = _Alignof(tuntap_priv_t),
 	.name = "tap",
+	.media = NULL,
 };
 
 
