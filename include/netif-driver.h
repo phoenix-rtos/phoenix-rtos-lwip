@@ -37,6 +37,13 @@ typedef struct netif_driver_ {
 } netif_driver_t;
 
 
+struct netif_alloc {
+	struct netif netif;
+	netif_driver_t *drv;
+	char *cfg;
+};
+
+
 typedef struct mdio_bus_ops_ {
 	int (*setup)(void *arg, unsigned max_khz, unsigned min_hold_ns, unsigned opt_preamble);
 	uint16_t (*read)(void *arg, unsigned addr, uint16_t reg);

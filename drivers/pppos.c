@@ -572,7 +572,8 @@ static int pppos_netifDown(pppos_priv_t *state)
 
 static void pppos_statusCallback(struct netif *netif)
 {
-	pppos_priv_t *state = (void *)((unsigned int)(((void *)netif) + sizeof(struct netif) + (_Alignof(pppos_priv_t) - 1)) & ~(_Alignof(pppos_priv_t) - 1));
+	struct netif_alloc *s = (void *)netif;
+	pppos_priv_t *state = (void *) ((char *)s + ((sizeof(*s) + (_Alignof(pppos_priv_t) - 1)) & ~(_Alignof(pppos_priv_t) - 1)));
 
 	if (netif->flags & NETIF_FLAG_UP) {
 		if (pppos_netifUp(state))

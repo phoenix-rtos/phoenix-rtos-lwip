@@ -25,13 +25,6 @@
 #endif
 
 
-struct netif_alloc {
-	struct netif netif;
-	netif_driver_t *drv;
-	char *cfg;
-};
-
-
 struct mdio_bus {
 	const mdio_bus_ops_t *ops;
 	void *arg;
