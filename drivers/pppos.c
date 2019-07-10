@@ -35,7 +35,8 @@ typedef struct
 	struct netif *netif;
 	ppp_pcb* ppp;
 
-	const char* serialdev_fn;
+	const char *serialdev_fn;
+	const char *serialat_fn;
 	const char *config_path;
 	char apn[64];
 	int fd;
@@ -87,40 +88,40 @@ static void pppos_printf(pppos_priv_t *state, const char *format, ...)
 
 /****** serial handling ******/
 
-static void serial_close(pppos_priv_t* state)
+static void serial_close(int fd)
 {
 	log_info("close()");
 
-	if (state->fd >= 0)
-		close(state->fd);
+	if (fd >= 0)
+		close(fd);
 
-	state->fd = -1;
+//	state->fd = -1;
 	// NOTE: set DISCONNECTED in status callback
 	// state->conn_state = CONN_STATE_DISCONNECTED;
 }
 
-static void serial_set_non_blocking(pppos_priv_t* state)
+static void serial_set_non_blocking(int fd)
 {
-	int flags = fcntl(state->fd, F_GETFL, 0);
-	if (fcntl(state->fd, F_SETFL, flags | O_NONBLOCK) < 0)
-		log_error("%s() : fcntl(%d, O_NONBLOCK) = (%d -> %s)", __func__, state->fd, errno, strerror(errno));
+	int flags = fcntl(fd, F_GETFL, 0);
+	if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0)
+		log_error("%s() : fcntl(%d, O_NONBLOCK) = (%d -> %s)", __func__, fd, errno, strerror(errno));
 }
 
-static void serial_set_blocking(pppos_priv_t* state)
+static void serial_set_blocking(int fd)
 {
-	int flags = fcntl(state->fd, F_GETFL, 0);
-	if (fcntl(state->fd, F_SETFL, flags & ~O_NONBLOCK) < 0)
-		log_error("%s() : fcntl(%d, ~O_NONBLOCK) = (%d -> %s)", __func__, state->fd, errno, strerror(errno));
+	int flags = fcntl(fd, F_GETFL, 0);
+	if (fcntl(fd, F_SETFL, flags & ~O_NONBLOCK) < 0)
+		log_error("%s() : fcntl(%d, ~O_NONBLOCK) = (%d -> %s)", __func__, fd, errno, strerror(errno));
 }
 
 #define WRITE_MAX_RETRIES 2
-static int serial_write(pppos_priv_t* state, const u8_t* data, u32_t len)
+static int serial_write(int fd, const u8_t* data, u32_t len)
 {
 	int off = 0;
 	int retries = 0;
 	while (off < len) {
 		int to_write = len - off;
-		int res = write(state->fd, data + off, to_write);
+		int res = write(fd, data + off, to_write);
 
 		if (res < 0) {
 			if (errno == EINTR) {
@@ -192,34 +193,33 @@ static const char * at_result_to_str(int res) {
 }
 
 
-static int at_send_cmd(pppos_priv_t* state, const char* cmd, int timeout_ms)
+static int at_send_cmd_res(int fd, const char* cmd, int timeout_ms, char *rx_buf, int rx_bufsize)
 {
-	char rx_buf[512];
-	int max_len = sizeof(rx_buf) - 1;
+	int max_len = rx_bufsize - 1;
 
-	if (!state || state->fd <= 0) {
-		log_error("%s: invalid PPP state!", __func__);
+	if (fd < 0) {
+		log_error("%s: invalid file descriptor!", __func__);
 		return ERR_ARG;
 	}
 
 	log_at("AT Tx: [%s]", cmd);
-	serial_write(state, (u8_t*)cmd, strlen(cmd));
+	serial_write(fd, (u8_t*)cmd, strlen(cmd));
 
 	// wait for result with optional response text
 	int off = 0;
 	while (off < max_len) {
-		int len = read(state->fd, rx_buf + off, max_len - off);
+		int len = read(fd, rx_buf + off, max_len - off);
 		if (len < 0) {
 			if (errno == EINTR)
 				continue;
 			if (errno == EWOULDBLOCK)
 				goto retry;
 			log_error("%s() : read(%d) = %d (%d -> %s)", __func__, max_len - off, len, errno, strerror(errno));
-			serial_close(state);
+			serial_close(fd);
 			return -1;
 		} else if (len == 0) {
 			log_error("%s() : read(%d) = %d (%d -> %s)", __func__, max_len - off, len, errno, strerror(errno));
-			serial_close(state);
+			serial_close(fd);
 			return -1;
 		} else {
 			rx_buf[off + len + 1] = '\0';
@@ -257,15 +257,22 @@ retry:
 }
 
 
+static int at_send_cmd(int fd, const char* cmd, int timeout_ms)
+{
+	char rx_buf[512];
+	return at_send_cmd_res(fd, cmd, timeout_ms, rx_buf, sizeof(rx_buf));
+}
+
+
 // NOTE: this only disconnects the AT modem from the data connection
-static int at_disconnect(pppos_priv_t* state) {
+static int at_disconnect(int fd) {
 	// TODO: do it better (finite retries? broken?)
 	int res;
 	int retries = 3;
 	do {
-		serial_write(state, (u8_t*) "+++", 3);	// ATS2 - escape char (default '+')
+		serial_write(fd, (u8_t*) "+++", 3);	// ATS2 - escape char (default '+')
 		usleep(1000 * 1000);		// ATS12 - escape prompt delay (default: 1s)
-		res = at_send_cmd(state, "ATH\r\n", 3000);
+		res = at_send_cmd(fd, "ATH\r\n", 3000);
 	} while (res != AT_RESULT_OK && --retries);
 
 	return res;
@@ -279,11 +286,12 @@ static u32_t pppos_output_cb(ppp_pcb *pcb, u8_t *data, u32_t len, void *ctx)
 {
 	pppos_priv_t* state = (pppos_priv_t*) ctx;
 
-	int res = serial_write(state, data, len);
+	int res = serial_write(state->fd, data, len);
 	//log_debug("%s : write(%d) = %d", __func__, len, res);
 	if (res < 0 && errno != EINTR && errno != EWOULDBLOCK) {
 		log_error("%s() : write(%d) = %d (%d -> %s)", __func__, len, res, errno, strerror(errno));
-		serial_close(state);
+		serial_close(state->fd);
+		state->fd = -1;
 		return 0;
 	}
 
@@ -328,7 +336,8 @@ static void pppos_link_status_cb(ppp_pcb *pcb, int err_code, void *ctx)
 
 	case PPPERR_DEVICE:            /* Invalid I/O device for PPP. */
 		log_info("ppp_link_status_cb: PPPERR_DEVICE");
-		serial_close(state);
+		serial_close(state->fd);
+		state->fd = -1;
 		break;
 
 	case PPPERR_ALLOC:             /* Unable to allocate resources. */
@@ -400,7 +409,8 @@ static void pppos_do_rx(pppos_priv_t* state)
 		} else {
 			if (len < 0 && errno != EINTR && errno != EWOULDBLOCK) {
 				log_error("%s() : read(%d) = %d (%d -> %s)", __func__, sizeof(buffer), len, errno, strerror(errno));
-				serial_close(state);
+				serial_close(state->fd);
+				state->fd = -1;
 				return;
 			}
 			usleep(PPPOS_READ_DATA_TIMEOUT_STEP_MS * 1000);
@@ -437,8 +447,8 @@ static void pppos_mainLoop(void* _state)
 			log_info("open success!");
 		}
 
-		serial_set_non_blocking(state);
-		if (at_disconnect(state) != AT_RESULT_OK)
+		serial_set_non_blocking(state->fd);
+		if (at_disconnect(state->fd) != AT_RESULT_OK)
 			goto fail;
 
 		mutexLock(state->lock);
@@ -448,7 +458,7 @@ static void pppos_mainLoop(void* _state)
 
 		const char** at_cmd = at_init_cmds;
 		while (*at_cmd) {
-			if ((res = at_send_cmd(state, *at_cmd, 3000)) != AT_RESULT_OK) {
+			if ((res = at_send_cmd(state->fd, *at_cmd, 3000)) != AT_RESULT_OK) {
 				log_warn("failed to initialize modem (cmd=%s), res=%d, retrying", *at_cmd, res);
 				goto fail;
 			}
@@ -463,13 +473,13 @@ static void pppos_mainLoop(void* _state)
 				goto fail;
 			}
 
-			if ((res = at_send_cmd(state, at_set_apn, 3000)) != AT_RESULT_OK) {
+			if ((res = at_send_cmd(state->fd, at_set_apn, 3000)) != AT_RESULT_OK) {
 				log_warn("failed to set APN, retrying");
 				goto fail;
 			}
 		}
 
-		if ((res = at_send_cmd(state, "AT+CGDATA=\"PPP\",1\r\n", 3000)) != AT_RESULT_CONNECT) {
+		if ((res = at_send_cmd(state->fd, "AT+CGDATA=\"PPP\",1\r\n", 3000)) != AT_RESULT_CONNECT) {
 			log_warn("failed to dial PPP, res=%d, retrying", *at_cmd, res);
 			goto fail;
 		}
@@ -570,10 +580,17 @@ static int pppos_netifDown(pppos_priv_t *state)
 }
 
 
-static void pppos_statusCallback(struct netif *netif)
+static pppos_priv_t *pppos_netifState(struct netif *netif)
 {
 	struct netif_alloc *s = (void *)netif;
 	pppos_priv_t *state = (void *) ((char *)s + ((sizeof(*s) + (_Alignof(pppos_priv_t) - 1)) & ~(_Alignof(pppos_priv_t) - 1)));
+	return state;
+}
+
+
+static void pppos_statusCallback(struct netif *netif)
+{
+	pppos_priv_t *state = pppos_netifState(netif);
 
 	if (netif->flags & NETIF_FLAG_UP) {
 		if (pppos_netifUp(state))
@@ -608,6 +625,19 @@ static int pppos_netifInit(struct netif *netif, char *cfg)
 	cfg++;
 
 	state->config_path = cfg;
+
+	while (*cfg && *cfg != ':')
+		++cfg;
+
+	if (*cfg == ':') {
+		*cfg = 0;
+		cfg++;
+		state->serialat_fn = cfg;
+	}
+	else {
+		state->serialat_fn = "/dev/ttyacm1";
+	}
+
 	state->fd = -1;
 
 	mutexCreate(&state->lock);
@@ -639,12 +669,38 @@ static int pppos_netifInit(struct netif *netif, char *cfg)
 }
 
 
+const char *pppos_media(struct netif *netif)
+{
+	pppos_priv_t *state = pppos_netifState(netif);
+	int fd = open(state->serialat_fn, O_RDWR | O_NONBLOCK);
+	char buffer[256];
+	int result;
+
+	if (fd < 0)
+		return "error/open";
+
+	if ((result = at_send_cmd_res(fd, "AT+COPS?\r\n", 300, buffer, sizeof(buffer))) != AT_RESULT_OK)
+		return "error/read";
+
+	close(fd);
+
+	if (strstr(buffer, "\",0") != NULL)
+		return "2G";
+	else if (strstr(buffer, "\",2") != NULL)
+		return "3G";
+	else if (strstr(buffer, "\",7") != NULL)
+		return "4G";
+	else
+		return "unrecognized";
+}
+
+
 static netif_driver_t pppos_drv = {
 	.init = pppos_netifInit,
 	.state_sz = sizeof(pppos_priv_t),
 	.state_align = _Alignof(pppos_priv_t),
 	.name = "pppos",
-	.media = NULL,
+	.media = pppos_media,
 };
 
 
