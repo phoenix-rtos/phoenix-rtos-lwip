@@ -124,7 +124,7 @@ int ephy_link_speed(eth_phy_state_t *phy, int *full_duplex)
 		return 0;
 
 	*full_duplex = pc1 & 4;
-	return pc1 & 2 ? 10 : 100;
+	return pc1 & 1 ? 10 : 100;
 }
 
 
