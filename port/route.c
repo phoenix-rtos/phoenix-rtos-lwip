@@ -4,7 +4,7 @@
  * LwIP advanced routing
  *
  * Copyright 2019 Phoenix Systems
- * Author: Kamil Amanowicz
+ * Author: Kamil Amanowicz, Jan Sikorski
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -78,6 +78,7 @@ static int route_table_del(rt_entry_t *entry)
 	do {
 		if (route_same(entry, e)) {
 			LIST_REMOVE(&rt_table.entries, e);
+			free(e);
 			return EOK;
 		}
 	}
