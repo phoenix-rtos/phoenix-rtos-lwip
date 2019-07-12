@@ -12,6 +12,7 @@
 #ifndef PHOENIX_ROUTE_H_
 #define PHOENIX_ROUTE_H_
 
+#include <sys/list.h>
 #include <net/route.h>
 
 #include <lwip/netif.h>
@@ -19,6 +20,9 @@
 
 
 typedef struct _rt_entry {
+	struct _rt_entry *next;
+	struct _rt_entry *prev;
+
 	ip4_addr_t dst;
 	ip4_addr_t gw;
 	ip4_addr_t genmask;
@@ -29,9 +33,8 @@ typedef struct _rt_entry {
 
 
 struct rt_table {
-	rt_entry_t **entries;
-	int size;
-	int used;
+	rt_entry_t *entries;
+	handle_t lock;
 };
 
 

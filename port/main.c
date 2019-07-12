@@ -48,27 +48,26 @@
 
 static int writeRoutes(char *buffer, size_t bufSize, size_t offset)
 {
-	int i;
 	rt_entry_t *entry;
 	size_t write, size = bufSize, retval;
 
-	const char *format = "    %2s%d    %08x    %08x    %08x    %8x    %8d\n";
+	const char *format = "    %2s%d    %08x    %08x    %08x    %8x    %8d    %8d\n";
 
-	SNPRINTF_APPEND("%7s%12s%12s%12s%12s%12s\n", "Iface", "Dest", "Mask", "Gateway", "Flags", "MTU");
+	SNPRINTF_APPEND("%7s%12s%12s%12s%12s%12s%12s\n", "Iface", "Dest", "Mask", "Gateway", "Flags", "MTU", "Metric");
 
-	for (i = 0; i < rt_table.used; i++) {
-		entry = rt_table.entries[i];
-		SNPRINTF_APPEND(format, entry->netif->name, entry->netif->num, ntohl(ip_addr_get_ip4_u32(&entry->dst)),
-			ntohl(ip_addr_get_ip4_u32(&entry->genmask)), ntohl(ip_addr_get_ip4_u32(&entry->gw)),
-			entry->flags, entry->netif->mtu);
+	if ((entry = rt_table.entries) != NULL) {
+		do {
+			SNPRINTF_APPEND(format, entry->netif->name, entry->netif->num, ntohl(ip_addr_get_ip4_u32(&entry->dst)),
+					ntohl(ip_addr_get_ip4_u32(&entry->genmask)), ntohl(ip_addr_get_ip4_u32(&entry->gw)),
+					entry->flags, entry->netif->mtu, entry->metric);
+		}
+		while ((entry = entry->next) != rt_table.entries);
 	}
 
 	if (netif_default != NULL) {
 		SNPRINTF_APPEND(format, netif_default->name, netif_default->num, 0, 0,
-			ntohl(ip_addr_get_ip4_u32(&netif_default->gw)), netif_default->flags, netif_default->mtu);
+			ntohl(ip_addr_get_ip4_u32(&netif_default->gw)), netif_default->flags, netif_default->mtu, -1);
 	}
-
-#undef ROUTE_APPEND
 
 	retval = bufSize - size;
 	return retval;
@@ -179,6 +178,8 @@ int main(int argc, char **argv)
 	register_driver_tap();
 #endif
 #endif
+
+	mutexCreate(&rt_table.lock);
 
 #if defined(HAVE_IP_FILTER) || defined(HAVE_MAC_FILTER)
 	init_filters();
