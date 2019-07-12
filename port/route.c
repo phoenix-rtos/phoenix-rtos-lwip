@@ -21,19 +21,19 @@
 struct rt_table rt_table;
 
 
-static int route_cmp(rt_entry_t *e1, rt_entry_t *e2)
+static int route_after(rt_entry_t *e1, rt_entry_t *e2)
 {
 	int score1, score2;
 
 	/* Put lower metric first */
 	if (e1->metric != e2->metric)
-		return (e1->metric > e2->metric) - (e1->metric < e2->metric);
+		return e1->metric > e2->metric;
 
 	/* Put more specific first */
 	score1 = __builtin_popcount(e1->genmask.addr);
 	score2 = __builtin_popcount(e2->genmask.addr);
 
-	return (score1 < score2) - (score1 > score2);
+	return score1 < score2;
 }
 
 
@@ -46,16 +46,21 @@ static int route_table_add(rt_entry_t *entry)
 	}
 	else {
 		do {
-			if (route_cmp(entry, e) <= 0)
+			if (route_after(e, entry))
 				break;
 		}
 		while ((e = e->next) != rt_table.entries);
 	}
 
-	if (e == rt_table.entries)
+	if (e == rt_table.entries) {
 		LIST_ADD(&rt_table.entries, entry);
-	else
+
+		if (route_after(rt_table.entries, entry))
+			rt_table.entries = entry;
+	}
+	else {
 		LIST_ADD(&e, entry);
+	}
 
 	return 0;
 }
