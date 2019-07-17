@@ -58,7 +58,7 @@ static int writeRoutes(char *buffer, size_t bufSize, size_t offset)
 	if ((entry = rt_table.entries) != NULL) {
 		do {
 			SNPRINTF_APPEND(format, entry->netif->name, entry->netif->num, ntohl(ip_addr_get_ip4_u32(&entry->dst)),
-					ntohl(ip_addr_get_ip4_u32(&entry->genmask)), ntohl(ip_addr_get_ip4_u32(&entry->gw)),
+					ntohl(ip_addr_get_ip4_u32(&entry->genmask)), ntohl(ip_addr_get_ip4_u32(entry->flags & RTF_GATEWAY ? &entry->gw : &entry->netif->gw)),
 					entry->flags, entry->netif->mtu, entry->metric);
 		}
 		while ((entry = entry->next) != rt_table.entries);

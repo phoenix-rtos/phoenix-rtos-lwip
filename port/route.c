@@ -178,7 +178,7 @@ static struct netif *_route_find(const ip4_addr_t *dest)
 		return NULL;
 
 	do {
-		if (e->dst.addr == (dest->addr & e->genmask.addr) && netif_is_up(e->netif))
+		if (e->dst.addr == (dest->addr & e->genmask.addr) && netif_is_up(e->netif) && netif_is_link_up(e->netif))
 			return e->netif;
 	}
 	while ((e = e->next) != rt_table.entries);
@@ -196,7 +196,7 @@ static ip4_addr_t *_route_get_gw(struct netif *netif, const ip4_addr_t *dest)
 
 	do {
 		if (e->dst.addr == (dest->addr & e->genmask.addr) && netif == e->netif)
-			return &e->gw;
+			return e->flags & RTF_GATEWAY ? &e->gw : NULL;
 	}
 	while ((e = e->next) != rt_table.entries);
 
