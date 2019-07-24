@@ -4,7 +4,7 @@
  * LwIP ip and mac filtering
  *
  * Copyright 2019 Phoenix Systems
- * Author: Aleksander Kaminiski, Kamil Amanowicz
+ * Author: Aleksander Kaminiski, Kamil Amanowicz, Jan Sikorski
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -13,11 +13,147 @@
 #include <sys/threads.h>
 #include <sys/msg.h>
 #include <sys/rb.h>
+#include <sys/list.h>
 #include <posix/utils.h>
 
+#include <errno.h>
+
 #include "lwip/ip_addr.h"
+#include "lwip/prot/tcp.h"
+#include "lwip/prot/udp.h"
 #include "lwip/prot/ethernet.h"
 #include "filter.h"
+
+
+static struct {
+	handle_t pf_lock;
+	pf_rule_t *pf_rules;
+} filter_common;
+
+
+static int pf_rule_match(pf_rule_t *rule, struct pbuf *pbuf, struct netif *netif)
+{
+	struct ip_hdr *iphdr = (struct ip_hdr *)pbuf->payload;
+	int i, hlen;
+
+	if (rule->netif != NULL && rule->netif != netif)
+		return 0;
+
+	if (rule->dst_addr.addr != (iphdr->dest.addr & rule->dst_mask.addr))
+		return 0;
+
+	if (rule->src_addr.addr != (iphdr->src.addr & rule->src_mask.addr))
+		return 0;
+
+	if (rule->proto[0] != 0xff) {
+		for (i = 0; i < sizeof(rule->proto) && rule->proto[i] != 0xff; ++i) {
+			if (rule->proto[i] == IPH_PROTO(iphdr))
+				goto proto_match;
+		}
+
+		return 0;
+	}
+
+proto_match:
+	hlen = 4 * IPH_HL(iphdr);
+
+	if (IPH_PROTO(iphdr) == IP_PROTO_UDP) {
+		struct udp_hdr *udphdr = (struct udp_hdr *)((u8_t *)iphdr + hlen);
+
+		if (rule->src_port_set && udphdr->src != rule->src_port)
+			return 0;
+		if (rule->dst_port_set && udphdr->dest != rule->dst_port)
+			return 0;
+	}
+	else if (IPH_PROTO(iphdr) == IP_PROTO_TCP) {
+		struct tcp_hdr *tcphdr = (struct tcp_hdr *)((u8_t *)iphdr + hlen);
+
+		if (rule->src_port_set && tcphdr->src != rule->src_port)
+			return 0;
+		if (rule->dst_port_set && tcphdr->dest != rule->dst_port)
+			return 0;
+		if (rule->tcp_flags != (TCPH_FLAGS(tcphdr) & rule->tcp_flags_mask))
+			return 0;
+	}
+
+	return 1;
+}
+
+
+static int pf_rule_apply(pf_rule_t *rule, struct pbuf *pbuf, struct netif *netif)
+{
+	return rule->action;
+}
+
+
+int pf_apply(struct pbuf *pbuf, struct netif *netif)
+{
+	pf_rule_t *rule, *match;
+	int rv;
+
+	mutexLock(filter_common.pf_lock);
+	if ((rule = filter_common.pf_rules) == NULL) {
+		mutexUnlock(filter_common.pf_lock);
+		return 0;
+	}
+
+	while (rule != NULL) {
+		if (pf_rule_match(rule, pbuf, netif)) {
+			match = rule;
+
+			if (rule->quick)
+				break;
+		}
+	}
+
+	rv = pf_rule_apply(match, pbuf, netif);
+	mutexUnlock(filter_common.pf_lock);
+	return rv;
+}
+
+
+int pf_ruleAdd(const pf_rule_t *rule)
+{
+	pf_rule_t *new_rule = malloc(sizeof(*rule));
+
+	if (new_rule == NULL)
+		return -ENOMEM;
+
+	memcpy(new_rule, rule, sizeof(*rule));
+
+	mutexLock(filter_common.pf_lock);
+	LIST_ADD(&filter_common.pf_rules, new_rule);
+	mutexUnlock(filter_common.pf_lock);
+
+	return EOK;
+}
+
+
+int pf_ruleRemove(const char *label)
+{
+	pf_rule_t *rule;
+
+	mutexLock(filter_common.pf_lock);
+	if ((rule = filter_common.pf_rules) != NULL) {
+		do {
+			if (!strcmp(label, rule->label)) {
+				LIST_REMOVE(&filter_common.pf_rules, rule);
+				mutexUnlock(filter_common.pf_lock);
+				free(rule);
+				return EOK;
+			}
+		} while (rule != filter_common.pf_rules);
+	}
+	mutexUnlock(filter_common.pf_lock);
+	return -ENOENT;
+}
+
+
+int if_filter(struct pbuf *pbuf, struct netif *netif)
+{
+	return 0;
+}
+
 
 
 #define IP_FILTER_PATH "/local/ip_whitelist"
