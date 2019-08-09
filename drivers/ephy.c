@@ -79,14 +79,18 @@ static u32 ephy_show_id(eth_phy_state_t *phy)
 	phyid |= ret;
 	oui |= (ret & 0xFC00) << (18-10);
 
+/*
 	printf("lwip: ephy%u.%u id 0x%08x (vendor 0x%06x model 0x%02x rev %u)\n",
 		phy->bus, phy->addr, phyid, oui, (ret >> 4) & 0x3F, ret & 0x0F);
+*/
 
 	oui = ephy_reg_read(phy, 0x10);
 	ret = ephy_reg_read(phy, 0x11);
 
+/*
 	printf("lwip: ephy%u.%u DigCtl 0x%04x AFECtl1 0x%04x\n",
 		phy->bus, phy->addr, oui, ret);
+*/
 
 	return phyid;
 }

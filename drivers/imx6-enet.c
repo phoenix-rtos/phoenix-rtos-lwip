@@ -84,6 +84,7 @@ enum {
 };
 
 
+#if 0
 static void enet_printf(enet_priv_t *state, const char *format, ...)
 {
 	char buf[192];
@@ -94,6 +95,9 @@ static void enet_printf(enet_priv_t *state, const char *format, ...)
 	va_end(arg);
 	printf("lwip: %s %s\n", state->name, buf);
 }
+#else
+#define enet_printf(...)
+#endif
 
 
 static void enet_reset(enet_priv_t *state)
@@ -270,7 +274,7 @@ static void enet_readCardMac(enet_priv_t *state)
 static void enet_showCardId(enet_priv_t *state)
 {
 	u8 *mac = (void *)&state->netif->hwaddr;
-	enet_printf(state, "MAC=%02x:%02x:%02x:%02x:%02x:%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+	printf("lwip: %s initialized, MAC=%02x:%02x:%02x:%02x:%02x:%02x\n", state->name, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 }
 
 
@@ -718,7 +722,6 @@ static int enet_initDevice(enet_priv_t *state, int irq, int mdio)
 
 	enet_reset(state);
 	enet_readCardMac(state);
-	enet_showCardId(state);
 	enet_pinConfig(state);
 
 	if (mdio) {
@@ -749,6 +752,8 @@ static int enet_initDevice(enet_priv_t *state, int irq, int mdio)
 
 	net_refillRx(&state->rx, 2);
 	enet_start(state);
+
+	enet_showCardId(state);
 
 	return 0;
 }

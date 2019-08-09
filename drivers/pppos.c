@@ -649,10 +649,7 @@ static int pppos_netifInit(struct netif *netif, char *cfg)
 	if (!cfg)
 		return ERR_ARG;
 
-	log_debug("Preinit");
-
 	if (!state->ppp) {
-		log_debug("pppos_create");
 		state->ppp = pppapi_pppos_create(state->netif, pppos_output_cb, pppos_link_status_cb, state);
 
 		if (!state->ppp) {
