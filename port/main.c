@@ -10,6 +10,7 @@
  */
 #include "arch/cc.h"
 #include "lwip/tcpip.h"
+#include "filter.h"
 #include "netif-driver.h"
 
 #include <sys/msg.h>
@@ -102,6 +103,62 @@ static int writeStatus(char *buffer, size_t bufSize, size_t offset)
 }
 
 
+static int readPf(void *buffer, size_t size, size_t offset)
+{
+	int err = EOK;
+	size_t i;
+	pfrule_array_t *input = (pfrule_array_t *)buffer;
+	pfrule_t *output = NULL, *curr;
+
+	if (buffer == NULL || !size || size != input->len * sizeof(pfrule_t) + sizeof(pfrule_array_t))
+		return -EINVAL;
+
+	/* Arbirary max number of rules */
+	if (input->len > 1024)
+		return -EINVAL;
+
+	if (!input->len) {
+		pf_rulesUpdate(NULL);
+		return EOK;
+	}
+
+	if ((output = malloc(sizeof(pfrule_t))) == NULL)
+		return -ENOMEM;
+
+	memcpy(output, &input->array[0], sizeof(pfrule_t));
+	output->next = NULL;
+	output->prev = NULL;
+	curr = output;
+
+	if ((err = _pf_processRule(output)) < 0) {
+		_pf_listDestroy(&output);
+		return err;
+	}
+
+	/* Read input array and convert rules to list */
+	for (i = 1; i < input->len; ++i) {
+		if ((curr->next = malloc(sizeof(pfrule_t))) == NULL) {
+			err = -ENOMEM;
+			break;
+		}
+
+		memcpy(curr->next, &input->array[i], sizeof(pfrule_t));
+
+		if ((err = _pf_processRule(curr->next)) < 0)
+			break;
+
+		curr = curr->next;
+	}
+
+	if (err < 0)
+		_pf_listDestroy(&output);
+	else
+		pf_rulesUpdate(output);
+
+	return err < 0 ? err : size;
+}
+
+
 static void mainLoop(void)
 {
 	msg_t msg = {0};
@@ -109,22 +166,29 @@ static void mainLoop(void)
 	unsigned port;
 	oid_t route_oid = {0, 0};
 	oid_t status_oid = {0, 1};
+	oid_t pf_oid = {0, 2};
 
 	if (portCreate(&port) < 0) {
-		printf("can't create port\n");
+		printf("phoenix-rtos-lwip: can't create port\n");
 		return;
 	}
 
 	route_oid.port = port;
 	status_oid.port = port;
+	pf_oid.port = port;
 
 	if (create_dev(&route_oid, "/dev/route") < 0) {
-		printf("can't create /dev/route\n");
+		printf("phoenix-rtos-lwip: can't create /dev/route\n");
 		return;
 	}
 
 	if (create_dev(&status_oid, "/dev/ifstatus") < 0) {
-		printf("can't create /dev/ifstatus\n");
+		printf("phoenix-rtos-lwip: can't create /dev/ifstatus\n");
+		return;
+	}
+
+	if (create_dev(&pf_oid, "/dev/pf") < 0) {
+		printf("phoenix-rtos-lwip: can't create /dev/pf\n");
 		return;
 	}
 
@@ -136,8 +200,18 @@ static void mainLoop(void)
 		case mtRead:
 				if (msg.i.io.oid.id == route_oid.id)
 					msg.o.io.err = writeRoutes(msg.o.data, msg.o.size, msg.i.io.offs);
-				else
+				else if (msg.i.io.oid.id == status_oid.id)
 					msg.o.io.err = writeStatus(msg.o.data, msg.o.size, msg.i.io.offs);
+				else
+					msg.o.io.err = -EINVAL;
+			break;
+
+		case mtWrite:
+				if (msg.i.io.oid.id == pf_oid.id)
+					msg.o.io.err = readPf(msg.i.data, msg.i.size, msg.i.io.offs);
+				else
+					msg.o.io.err = -EINVAL;
+				msg.o.io.err = EOK;
 			break;
 
 		default:
@@ -181,7 +255,7 @@ int main(int argc, char **argv)
 
 	mutexCreate(&rt_table.lock);
 
-#if defined(HAVE_IP_FILTER) || defined(HAVE_MAC_FILTER)
+#ifdef HAVE_PF
 	init_filters();
 #endif
 
@@ -191,7 +265,7 @@ int main(int argc, char **argv)
 		if (!err)
 			++have_intfs;
 		else
-			printf("can't init netif from cfg \"%s\": %s\n", *argv, strerror(err));
+			printf("phoenix-rtos-lwip: can't init netif from cfg \"%s\": %s\n", *argv, strerror(err));
 	}
 
 	/* printf("netsrv: %zu interface%s\n", have_intfs, have_intfs == 1 ? "" : "s"); */
