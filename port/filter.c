@@ -133,7 +133,7 @@ static int pf_filter(struct pbuf *pbuf, struct netif *netif, int pdir)
 	mutexLock(filter_common.pf_lock);
 
 	if (ethhdr->type != PP_HTONS(ETHTYPE_IP)) {
-		for (rule = filter_common.rules; rule != NULL; rule = rule->next) {
+		for (rule = filter_common.puremac_rules; rule != NULL; rule = rule->next) {
 			if (pf_ruleMatchPureMac(rule, pbuf, netif)) {
 				winner = rule;
 				if (winner->quick)
