@@ -77,6 +77,12 @@ static int pf_ruleMatch(pfrule_t *rule, struct pbuf *pbuf, struct netif *netif, 
 	if (rule->netif != NULL && rule->netif != netif)
 		return 0;
 
+	if (pdir == packet_dir_in && !(rule->direction & pfin))
+		return 0;
+
+	if (pdir == packet_dir_out && !(rule->direction & pfout))
+		return 0;
+
 	if (rule->dst_addr != (iphdr->dest.addr & (0xffffffffUL << (32 - rule->dst_mask))))
 		return 0;
 
