@@ -51,13 +51,28 @@ static int pf_ruleMatchPureMac(pfrule_t *rule, struct pbuf *pbuf, struct netif *
 }
 
 
+static inline int pf_matchProtocol(pfrule_t *rule, unsigned char proto)
+{
+	int i;
+
+	if (rule->protocol[0] == 0xff)
+		return 1;
+
+	for (i = 0; i < sizeof(rule->protocol) / sizeof(rule->protocol[0]) && rule->protocol[i] != 0xff; ++i) {
+		if (rule->protocol[i] == proto)
+			return 1;
+	}
+
+	return 0;
+}
+
+
 static int pf_ruleMatch(pfrule_t *rule, struct pbuf *pbuf, struct netif *netif, int pdir)
 {
 	struct eth_hdr *ethhdr = (struct eth_hdr *)pbuf->payload;
 	struct ip_hdr *iphdr = (struct ip_hdr *)((char *)pbuf->payload + SIZEOF_ETH_HDR);
 	struct udp_hdr *udphdr;
 	struct tcp_hdr *tcphdr;
-	int i;
 
 	if (rule->netif != NULL && rule->netif != netif)
 		return 0;
@@ -68,15 +83,8 @@ static int pf_ruleMatch(pfrule_t *rule, struct pbuf *pbuf, struct netif *netif, 
 	if (rule->src_addr != (iphdr->src.addr & (0xffffffffUL << (32 - rule->src_mask))))
 		return 0;
 
-	if (rule->protocol[0] != 0xff) {
-		for (i = 0; i < sizeof(rule->protocol) / sizeof(rule->protocol[0]) && rule->protocol[i] != 0xff; ++i) {
-			if (rule->protocol[i] == IPH_PROTO(iphdr))
-				break;
-		}
-
-		if (i >= sizeof(rule->protocol) / sizeof(rule->protocol[0]))
-			return 0;
-	}
+	if (!pf_matchProtocol(rule, IPH_PROTO(iphdr)))
+		return 0;
 
 	if (rule->filter_mac && memcmp(ethhdr->src.addr, rule->mac, sizeof(ethhdr->src.addr)))
 		return 0;
