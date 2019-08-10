@@ -246,7 +246,7 @@ int _pf_processRule(pfrule_t *rule)
 	char name[2];
 	unsigned char num;
 
-	if (!rule->quick || (rule->tcp_flags | rule->tcp_flags_mask) != rule->tcp_flags_mask)
+	if ((rule->tcp_flags | rule->tcp_flags_mask) != rule->tcp_flags_mask)
 		return -EINVAL;
 
 	if (rule->interface[0] != '\0') {
