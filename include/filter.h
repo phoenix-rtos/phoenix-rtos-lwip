@@ -23,13 +23,7 @@ int pf_filterIn(struct pbuf *pbuf, struct netif *netif);
 int pf_filterOut(struct pbuf *pbuf, struct netif *netif);
 
 
-void pf_rulesUpdate(pfrule_t *list);
-
-
-int _pf_processRule(pfrule_t *rule);
-
-
-void _pf_listDestroy(pfrule_t **list);
+int pf_rulesUpdate(pfrule_array_t *array);
 
 
 void init_filters(void);

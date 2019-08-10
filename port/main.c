@@ -105,57 +105,12 @@ static int writeStatus(char *buffer, size_t bufSize, size_t offset)
 
 static int readPf(void *buffer, size_t size, size_t offset)
 {
-	int err = EOK;
-	size_t i;
 	pfrule_array_t *input = (pfrule_array_t *)buffer;
-	pfrule_t *output = NULL, *curr;
 
 	if (buffer == NULL || !size || size != input->len * sizeof(pfrule_t) + sizeof(pfrule_array_t))
 		return -EINVAL;
 
-	/* Arbirary max number of rules */
-	if (input->len > 1024)
-		return -EINVAL;
-
-	if (!input->len) {
-		pf_rulesUpdate(NULL);
-		return EOK;
-	}
-
-	if ((output = malloc(sizeof(pfrule_t))) == NULL)
-		return -ENOMEM;
-
-	memcpy(output, &input->array[0], sizeof(pfrule_t));
-	output->next = NULL;
-	output->prev = NULL;
-	curr = output;
-
-	if ((err = _pf_processRule(output)) < 0) {
-		_pf_listDestroy(&output);
-		return err;
-	}
-
-	/* Read input array and convert rules to list */
-	for (i = 1; i < input->len; ++i) {
-		if ((curr->next = malloc(sizeof(pfrule_t))) == NULL) {
-			err = -ENOMEM;
-			break;
-		}
-
-		memcpy(curr->next, &input->array[i], sizeof(pfrule_t));
-
-		if ((err = _pf_processRule(curr->next)) < 0)
-			break;
-
-		curr = curr->next;
-	}
-
-	if (err < 0)
-		_pf_listDestroy(&output);
-	else
-		pf_rulesUpdate(output);
-
-	return err < 0 ? err : size;
+	return pf_rulesUpdate(input);
 }
 
 
