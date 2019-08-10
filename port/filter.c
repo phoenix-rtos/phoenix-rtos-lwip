@@ -211,7 +211,7 @@ static void _pf_ruleAdd(pfrule_t **list, pfrule_t **head, pfrule_t *n)
 		n->prev = t;
 
 		if (head != NULL)
-			*head = t;
+			*head = n;
 	}
 }
 
