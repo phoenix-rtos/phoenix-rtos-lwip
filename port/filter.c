@@ -56,7 +56,7 @@ static int pf_ruleMatchPureMac(pfrule_t *rule, struct pbuf *pbuf, struct netif *
 	if (memcmp(ethhdr->src.addr, rule->mac, sizeof(ethhdr->src.addr)))
 		return 0;
 
-	return 0;
+	return 1;
 }
 
 
