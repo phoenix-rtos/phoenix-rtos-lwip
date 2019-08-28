@@ -134,8 +134,8 @@ int ephy_link_speed(eth_phy_state_t *phy, int *full_duplex)
 
 static void ephy_restart_an(eth_phy_state_t *phy)
 {
-	// adv: no-next-page, no-rem-fault, no-pause, no-T4, 100M-FD-only, 802.3
-	ephy_reg_write(phy, 4, 0x0101);
+	// adv: no-next-page, no-rem-fault, no-pause, no-T4, 100M/10M-FD & 10M-HD, 802.3
+	ephy_reg_write(phy, 4, 0x0161);
 	// 100M-FD, AN, restart-AN
 	ephy_reg_write(phy, 0, 0x3300);
 }
