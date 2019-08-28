@@ -602,7 +602,7 @@ static void socket_thread(void *arg)
 	}
 
 	portDestroy(port);
-	if (err >= 0)
+	if (err < 0)
 		lwip_close(sock);
 }
 
