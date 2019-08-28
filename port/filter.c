@@ -36,28 +36,7 @@ enum { packet_dir_in = 0, packet_dir_out };
 static struct {
 	handle_t pf_lock;
 	pfrule_t *rules;
-	pfrule_t *puremac_rules;
 } filter_common;
-
-
-static int pf_ruleMatchPureMac(pfrule_t *rule, struct pbuf *pbuf, struct netif *netif, int pdir)
-{
-	struct eth_hdr *ethhdr = (struct eth_hdr *)pbuf->payload;
-
-	if (rule->netif != NULL && rule->netif != netif)
-		return 0;
-
-	if (pdir == packet_dir_in && !(rule->direction & pfin))
-		return 0;
-
-	if (pdir == packet_dir_out && !(rule->direction & pfout))
-		return 0;
-
-	if (memcmp(ethhdr->src.addr, rule->mac, sizeof(ethhdr->src.addr)))
-		return 0;
-
-	return 1;
-}
 
 
 static inline int pf_matchProtocol(pfrule_t *rule, unsigned char proto)
@@ -79,7 +58,7 @@ static inline int pf_matchProtocol(pfrule_t *rule, unsigned char proto)
 static int pf_ruleMatch(pfrule_t *rule, struct pbuf *pbuf, struct netif *netif, int pdir)
 {
 	struct eth_hdr *ethhdr = (struct eth_hdr *)pbuf->payload;
-	struct ip_hdr *iphdr = (struct ip_hdr *)((char *)pbuf->payload + SIZEOF_ETH_HDR);
+	struct ip_hdr *iphdr = NULL;
 	struct udp_hdr *udphdr;
 	struct tcp_hdr *tcphdr;
 
@@ -92,38 +71,52 @@ static int pf_ruleMatch(pfrule_t *rule, struct pbuf *pbuf, struct netif *netif, 
 	if (pdir == packet_dir_out && !(rule->direction & pfout))
 		return 0;
 
-	if (rule->dst_addr != (iphdr->dest.addr & (0xffffffffUL << (32 - rule->dst_mask))))
-		return 0;
-
-	if (rule->src_addr != (iphdr->src.addr & (0xffffffffUL << (32 - rule->src_mask))))
-		return 0;
-
-	if (!pf_matchProtocol(rule, IPH_PROTO(iphdr)))
-		return 0;
-
 	if (rule->filter_mac && memcmp(ethhdr->src.addr, rule->mac, sizeof(ethhdr->src.addr)))
 		return 0;
 
-	if (IPH_PROTO(iphdr) == IP_PROTO_UDP) {
-		udphdr = (struct udp_hdr *)((u8_t *)iphdr + 4 * IPH_HL(iphdr));
+	if (ethhdr->type == PP_HTONS(ETHTYPE_IP)) {
+		if (pbuf->len < SIZEOF_ETH_HDR + sizeof(struct ip_hdr))
+			return 1; /* Packet would be dropped anyway */
 
-		if (rule->src_port_set && udphdr->src != rule->src_port)
-			return 0;
-		if (rule->dst_port_set && udphdr->dest != rule->dst_port)
-			return 0;
-	}
-	else if (IPH_PROTO(iphdr) == IP_PROTO_TCP) {
-		tcphdr = (struct tcp_hdr *)((u8_t *)iphdr + 4 * IPH_HL(iphdr));
+		iphdr = (struct ip_hdr *)((char *)pbuf->payload + SIZEOF_ETH_HDR);
 
-		if (rule->src_port_set && tcphdr->src != rule->src_port)
+		if (rule->dst_addr != (iphdr->dest.addr & (0xffffffffUL << (32 - rule->dst_mask))))
 			return 0;
-		if (rule->dst_port_set && tcphdr->dest != rule->dst_port)
+
+		if (rule->src_addr != (iphdr->src.addr & (0xffffffffUL << (32 - rule->src_mask))))
 			return 0;
-		if (rule->tcp_flags != (TCPH_FLAGS(tcphdr) & rule->tcp_flags_mask))
+
+		if (!pf_matchProtocol(rule, IPH_PROTO(iphdr)))
 			return 0;
+
+		if (IPH_PROTO(iphdr) == IP_PROTO_UDP) {
+			udphdr = (struct udp_hdr *)((u8_t *)iphdr + 4 * IPH_HL(iphdr));
+
+			if (rule->src_port_set && udphdr->src != rule->src_port)
+				return 0;
+			if (rule->dst_port_set && udphdr->dest != rule->dst_port)
+				return 0;
+		}
+		else if (IPH_PROTO(iphdr) == IP_PROTO_TCP) {
+			tcphdr = (struct tcp_hdr *)((u8_t *)iphdr + 4 * IPH_HL(iphdr));
+
+			if (rule->src_port_set && tcphdr->src != rule->src_port)
+				return 0;
+			if (rule->dst_port_set && tcphdr->dest != rule->dst_port)
+				return 0;
+			if (rule->tcp_flags != (TCPH_FLAGS(tcphdr) & rule->tcp_flags_mask))
+				return 0;
+		}
+		else if (rule->src_port_set || rule->dst_port_set) {
+			return 0;
+		}
 	}
-	else if (rule->src_port_set || rule->dst_port_set) {
-		return 0;
+	else {
+		if (rule->src_mask != 0 || rule->dst_mask != 0 || rule->src_port_set || rule->dst_port_set)
+			return 0;
+
+		if (rule->tcp_flags_mask != 0 || rule->protocol[0] != 0xff)
+			return 0;
 	}
 
 	return 1;
@@ -132,8 +125,7 @@ static int pf_ruleMatch(pfrule_t *rule, struct pbuf *pbuf, struct netif *netif, 
 
 static int pf_filter(struct pbuf *pbuf, struct netif *netif, int pdir)
 {
-	struct eth_hdr *ethhdr = (struct eth_hdr *)pbuf->payload;
-	pfrule_t *rule, *winner = NULL;
+	pfrule_t *rule;
 	unsigned int action = DEFAULT_ACTION;
 
 	if (pbuf->len < SIZEOF_ETH_HDR)
@@ -141,30 +133,13 @@ static int pf_filter(struct pbuf *pbuf, struct netif *netif, int pdir)
 
 	mutexLock(filter_common.pf_lock);
 
-	if (ethhdr->type != PP_HTONS(ETHTYPE_IP)) {
-		for (rule = filter_common.puremac_rules; rule != NULL; rule = rule->next) {
-			if (pf_ruleMatchPureMac(rule, pbuf, netif, pdir)) {
-				winner = rule;
-				if (winner->quick)
-					break;
-			}
+	for (rule = filter_common.rules; rule != NULL; rule = rule->next) {
+		if (pf_ruleMatch(rule, pbuf, netif, pdir)) {
+			action = rule->action;
+			if (rule->quick)
+				break;
 		}
 	}
-	else {
-		if (pbuf->len < SIZEOF_ETH_HDR + sizeof(struct ip_hdr))
-			return 1; /* Packet would be dropped anyway */
-
-		for (rule = filter_common.rules; rule != NULL; rule = rule->next) {
-			if (pf_ruleMatch(rule, pbuf, netif, pdir)) {
-				winner = rule;
-				if (winner->quick)
-					break;
-			}
-		}
-	}
-
-	if (winner != NULL)
-		action = winner->action;
 
 	mutexUnlock(filter_common.pf_lock);
 
@@ -248,21 +223,6 @@ static void _pf_listDestroy(pfrule_t **list)
 }
 
 
-static int pf_isPure(pfrule_t *rule)
-{
-	if (!rule->filter_mac)
-		return 0;
-
-	if (rule->src_mask != 0 || rule->dst_mask != 0 || rule->src_port != 0 || rule->dst_port != 0)
-		return 0;
-
-	if (rule->tcp_flags_mask != 0 || rule->protocol[0] != 0xff)
-		return 0;
-
-	return 1;
-}
-
-
 static int _pf_processRule(pfrule_t *rule)
 {
 	struct netif *netif;
@@ -303,7 +263,7 @@ static int _pf_processRule(pfrule_t *rule)
 
 int pf_rulesUpdate(pfrule_array_t *array)
 {
-	pfrule_t *newlist = NULL, *listhead = NULL, *newpure = NULL, *purehead = NULL, *newrule, *t;
+	pfrule_t *newlist = NULL, *listhead = NULL, *newrule;
 	size_t i;
 
 	/* Arbirary max number of rules */
@@ -313,7 +273,6 @@ int pf_rulesUpdate(pfrule_array_t *array)
 	for (i = 0; i < array->len; ++i) {
 		if ((newrule = malloc(sizeof(pfrule_t))) == NULL) {
 			_pf_listDestroy(&newlist);
-			_pf_listDestroy(&newpure);
 			return -ENOMEM;
 		}
 
@@ -322,34 +281,17 @@ int pf_rulesUpdate(pfrule_array_t *array)
 		if (_pf_processRule(newrule) != 0) {
 			free(newrule);
 			_pf_listDestroy(&newlist);
-			_pf_listDestroy(&newpure);
 			return -EINVAL;
 		}
 
 		_pf_ruleAdd(&newlist, &listhead, newrule);
-
-		if (pf_isPure(newrule)) {
-			if ((t = malloc(sizeof(pfrule_t))) == NULL) {
-				_pf_listDestroy(&newlist);
-				_pf_listDestroy(&newpure);
-				return -ENOMEM;
-			}
-
-			memcpy(t, newrule, sizeof(pfrule_t));
-
-			_pf_ruleAdd(&newpure, &purehead, t);
-		}
 	}
 
 	mutexLock(filter_common.pf_lock);
 	if (filter_common.rules != NULL)
 		_pf_listDestroy(&filter_common.rules);
 
-	if (filter_common.puremac_rules != NULL)
-		_pf_listDestroy(&filter_common.puremac_rules);
-
 	filter_common.rules = newlist;
-	filter_common.puremac_rules = newpure;
 	mutexUnlock(filter_common.pf_lock);
 
 	return EOK;
@@ -361,6 +303,5 @@ void init_filters(void)
 #ifdef HAVE_PF
 	mutexCreate(&filter_common.pf_lock);
 	filter_common.rules = NULL;
-	filter_common.puremac_rules = NULL;
 #endif
 }
