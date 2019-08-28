@@ -22,6 +22,7 @@
 #include <sys/platform.h>
 #include <sys/threads.h>
 #include <phoenix/arch/imx6ull.h>
+#include <stdatomic.h>
 #include <endian.h>
 #include <errno.h>
 #include <stdarg.h>
@@ -316,11 +317,7 @@ static void enet_fillRxDesc(const net_bufdesc_ring_t *ring, size_t i, addr_t pa,
 #if USE_ENET_EXT_DESCRIPTORS
 	desc->yflags = ENET_RXDY_INT;
 #endif
-	asm ("" ::: "memory");
-
-	desc->flags = ENET_DESC_OWN | wrap;
-
-	asm ("" ::: "memory");
+	atomic_store(&desc->flags, ENET_DESC_OWN | wrap);
 }
 
 
@@ -355,11 +352,7 @@ static void enet_fillTxDesc(const net_bufdesc_ring_t *ring, size_t i, addr_t pa,
 	desc->yflags = yflags;
 #endif
 
-	asm ("" ::: "memory");
-
-	desc->flags = flags;
-
-	asm ("" ::: "memory");
+	atomic_store(&desc->flags, flags);
 }
 
 
@@ -404,7 +397,7 @@ static int enet_irq_handler(unsigned irq, void *arg)
 	state->mmio->EIMR &= ~(ENET_IRQ_RXF | ENET_IRQ_TXF);
 
 	if (events & ENET_IRQ_EBERR)
-		__sync_fetch_and_or(&state->drv_exit, EV_BUS_ERROR);	// FIXME: atomic_set()
+		atomic_fetch_or(&state->drv_exit, EV_BUS_ERROR);
 
 	return 0;
 }

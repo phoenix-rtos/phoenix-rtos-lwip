@@ -12,6 +12,7 @@
 #define PHOENIX_NET_BDRING_H_
 
 #include <sys/types.h>
+#include <stdatomic.h>
 #include "lwip/pbuf.h"
 
 
@@ -45,7 +46,8 @@ struct net_bufdesc_ring_
 {
 	volatile void *ring;
 	struct pbuf **bufp;
-	unsigned head, tail, last;
+	volatile unsigned head, tail;
+	unsigned last;
 	addr_t phys;
 	const net_bufdesc_ops_t *ops;
 	handle_t lock;
@@ -61,15 +63,10 @@ size_t net_transmitPacket(net_bufdesc_ring_t *ring, struct pbuf *p);
 
 static inline int net_rxFullyFilled(net_bufdesc_ring_t *ring)
 {
-	return ((ring->head - ring->tail) & ring->last) == 1;
+	unsigned tail = atomic_load(&ring->tail);
+	unsigned head = atomic_load(&ring->head);
+
+	return ((head - tail) & ring->last) == 1;
 }
-
-
-static inline int net_txEmpty(net_bufdesc_ring_t *ring)
-{
-	// called from netport thread, races against irq/tx_done
-	return ring->head == *(volatile unsigned *)&ring->tail;
-}
-
 
 #endif /* PHOENIX_NET_BDRING_H_ */

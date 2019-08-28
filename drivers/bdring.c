@@ -18,6 +18,7 @@
 
 #include LWIP_HOOK_FILENAME
 
+#include <stdatomic.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -206,7 +207,7 @@ size_t net_reapTxFinished(net_bufdesc_ring_t *ring)
 
 	n = 0;
 	i = ring->tail;
-	head = *(volatile unsigned *)&ring->head;
+	head = atomic_load(&ring->head);
 	while (i != head) {
 		if (!ring->ops->nextTxDone(ring, i))
 			break;
@@ -221,7 +222,7 @@ size_t net_reapTxFinished(net_bufdesc_ring_t *ring)
 	}
 
 	if (n)
-		*(volatile unsigned *)&ring->tail = i;
+		atomic_store(&ring->tail, i);
 
 	mutexUnlock(ring->lock);
 	return n;
@@ -275,7 +276,7 @@ size_t net_transmitPacket(net_bufdesc_ring_t *ring, struct pbuf *p)
 
 	mutexLock(ring->lock);
 	// NOTE: 2^n ring size verified in net_initRings
-	n = *(volatile unsigned *)&ring->tail;	// access tail once - it may be advanced by tx_done thread
+	n = atomic_load(&ring->tail);	// access tail once - it may be advanced by tx_done thread
 	i = ring->head;
 	n = (n - i - 1) & ring->last;
 	if (n > MAX_TX_FRAGMENTS)
@@ -300,8 +301,7 @@ size_t net_transmitPacket(net_bufdesc_ring_t *ring, struct pbuf *p)
 		last = 0;
 	}
 
-	asm volatile ("" ::: "memory");
-	*(volatile unsigned *)&ring->head = ni;	// sync with read in net_reapTxFinished() run in tx_done thread
+	atomic_store(&ring->head, ni);
 	mutexUnlock(ring->lock);
 	return frags;
 }
