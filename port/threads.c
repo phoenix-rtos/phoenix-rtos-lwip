@@ -30,7 +30,7 @@ typedef struct {
 
 
 static struct {
-	char collector_stack[4 * 4096] __attribute__((aligned(8)));
+	char collector_stack[32 * 4096] __attribute__((aligned(8)));
 	rbtree_t threads;
 	handle_t lock;
 } global;
