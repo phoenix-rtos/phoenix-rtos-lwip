@@ -131,6 +131,7 @@ int sys_thread_opt_new(const char *name, void (* thread)(void *arg), void *arg, 
 	ts->stack = stack;
 	ts->arg = arg;
 
+	mutexLock(global.lock);
 	err = beginthreadex(thread_main, prio, stack, stacksize, ts, &ts->tid);
 
 	if (err) {
@@ -140,6 +141,7 @@ int sys_thread_opt_new(const char *name, void (* thread)(void *arg), void *arg, 
 
 	if (id != NULL)
 		*id = ts->tid;
+	mutexUnlock(global.lock);
 
 	return err;
 }
