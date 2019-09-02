@@ -731,7 +731,7 @@ static int enet_initDevice(enet_priv_t *state, int irq, int mdio)
 #endif
 
 	interrupt(irq, enet_irq_handler, state, state->irq_cond, &state->irq_handle);
-	beginthread(enet_irq_thread, 0, state->irq_stack, sizeof(state->irq_stack), state);
+	beginthread(enet_irq_thread, 4, state->irq_stack, sizeof(state->irq_stack), state);
 
 	if (state->mscr) {
 		err = register_mdio_bus(&enet_mdio_ops, state);
