@@ -772,11 +772,24 @@ static err_t enet_netifOutput(struct netif *netif, struct pbuf *p)
 static void enet_setLinkState(void *arg, int state)
 {
 	struct netif* netif = (struct netif*) arg;
+	enet_priv_t *priv = netif->state;
+	int speed, full_duplex;
 
-	if (state)
+	if (state) {
+		speed = ephy_link_speed(&priv->phy, &full_duplex);
+
+		if (speed == 10) {
+			priv->mmio->RCR |= ENET_RCR_RMII_10T;
+		}
+		else if (speed == 100) {
+			priv->mmio->RCR &= ~ENET_RCR_RMII_10T;
+		}
+
 		netif_set_link_up(netif);
-	else
+	}
+	else {
 		netif_set_link_down(netif);
+	}
 }
 
 // ARGS: enet:base:irq[:no-mdio][:PHY:[bus.]addr[:config]]
