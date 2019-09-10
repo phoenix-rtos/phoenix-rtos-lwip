@@ -532,8 +532,10 @@ static int pppos_netifUp(pppos_priv_t *state)
 	if (fcfg == NULL)
 		return 1;
 
-	if (state->apn[0])
+	if (state->apn[0]) {
+		fclose(fcfg);
 		return 0;
+	}
 
 	mutexLock(state->lock);
 	while (fgets(lcfg, sizeof(lcfg), fcfg) != NULL) {
