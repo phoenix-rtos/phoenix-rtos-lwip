@@ -267,6 +267,7 @@ static int at_send_cmd(int fd, const char* cmd, int timeout_ms)
 // NOTE: this only disconnects the AT modem from the data connection
 static int at_disconnect(int fd) {
 	// TODO: do it better (finite retries? broken?)
+#if 0
 	int res;
 	int retries = 3;
 	do {
@@ -276,8 +277,34 @@ static int at_disconnect(int fd) {
 	} while (res != AT_RESULT_OK && --retries);
 
 	return res;
+#else
+	return AT_RESULT_OK;
+#endif
 }
 
+
+static int at_reset(pppos_priv_t* state)
+{
+	int res;
+	int retry = 10;
+
+	log_info("Resetting modem");
+	if ((res = at_send_cmd(state->fd, "ATZ\r\n", 3000)) != AT_RESULT_OK) {
+		log_warn("failed to reset modem, retrying");
+		return -1;
+	}
+
+	usleep (3 * 1000 * 1000);
+
+	while ((res = at_send_cmd(state->fd, "AT\r\n", 3000)) != AT_RESULT_OK && retry--);
+
+	if (res != AT_RESULT_OK) {
+		log_warn("failed to reset modem, res=%d", res);
+		return -1;
+	}
+
+	return 0;
+}
 
 
 /****** PPPoS support functions ******/
@@ -422,14 +449,12 @@ static void pppos_do_rx(pppos_priv_t* state)
 
 
 const char* at_init_cmds[] = {
-	"ATZ\r\n",			// reset MODEM
-	"ATQ0 V1 E0 S0=0 &C1 &D2 +FCLASS=0\r\n",	// setup serial/message exchange
-	"AT+WS46=29\r\n",		// disable LTE
 	"AT+CREG?\r\n", 		// check network registration (just for debug)
 	"AT+COPS?\r\n", 		// check operator registration (just for debug)
 	"AT+CSQ\r\n",       // check signal quality (for debug)
 	NULL,
 };
+
 
 static void pppos_mainLoop(void* _state)
 {
@@ -451,14 +476,12 @@ static void pppos_mainLoop(void* _state)
 		if (at_disconnect(state->fd) != AT_RESULT_OK)
 			goto fail;
 
-		mutexLock(state->lock);
-		while (!state->apn[0])
-			condWait(state->cond, state->lock, 0);
-		mutexUnlock(state->lock);
+		if (at_reset(state))
+			goto fail;
 
 		const char** at_cmd = at_init_cmds;
 		while (*at_cmd) {
-			if ((res = at_send_cmd(state->fd, *at_cmd, 3000)) != AT_RESULT_OK) {
+			if ((res = at_send_cmd(state->fd, *at_cmd, 5000)) != AT_RESULT_OK) {
 				log_warn("failed to initialize modem (cmd=%s), res=%d, retrying", *at_cmd, res);
 				goto fail;
 			}
@@ -466,26 +489,10 @@ static void pppos_mainLoop(void* _state)
 			at_cmd += 1;
 		}
 
-		{ /* Configure APN */
-			char at_set_apn[256];
-			if (snprintf(at_set_apn, sizeof(at_set_apn), "AT+CGDCONT=1,\"IP\",\"%s\"\r\n", state->apn) >= sizeof(at_set_apn)) {
-				log_error("APN name too long");
-				goto fail;
-			}
-
-			if ((res = at_send_cmd(state->fd, at_set_apn, 3000)) != AT_RESULT_OK) {
-				log_warn("failed to set APN, retrying");
-				goto fail;
-			}
-		}
-
-		if ((res = at_send_cmd(state->fd, "AT+CGDATA=\"PPP\",1\r\n", 3000)) != AT_RESULT_CONNECT) {
+		if ((res = at_send_cmd(state->fd, "ATD*99***1#\r\n", 5000)) != AT_RESULT_CONNECT) {
 			log_warn("failed to dial PPP, res=%d, retrying", *at_cmd, res);
 			goto fail;
 		}
-
-		// TODO: provide authentication params externally
-		//ppp_set_auth(state->ppp, PPPAUTHTYPE_PAP, "plusgsm", "plusgsm");
 
 		log_debug("ppp_connect");
 		state->conn_state = CONN_STATE_CONNECTING;
@@ -523,59 +530,13 @@ fail:
 
 static int pppos_netifUp(pppos_priv_t *state)
 {
-	char lcfg[256] = { 0 };
-	int line = 0;
-	FILE *fcfg = fopen(state->config_path, "r");
-	char *cfgval;
-	char *eq;
-
-	if (fcfg == NULL)
-		return 1;
-
-	if (state->apn[0])
-		return 0;
-
-	mutexLock(state->lock);
-	while (fgets(lcfg, sizeof(lcfg), fcfg) != NULL) {
-		line++;
-		if (lcfg[0] == '#')
-			continue;
-
-		if ((eq = strchr(lcfg, '=')) == NULL) {
-			log_error("[line %d] invalid format - missing '='", line);
-			continue;
-		}
-
-		lcfg[strcspn(lcfg, "\r\n")] = 0;
-
-		*eq = 0;
-		cfgval = eq + 1;
-
-		if (cfgval[0] == '"' || cfgval[0] == '\'') {
-			cfgval++;
-			cfgval[strlen(cfgval) - 1] = 0;
-		}
-
-		if (!strcasecmp(lcfg, "apn"))
-			strncpy(state->apn, cfgval, sizeof(state->apn) - 1);
-		else
-			log_warn("[line %d] unsupported option: %s (val: %s)", line, lcfg, cfgval);
-	}
-
-	condSignal(state->cond);
-	mutexUnlock(state->lock);
-	fclose(fcfg);
-
 	return 0;
 }
 
 
 static int pppos_netifDown(pppos_priv_t *state)
 {
-	if (state->apn[0]) {
-		state->apn[0] = 0;
-		pppapi_close(state->ppp, 0);
-	}
+	pppapi_close(state->ppp, 0);
 	return 0;
 }
 
