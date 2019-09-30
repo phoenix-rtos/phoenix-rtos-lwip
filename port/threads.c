@@ -137,9 +137,11 @@ int sys_thread_opt_new(const char *name, void (* thread)(void *arg), void *arg, 
 	if (err) {
 		free(stack);
 		free(ts);
-	} else if (id != NULL)
+	}
+	else if (id != NULL) {
 		*id = ts->tid;
 	}
+
 	mutexUnlock(global.lock);
 
 	return err;
