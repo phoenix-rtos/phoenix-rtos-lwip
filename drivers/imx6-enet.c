@@ -26,6 +26,7 @@
 #include <endian.h>
 #include <errno.h>
 #include <stdarg.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -66,13 +67,13 @@ typedef struct
 	net_bufdesc_ring_t rx, tx;
 
 	addr_t devphys;
-	u32 mscr;
+	uint32_t mscr;
 
 	char name[32];
 
 	eth_phy_state_t phy;
 
-	u32 irq_stack[1024] __attribute__((aligned(16))), mdio_stack[1024];
+	uint32_t irq_stack[1024] __attribute__((aligned(16))), mdio_stack[1024];
 } enet_priv_t;
 
 
@@ -183,9 +184,9 @@ static void enet_start(enet_priv_t *state)
 }
 
 
-static int enet_readFusedMac(u32 *buf)
+static int enet_readFusedMac(uint32_t *buf)
 {
-	volatile u32 *va = physmmap(0x21bc000, 0x1000);
+	volatile uint32_t *va = physmmap(0x21bc000, 0x1000);
 
 	if (va == MAP_FAILED)
 		return -ENOMEM;
@@ -199,10 +200,10 @@ static int enet_readFusedMac(u32 *buf)
 	return 0;
 }
 
-static u32 enet_readCpuId(void)
+static uint32_t enet_readCpuId(void)
 {
-	volatile u32 *va = physmmap(0x21bc000, 0x1000);
-	u32 res = 0;
+	volatile uint32_t *va = physmmap(0x21bc000, 0x1000);
+	uint32_t res = 0;
 
 	if (va == MAP_FAILED)
 		return 0;
@@ -216,7 +217,7 @@ static u32 enet_readCpuId(void)
 }
 
 
-static inline u8 get_byte(u32 v, int i)
+static inline uint8_t get_byte(uint32_t v, int i)
 {
 	return (v >> (i * 8)) & 0xFF;
 }
@@ -226,8 +227,8 @@ static void enet_readCardMac(enet_priv_t *state)
 {
 	static const struct eth_addr zero_eth = { { 0, 0, 0, 0, 0, 0 } };
 
-	u32 buf[3];
-	u8 *mac;
+	uint32_t buf[3];
+	uint8_t *mac;
 
 	mac = (void *)&state->netif->hwaddr;
 
@@ -258,7 +259,7 @@ static void enet_readCardMac(enet_priv_t *state)
 	}
 
 	if (memcmp(mac, &zero_eth.addr, ETH_HWADDR_LEN) == 0) {
-		u32 cpuId = enet_readCpuId();
+		uint32_t cpuId = enet_readCpuId();
 		mac[0] = 0x02;
 		mac[1] = (cpuId >> 24) & 0xFF;
 		mac[2] = (cpuId >> 16) & 0xFF;
@@ -267,14 +268,14 @@ static void enet_readCardMac(enet_priv_t *state)
 		mac[5] = state->devphys >> 16;
 	}
 
-	state->mmio->PALR = be32toh(*(u32 *)mac);
-	state->mmio->PAUR = (be16toh(*(u16 *)(mac + 4)) << 16) | 0x8808;
+	state->mmio->PALR = be32toh(*(uint32_t *)mac);
+	state->mmio->PAUR = (be16toh(*(uint16_t *)(mac + 4)) << 16) | 0x8808;
 }
 
 
 static void enet_showCardId(enet_priv_t *state)
 {
-	u8 *mac = (void *)&state->netif->hwaddr;
+	uint8_t *mac = (void *)&state->netif->hwaddr;
 	printf("lwip: %s initialized, MAC=%02x:%02x:%02x:%02x:%02x:%02x\n", state->name, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 }
 
@@ -390,7 +391,7 @@ static int enet_initRings(enet_priv_t *state)
 /* hard-IRQ handler */
 static int enet_irq_handler(unsigned irq, void *arg)
 {
-	u32 events;
+	uint32_t events;
 	enet_priv_t *state = arg;
 
 	events = state->mmio->EIR & (ENET_IRQ_RXF | ENET_IRQ_TXF | ENET_IRQ_EBERR);
@@ -503,14 +504,14 @@ static void enet_mdioWait(enet_priv_t *state)
 }
 
 
-static u16 enet_mdioIO(enet_priv_t *state, unsigned addr, unsigned reg, unsigned val, int read)
+static uint16_t enet_mdioIO(enet_priv_t *state, unsigned addr, unsigned reg, unsigned val, int read)
 {
 	state->mmio->EIR = ENET_IRQ_MII;
 	if (!MDC_ALWAYS_ON)
 		state->mmio->MSCR = state->mscr;
 
 	if (addr & NETDEV_MDIO_CLAUSE45) {
-		u32 dev = ((addr & NETDEV_MDIO_A_MASK) << 18) |
+		uint32_t dev = ((addr & NETDEV_MDIO_A_MASK) << 18) |
 			((addr & NETDEV_MDIO_B_MASK) << (23-8));
 		state->mmio->MMFR = 0x00020000 | /* extended MDIO address write */
 			dev | (reg & 0xFFFF);
@@ -532,10 +533,10 @@ static u16 enet_mdioIO(enet_priv_t *state, unsigned addr, unsigned reg, unsigned
 }
 
 
-static u16 enet_mdioRead(void *arg, unsigned addr, u16 reg)
+static uint16_t enet_mdioRead(void *arg, unsigned addr, uint16_t reg)
 {
 	enet_priv_t *state = arg;
-	u16 v;
+	uint16_t v;
 
 	v = enet_mdioIO(state, addr, reg, 0, 1);
 #if MDIO_DEBUG
@@ -545,7 +546,7 @@ static u16 enet_mdioRead(void *arg, unsigned addr, u16 reg)
 }
 
 
-static void enet_mdioWrite(void *arg, unsigned addr, u16 reg, u16 val)
+static void enet_mdioWrite(void *arg, unsigned addr, uint16_t reg, uint16_t val)
 {
 	enet_priv_t *state = arg;
 

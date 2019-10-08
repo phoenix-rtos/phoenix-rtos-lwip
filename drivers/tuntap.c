@@ -14,6 +14,7 @@
 
 #include <errno.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
@@ -34,7 +35,7 @@
 
 typedef struct
 {
-	u32 stacks[2][4096];
+	uint32_t stacks[2][4096];
 
 	struct netif *netif;
 	handle_t lock, cond;

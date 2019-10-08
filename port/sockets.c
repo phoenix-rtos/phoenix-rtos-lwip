@@ -11,6 +11,7 @@
 
 #include <errno.h>
 #include <poll.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <fcntl.h>
 #include <string.h>
@@ -35,7 +36,7 @@ enum { socket_tcp, socket_udp };
 typedef struct {
 	id_t id;
 	int refs;
-	u16_t inoffs;
+	uint16_t inoffs;
 	struct pbuf *inbufs;
 	char type;
 
@@ -158,7 +159,7 @@ static err_t socket_received(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, er
 }
 
 
-static err_t socket_transmitted(void *arg, struct tcp_pcb *tpcb, u16_t len)
+static err_t socket_transmitted(void *arg, struct tcp_pcb *tpcb, uint16_t len)
 {
 	socket_t *socket = arg;
 	LOG_INFO("entered id=%llu", socket->id);

@@ -14,6 +14,7 @@
 #include <netif/ppp/pppapi.h>
 
 #include <errno.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdarg.h>
@@ -44,7 +45,7 @@ typedef struct
 	volatile int conn_state;
 	handle_t lock, cond;
 
-	u32 main_loop_stack[4096];
+	uint32_t main_loop_stack[4096];
 } pppos_priv_t;
 
 #define COL_RED     "\033[1;31m"

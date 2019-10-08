@@ -13,6 +13,7 @@
 #include "netif-driver.h"
 
 #include <errno.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -24,13 +25,13 @@
 //#define EPHY_KSZ8081RND
 
 
-static uint16_t ephy_reg_read(eth_phy_state_t *phy, u16 reg)
+static uint16_t ephy_reg_read(eth_phy_state_t *phy, uint16_t reg)
 {
 	return mdio_read(phy->bus, phy->addr, reg);
 }
 
 
-static void ephy_reg_write(eth_phy_state_t *phy, u16 reg, u16 val)
+static void ephy_reg_write(eth_phy_state_t *phy, uint16_t reg, uint16_t val)
 {
 	mdio_write(phy->bus, phy->addr, reg, val);
 	ephy_reg_read(phy, reg);
@@ -65,11 +66,11 @@ static void ephy_reset(eth_phy_state_t *phy)
 }
 
 
-static u32 ephy_show_id(eth_phy_state_t *phy)
+static uint32_t ephy_show_id(eth_phy_state_t *phy)
 {
-	u32 oui = 0;
-	u32 phyid = 0;
-	u16 ret;
+	uint32_t oui = 0;
+	uint32_t phyid = 0;
+	uint16_t ret;
 
 	ret = ephy_reg_read(phy, 0x02);
 	phyid = ret << 16;
@@ -98,7 +99,7 @@ static u32 ephy_show_id(eth_phy_state_t *phy)
 
 static void ephy_show_link_state(eth_phy_state_t *phy)
 {
-	u16 bctl, bstat, adv, lpa, pc1, pc2;
+	uint16_t bctl, bstat, adv, lpa, pc1, pc2;
 
 	bctl = ephy_reg_read(phy, 0x00);
 	bstat = ephy_reg_read(phy, 0x01);
@@ -122,7 +123,7 @@ static void ephy_show_link_state(eth_phy_state_t *phy)
 
 int ephy_link_speed(eth_phy_state_t *phy, int *full_duplex)
 {
-	u16 pc1 = ephy_reg_read(phy, 0x1e);
+	uint16_t pc1 = ephy_reg_read(phy, 0x1e);
 
 	if (!(pc1 & 7))
 		return 0;
@@ -244,7 +245,7 @@ static int ephy_config(eth_phy_state_t *phy, char *cfg)
 
 int ephy_init(eth_phy_state_t *phy, char *conf, link_state_cb_t cb, void *cb_arg)
 {
-	u32 phyid;
+	uint32_t phyid;
 	int err;
 
 	memset(phy, 0, sizeof(*phy));

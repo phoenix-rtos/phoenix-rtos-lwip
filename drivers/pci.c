@@ -17,9 +17,9 @@ int pci_parseDevnum(const char *s)
 }
 
 
-void pci_setBusMaster(u16 devnum, int enable)
+void pci_setBusMaster(uint16_t devnum, int enable)
 {
-	u32 cmds;
+	uint32_t cmds;
 
 	cmds = pci_configRead(devnum, 0x04);
 	cmds |= 0x04;
@@ -27,11 +27,11 @@ void pci_setBusMaster(u16 devnum, int enable)
 }
 
 
-volatile void *pci_mapMemBAR(u16 devnum, int bar)
+volatile void *pci_mapMemBAR(uint16_t devnum, int bar)
 {
 	volatile void *p;
-	u32 sz, pa;
-	u64 v;
+	uint32_t sz, pa;
+	uint64_t v;
 
 	v = pci_configReadBAR(devnum, bar);
 	sz = v >> 32;

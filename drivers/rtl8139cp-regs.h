@@ -15,31 +15,31 @@
 
 
 typedef struct {
-	u32 l, h;
+	uint32_t l, h;
 } u64_split;
 
 
 struct rtl_regs {
 	/* 0x00 */
-	u32		IDR[2];		// node ID (MAC address)
-	u32		MAR[2];		// multicast filter
+	uint32_t		IDR[2];		// node ID (MAC address)
+	uint32_t		MAR[2];		// multicast filter
 	/* 0x10 */
 	u64_split	DTCCR;		// stats dump command
-	const u32	rsvd1[2];
+	const uint32_t	rsvd1[2];
 	/* 0x20 */
 	u64_split	TNPDS;		// tx desc table (normal) addr
 	u64_split	THPDS;		// tx desc table (prio) addr
 	/* 0x30 */
-	const u32	rsvd2;
-	const u16	ERBCR;
-	const u8	ERSR;
-	u8		CR;
+	const uint32_t	rsvd2;
+	const uint16_t	ERBCR;
+	const uint8_t	ERSR;
+	uint8_t		CR;
 #define RTL_CMD_RESET		0x10
 #define RTL_CMD_RX_ENABLE	0x08
 #define RTL_CMD_TX_ENABLE	0x04
 #define RTL_CMD_RX_EMPTY	0x01
-	const u16	rsvd3[2];
-	u16		IMR, ISR;	// interrupt mask and status
+	const uint16_t	rsvd3[2];
+	uint16_t		IMR, ISR;	// interrupt mask and status
 #define RTL_INT_ROK		0x0001
 #define RTL_INT_TOK		0x0004
 #define RTL_INT_RX_MISS		0x0010
@@ -52,13 +52,13 @@ struct rtl_regs {
 #define RTL_INT_RX		(RTL_INT_ROK | RTL_INT_RX_MISS)
 #define RTL_INT_TX		(RTL_INT_TOK | RTL_INT_TX_EMPTY | RTL_INT_TX_POLL)
 	/* 0x40 */
-	u32		TCR;		// tx config
+	uint32_t		TCR;		// tx config
 #define RTL_HW_VERID			0x7c800000
 #define RTL_TX_LOOPBACK			0x00060000
 #define RTL_TX_INHIBIT_FCS		0x00010000
 #define RTL_TX_DMA_BURST		0x00000700	// log2(burst / 16) [0..7]
 #define RTL_TX_DMA_BURST_SHIFT		8
-	u32		RCR;		// rx config
+	uint32_t		RCR;		// rx config
 #define RTL_RX_DMA_BURST		0x00000700	// log2(burst / 16) [2..4]
 #define RTL_RX_DMA_BURST_SHIFT		8
 #define RTL_RX_FTH			0x0000E000
@@ -66,75 +66,75 @@ struct rtl_regs {
 #define RTL_RX_MCAST			0x00000004
 #define RTL_RX_UCAST			0x00000002
 #define RTL_RX_UCAST_ALL		0x00000001
-	u32		TCTR;		// gp-timer
-	u32		MPC;		// packets missed counter
+	uint32_t		TCTR;		// gp-timer
+	uint32_t		MPC;		// packets missed counter
 #define RTL_MPC_MASK 		0xFFFFFFa
 	/* 0x50 */
-	u8		EECR;		// EEPROM (93C46/93C56) command register
-	u8		CONFIG0;
-	u8		CONFIG1;
-	const u8	rsvd4;
-	u32		TIMERINT;	// timer interrupt enable
-	u8		MSR;		// media status
-	u8		CONFIG3;
-	u8		CONFIG4;
-	const u8	rsvd5;
-	u16		MULINT;		// multiple-packet interrupt config (FIXME)
-	const u8	RERID;		// PCI revision ID
-	const u8	rsvd6;
+	uint8_t		EECR;		// EEPROM (93C46/93C56) command register
+	uint8_t		CONFIG0;
+	uint8_t		CONFIG1;
+	const uint8_t	rsvd4;
+	uint32_t		TIMERINT;	// timer interrupt enable
+	uint8_t		MSR;		// media status
+	uint8_t		CONFIG3;
+	uint8_t		CONFIG4;
+	const uint8_t	rsvd5;
+	uint16_t		MULINT;		// multiple-packet interrupt config (FIXME)
+	const uint8_t	RERID;		// PCI revision ID
+	const uint8_t	rsvd6;
 	/* 0x60 */
-	const u16	rsvd7;
-	u16		BMCR;
-	const u16	BMSR;
-	u16		ANAR;
-	const u16	ANLPAR;
-	const u16	ANER;
-	const u16	DIS;		// disconnect counter
-	const u16	FCSC;		// false carrier sense counter
+	const uint16_t	rsvd7;
+	uint16_t		BMCR;
+	const uint16_t	BMSR;
+	uint16_t		ANAR;
+	const uint16_t	ANLPAR;
+	const uint16_t	ANER;
+	const uint16_t	DIS;		// disconnect counter
+	const uint16_t	FCSC;		// false carrier sense counter
 	/* 0x70 */
-	u16		NWAYTR;		// N-way test
-	const u16	REC;		// RX counter
-	u16		CSCR;		// CS config
-	const u16 	rsvd8;
-	u32		PHY1_PARM;	// PHY param 1
-	u32		TW_PARM;	// Twister param
+	uint16_t		NWAYTR;		// N-way test
+	const uint16_t	REC;		// RX counter
+	uint16_t		CSCR;		// CS config
+	const uint16_t 	rsvd8;
+	uint32_t		PHY1_PARM;	// PHY param 1
+	uint32_t		TW_PARM;	// Twister param
 	/* 0x80 */
-	u8		PHY2_PARM;	// PHY param 2
-	const u8 	rsvd9;
-	const u16 	TDOKLADDR;	// tx done addr
-	u8 		WAKE_CRC[8];	// CRCs for wakeup frames
+	uint8_t		PHY2_PARM;	// PHY param 2
+	const uint8_t 	rsvd9;
+	const uint16_t 	TDOKLADDR;	// tx done addr
+	uint8_t 		WAKE_CRC[8];	// CRCs for wakeup frames
 	/* 0x8C */
 	u64_split 	WAKE_FRAME[8];	// wakeup frame byte masks
 	/* 0xCC */
-	u8		WAKE_LCRC[8];	// MSBs of CRC-16 / last masked byte value for wakeup frames
-	u32		FLASH;		// flash memory access
-	u8		CONFIG5;
-	u8		TPPOLL;		// TX trigger
+	uint8_t		WAKE_LCRC[8];	// MSBs of CRC-16 / last masked byte value for wakeup frames
+	uint32_t		FLASH;		// flash memory access
+	uint8_t		CONFIG5;
+	uint8_t		TPPOLL;		// TX trigger
 #define RTL_POLL_HPQ		0x80
 #define RTL_POLL_NPQ		0x40
 #define RTL_POLL_FSWINT		0x01
-	const u16	rsvd10[3];
+	const uint16_t	rsvd10[3];
 	/* 0xE0 */
-	u16		CPCR;		// C+ mode
+	uint16_t		CPCR;		// C+ mode
 #define RTL_CMD_RX_VLAN		0x0040
 #define RTL_CMD_RX_CSUM		0x0020
 #define RTL_CMD_PCI_DAC		0x0010
 #define RTL_CMD_PCI_MULRW	0x0008
 #define RTL_CMD_RX_MODE_CP	0x0002
 #define RTL_CMD_TX_MODE_CP	0x0001
-	const u16	rsvd11;
+	const uint16_t	rsvd11;
 	u64_split	RDSAR;		// rx desc table addr
-	u8		ETTHR;		// early tx threshold
-	u8		rsvd12[3];
+	uint8_t		ETTHR;		// early tx threshold
+	uint8_t		rsvd12[3];
 	/* 0xF0 */
-	const u32	rsvd13[4];	// CardBus specific
+	const uint32_t	rsvd13[4];	// CardBus specific
 };
 
 
 typedef struct
 {
-	u32 cmd;
-	u32 offload;
+	uint32_t cmd;
+	uint32_t offload;
 	u64_split addr;
 } rtl_buf_desc_t;
 

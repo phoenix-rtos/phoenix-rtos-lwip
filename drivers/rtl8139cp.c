@@ -27,6 +27,7 @@
 
 
 #include <errno.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdarg.h>
@@ -52,9 +53,9 @@ typedef struct
 
 	net_bufdesc_ring_t rx, tx, txp;
 
-	u16 devnum;
+	uint16_t devnum;
 
-	u32 rx_stack[2048], tx_stack[2048], irq_stack[256];
+	uint32_t rx_stack[2048], tx_stack[2048], irq_stack[256];
 } rtl_priv_t;
 
 
@@ -89,7 +90,7 @@ static void rtl_chipReset(rtl_priv_t *state)
 
 static void rtl_readCardMac(rtl_priv_t *state)
 {
-	u32 buf[2];
+	uint32_t buf[2];
 
 	// XX: cpu_to_le(), need dword access
 	buf[0] = state->mmio->IDR[0];
@@ -101,8 +102,8 @@ static void rtl_readCardMac(rtl_priv_t *state)
 
 static void rtl_showCardId(rtl_priv_t *state)
 {
-	u32 tc, rc;
-	u8 *mac;
+	uint32_t tc, rc;
+	uint8_t *mac;
 
 	tc = state->mmio->TCR;
 	rc = state->mmio->RCR;
@@ -119,7 +120,7 @@ static void rtl_showCardId(rtl_priv_t *state)
 static size_t rtl_nextRxBufferSize(const net_bufdesc_ring_t *ring, size_t i)
 {
 	volatile rtl_buf_desc_t *r = ring->ring;
-	u32 cmd = r[i].cmd;
+	uint32_t cmd = r[i].cmd;
 
 	if (cmd & RTL_DESC_OWN)
 		return 0;
@@ -140,7 +141,7 @@ static int rtl_pktRxFinished(const net_bufdesc_ring_t *ring, size_t i)
 static void rtl_fillDesc(const net_bufdesc_ring_t *ring, size_t i, addr_t pa, size_t sz, unsigned seg)
 {
 	volatile rtl_buf_desc_t *r = ring->ring;
-	u32 cmd = sz;
+	uint32_t cmd = sz;
 
 	if (seg & BDRING_SEG_FIRST)
 		cmd |= RTL_DESC_FS;
@@ -291,9 +292,9 @@ static void rtl_tx_irq_thread(void *arg)
 }
 
 
-static int rtl_initDevice(rtl_priv_t *state, u16 devnum, int irq)
+static int rtl_initDevice(rtl_priv_t *state, uint16_t devnum, int irq)
 {
-	u32 crev;
+	uint32_t crev;
 	int err;
 
 	state->devnum = devnum;
