@@ -14,6 +14,7 @@
 #include "gpio.h"
 
 #include <sys/types.h>
+#include <stdint.h>
 
 typedef void (*link_state_cb_t)(void* arg, int state);
 
@@ -27,7 +28,7 @@ typedef struct {
 	link_state_cb_t link_state_callback;
 	void *link_state_callback_arg;
 
-	u32 th_stack[512] __attribute__((aligned(16)));
+	uint32_t th_stack[512] __attribute__((aligned(16)));
 } eth_phy_state_t;
 
 

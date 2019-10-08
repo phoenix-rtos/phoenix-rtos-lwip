@@ -21,6 +21,7 @@
 
 #include <errno.h>
 #include <poll.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/file.h>
@@ -40,7 +41,7 @@
 
 
 struct sock_start {
-	u32 port;
+	uint32_t port;
 	int sock;
 };
 
@@ -51,7 +52,7 @@ struct poll_state {
 };
 
 
-static int wrap_socket(u32 *port, int sock, int flags);
+static int wrap_socket(uint32_t *port, int sock, int flags);
 
 
 static ssize_t map_errno(ssize_t ret)
@@ -485,7 +486,7 @@ static int socket_op(msg_t *msg, int sock)
 	const sockport_msg_t *smi = (const void *)msg->i.raw;
 	sockport_resp_t *smo = (void *)msg->o.raw;
 	struct poll_state polls = {0};
-	u32 new_port;
+	uint32_t new_port;
 	socklen_t salen;
 	int err;
 
@@ -588,7 +589,7 @@ static void socket_thread(void *arg)
 {
 	struct sock_start *ss = arg;
 	unsigned respid;
-	u32 port = ss->port;
+	uint32_t port = ss->port;
 	int sock = ss->sock, err;
 	msg_t msg;
 
@@ -607,7 +608,7 @@ static void socket_thread(void *arg)
 }
 
 
-static int wrap_socket(u32 *port, int sock, int flags)
+static int wrap_socket(uint32_t *port, int sock, int flags)
 {
 	struct sock_start *ss;
 	int err;
@@ -742,7 +743,7 @@ static void socketsrv_thread(void *arg)
 	char *node, *serv;
 	size_t sz;
 	msg_t msg;
-	u32 port;
+	uint32_t port;
 	int err, sock;
 
 	port = (unsigned)arg;

@@ -5,11 +5,11 @@
 
 
 typedef struct {
-	u16 devnum;
-	u16 flags;
-	u32 device_id;
-	u32 subsystem_id;
-	u32 class_rev;
+	uint16_t devnum;
+	uint16_t flags;
+	uint32_t device_id;
+	uint32_t subsystem_id;
+	uint32_t class_rev;
 } pci_device_t;
 
 /* flags */
@@ -20,7 +20,7 @@ typedef struct {
 #define	PCIDEV_MULTIFN		0x8000
 
 
-static inline u16 pci_makeDevNum(u8 bus, u8 dev, u8 fn)
+static inline uint16_t pci_makeDevNum(uint8_t bus, uint8_t dev, uint8_t fn)
 {
 	return (bus << 8) | ((dev & 0x1F) << 3) | (fn & 7);
 }
@@ -33,18 +33,18 @@ static inline u16 pci_makeDevNum(u8 bus, u8 dev, u8 fn)
 int pci_parseDevnum(const char *str);
 
 
-u32 pci_configRead(u16 devnum, u16 addr);
-u64 pci_configReadBAR(u16 devnum, int bar);
-void pci_configWrite(u16 devnum, u16 addr, u32 value);
+uint32_t pci_configRead(uint16_t devnum, uint16_t addr);
+uint64_t pci_configReadBAR(uint16_t devnum, int bar);
+void pci_configWrite(uint16_t devnum, uint16_t addr, uint32_t value);
 
 
-volatile void *pci_mapMemBAR(u16 devnum, int bar);
-void pci_setBusMaster(u16 devnum, int enable);
+volatile void *pci_mapMemBAR(uint16_t devnum, int bar);
+void pci_setBusMaster(uint16_t devnum, int enable);
 
 
 /* driver main() */
 
-typedef int (*init_device_f)(u16 devnum, int irq);
+typedef int (*init_device_f)(uint16_t devnum, int irq);
 typedef int (*poll_device_f)(void);
 int pci_driver(int argc, char **argv, init_device_f init, poll_device_f poll);
 

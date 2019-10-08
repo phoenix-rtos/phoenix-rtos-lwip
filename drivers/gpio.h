@@ -11,8 +11,8 @@
 #ifndef NET_GPIO_H_
 #define NET_GPIO_H_
 
+#include <sys/types.h>
 #include <stdint.h>
-
 
 enum {
 	GPIO_INVERTED = 1 << 0,

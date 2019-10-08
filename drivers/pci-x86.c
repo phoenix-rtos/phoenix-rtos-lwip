@@ -9,23 +9,23 @@
 #define IO_PCICONF_DATA (void *)0xCFC
 
 
-static inline u32 pci_configSelector(u16 devnum, u16 addr)
+static inline uint32_t pci_configSelector(uint16_t devnum, uint16_t addr)
 {
 	return 0x80000000 | ((addr & 0xF00) << 16) | (devnum << 8) | (addr & 0xFC);
 }
 
 
-u32 pci_configRead(u16 devnum, u16 addr)
+uint32_t pci_configRead(uint16_t devnum, uint16_t addr)
 {
 	outl(IO_PCICONF_ADDRESS, pci_configSelector(devnum, addr));
 	return inl(IO_PCICONF_DATA);
 }
 
 
-u64 pci_configReadBAR(u16 devnum, int bar)
+uint64_t pci_configReadBAR(uint16_t devnum, int bar)
 {
-	u32 addr, sz, cfg = pci_configSelector(devnum, 0x10 + bar * 4);
-	u32 io = (u32)IO_PCICONF_ADDRESS;
+	uint32_t addr, sz, cfg = pci_configSelector(devnum, 0x10 + bar * 4);
+	uint32_t io = (uint32_t)IO_PCICONF_ADDRESS;
 
 	asm volatile (
 		"cli;"
@@ -45,11 +45,11 @@ u64 pci_configReadBAR(u16 devnum, int bar)
 	: "memory");
 
 	sz = ~sz | (sz & 1 ? 0x3 : 0xf);
-	return ~sz ? ((u64)sz << 32) | addr : 0;
+	return ~sz ? ((uint64_t)sz << 32) | addr : 0;
 }
 
 
-void pci_configWrite(u16 devnum, u16 addr, u32 value)
+void pci_configWrite(uint16_t devnum, uint16_t addr, uint32_t value)
 {
 	outl(IO_PCICONF_ADDRESS, pci_configSelector(devnum, addr));
 	outl(IO_PCICONF_DATA, value);

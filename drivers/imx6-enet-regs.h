@@ -19,15 +19,15 @@
 // all register accesses are required to be U32
 
 typedef struct {
-	u32 S, C;	// 1588 control/status + compare capture
+	uint32_t S, C;	// 1588 control/status + compare capture
 } timer_control_t;
 
-#define R_RESERVED(b, e) u32 rsvd_##b##_##e[(e - b)/4]
+#define R_RESERVED(b, e) uint32_t rsvd_##b##_##e[(e - b)/4]
 #define BIT(i) (1u << (i))
 
 struct enet_regs {
 	R_RESERVED(0x000, 0x004);
-	u32		EIR, EIMR;	// irq event, irq mask
+	uint32_t		EIR, EIMR;	// irq event, irq mask
 #define ENET_IRQ_BABR		BIT(30)		// babbling receive error
 #define ENET_IRQ_BABT		BIT(29)		// babbling transmit error
 #define ENET_IRQ_GRA		BIT(28)		// graceful stop complete (tx)
@@ -45,9 +45,9 @@ struct enet_regs {
 #define ENET_IRQ_TS_AVAIL	BIT(16)		// ATSTMP valid after transmit
 #define ENET_IRQ_TS_TIMER	BIT(15)		// timer wrapped
 	R_RESERVED(0x00C, 0x010);
-	u32		RDAR, TDAR;	// RX/TX new desc trigger command
+	uint32_t		RDAR, TDAR;	// RX/TX new desc trigger command
 	R_RESERVED(0x018, 0x024);
-	u32		ECR;		// ethernet control	[desc format, endiannes, reset, ...]
+	uint32_t		ECR;		// ethernet control	[desc format, endiannes, reset, ...]
 #define	ENET_ECR_REG_MAGIC	0x70000000
 #define	ENET_ECR_DBSWP		BIT(8)
 #define	ENET_ECR_DBGEN		BIT(6)
@@ -57,16 +57,16 @@ struct enet_regs {
 #define	ENET_ECR_ETHEREN	BIT(1)
 #define	ENET_ECR_RESET		BIT(0)
 	R_RESERVED(0x028, 0x040);
-	u32		MMFR, MSCR;	// MII control
+	uint32_t		MMFR, MSCR;	// MII control
 #define ENET_MSCR_HOLDTIME_SHIFT	8
 #define ENET_MSCR_HOLDTIME_MASK		0x700
 #define ENET_MSCR_DIS_PRE		BIT(7)
 #define ENET_MSCR_SPEED_SHIFT		1
 #define ENET_MSCR_SPEED_MASK		0x7E
 	R_RESERVED(0x048, 0x064);
-	u32		MIBC;		// MIB control
+	uint32_t		MIBC;		// MIB control
 	R_RESERVED(0x068, 0x084);
-	u32		RCR;		// RX control
+	uint32_t		RCR;		// RX control
 #define	ENET_RCR_GRS		BIT(31)		// [ro] RX stopped
 #define	ENET_RCR_NLC		BIT(30)		// payloach check enable
 #define	ENET_RCR_MAX_FL_SHIFT	16
@@ -84,7 +84,7 @@ struct enet_regs {
 #define	ENET_RCR_DRT		BIT(1)		// half-duplex mode
 #define	ENET_RCR_LOOP		BIT(0)		// MII loopback mode (requires: MII_MODE=1, RMII_MODE=0, DRT=0, clocks for MII provided)
 	R_RESERVED(0x088, 0x0C4);
-	u32		TCR;		// TX control
+	uint32_t		TCR;		// TX control
 #define	ENET_TCR_CRCFWD		BIT(9)		// don't ever append FCS to transmitted frame data
 #define	ENET_TCR_ADDINS		BIT(8)		// overwrite SA with node's address (set in PALR+PAUR)
 #define	ENET_TCR_RFC_PAUSE	BIT(4)		// (ro) TX is being held after PAUSE frame received
@@ -92,51 +92,51 @@ struct enet_regs {
 #define	ENET_TCR_FDEN		BIT(2)		// full-duplex mode (== ignore CS and COL on transmit)
 #define	ENET_TCR_GTS		BIT(0)		// stop transmit (after current frame transmission ends)
 	R_RESERVED(0x0C8, 0x0E4);
-	u32		PALR, PAUR;	// MAC address
-	u32		OPD;		// pause duration (for TXed pauses)
-	u32		TXIC;		// TX irq coalescing
+	uint32_t		PALR, PAUR;	// MAC address
+	uint32_t		OPD;		// pause duration (for TXed pauses)
+	uint32_t		TXIC;		// TX irq coalescing
 	R_RESERVED(0x0F4, 0x100);
-	u32		RXIC;		// RX irq coalescing
+	uint32_t		RXIC;		// RX irq coalescing
 	R_RESERVED(0x104, 0x118);
-	u32		IAUR, IALR;	// unicast MAC hash-filter	[6 MSB from CRC-32]
-	u32		GAUR, GALR;	// multicast MAC hash-filter
+	uint32_t		IAUR, IALR;	// unicast MAC hash-filter	[6 MSB from CRC-32]
+	uint32_t		GAUR, GALR;	// multicast MAC hash-filter
 	R_RESERVED(0x128, 0x144);
-	u32		TFWR;		// TX FIFO control (cut-through vs store-and-forward on TX)
+	uint32_t		TFWR;		// TX FIFO control (cut-through vs store-and-forward on TX)
 	R_RESERVED(0x148, 0x180);
-	u32		RDSR;		// RX descriptor ring address [64-bit aligned; preferred: cacheline(64B)-aligned]
-	u32		TDSR;		// TX descriptor ring address [as above]
-	u32		MRBR;		// RX max buffer size [always includes FCS; 14-bit, 16B-aligned]
+	uint32_t		RDSR;		// RX descriptor ring address [64-bit aligned; preferred: cacheline(64B)-aligned]
+	uint32_t		TDSR;		// TX descriptor ring address [as above]
+	uint32_t		MRBR;		// RX max buffer size [always includes FCS; 14-bit, 16B-aligned]
 	R_RESERVED(0x18C, 0x190);
-	u32		RSFL, RSEM;	// RX FIFO control (cut-through vs store-and-forward on RX)
-	u32		RAEM, RAFL;
-	u32		TSEM, TAEM;	// TX FIFO control (cut-through vs store-and-forward on TX)
-	u32		TAFL;
-	u32		TIPG;		// TX inter-packet-gap (in bytes; valid: 8-26, def: 12)
-	u32		FTRL;		// RX frame truncation length (14-bit, def: 2kB-1)
+	uint32_t		RSFL, RSEM;	// RX FIFO control (cut-through vs store-and-forward on RX)
+	uint32_t		RAEM, RAFL;
+	uint32_t		TSEM, TAEM;	// TX FIFO control (cut-through vs store-and-forward on TX)
+	uint32_t		TAFL;
+	uint32_t		TIPG;		// TX inter-packet-gap (in bytes; valid: 8-26, def: 12)
+	uint32_t		FTRL;		// RX frame truncation length (14-bit, def: 2kB-1)
 	R_RESERVED(0x1B4, 0x1C0);
-	u32		TACC;		// TX accel control [don't change during transfers to TX FIFO -> TX quiescent / paused]
+	uint32_t		TACC;		// TX accel control [don't change during transfers to TX FIFO -> TX quiescent / paused]
 #define ENET_TACC_PROCHK	BIT(4)		// global force?
 #define ENET_TACC_IPCHK		BIT(3)		// global force?
 #define ENET_TACC_SHIFT16	BIT(0)		// skip 2-byte padding before ethernet header
-	u32		RACC;		// RX accel control
+	uint32_t		RACC;		// RX accel control
 #define ENET_RACC_SHIFT16	BIT(7)		// add 2-byte padding before ethernet header
 #define ENET_RACC_LINEDIS	BIT(6)		// discard errnoneous frames
 #define ENET_RACC_PRODIS	BIT(2)		// discard frames with TCP/UDP/ICMP checksum error
 #define ENET_RACC_IPDIS		BIT(1)		// discard frames with IPv4 checksum error
 #define ENET_RACC_PADREM	BIT(0)		// remove ethernet payload padding from short IP frames
 	R_RESERVED(0x1C8, 0x200);
-	u32		stats[64];	// various stats counters (32-bit each)
+	uint32_t		stats[64];	// various stats counters (32-bit each)
 #define ENET_VALID_COUTERS	0x01FFFFFE1FFFFFFFull
 	R_RESERVED(0x300, 0x400);
-	u32		ATCR;		// timer command
-	u32		ATVR;		// timer value
-	u32		ATOFF;		// timer limit (wrap / on-shot event)
-	u32		ATPER;		// timer period
-	u32		ATCOR;		// timer correction clocks (additional increment every this ts_clk cycles)
-	u32		ATINC;		// timer increment (base increment value per ts_clk, correction increment value)
-	u32		ATSTMP;		// last TX timestamp (for last frame with TxBD[TS] set)
+	uint32_t		ATCR;		// timer command
+	uint32_t		ATVR;		// timer value
+	uint32_t		ATOFF;		// timer limit (wrap / on-shot event)
+	uint32_t		ATPER;		// timer period
+	uint32_t		ATCOR;		// timer correction clocks (additional increment every this ts_clk cycles)
+	uint32_t		ATINC;		// timer increment (base increment value per ts_clk, correction increment value)
+	uint32_t		ATSTMP;		// last TX timestamp (for last frame with TxBD[TS] set)
 	R_RESERVED(0x41C, 0x604);
-	u32		TGSR;		// timer flags (channel 0-3)
+	uint32_t		TGSR;		// timer flags (channel 0-3)
 	timer_control_t	TC_R[4];	// timer flags (channel 0-3)
 	R_RESERVED(0x628, 0x800);
 };
@@ -147,22 +147,22 @@ struct enet_regs {
 // XXX: clear reserved/unused descriptor fields
 typedef struct
 {
-	u16 len;	// for last frag = whole frame size? (TBV)
-	u16 flags;
-	u32 addr;	// 64B-aligned buffer [size = TRUNC_FL ?]
+	uint16_t len;	// for last frag = whole frame size? (TBV)
+	uint16_t flags;
+	uint32_t addr;	// 64B-aligned buffer [size = TRUNC_FL ?]
 } enet_short_desc_t;
 
 typedef struct
 {
 	// first 3 same as enet_short_desc_t
-	u16 len, flags;
-	u32 addr;
-	u16 xflags, yflags;
-	u16 csum, proto;	// csum: IP payload (iow excluding IP header)
-	u16 rsvd1, dflags;
-	u32 timestamp;
-	u32 rsvd2;
-	u32 rsvd3;
+	uint16_t len, flags;
+	uint32_t addr;
+	uint16_t xflags, yflags;
+	uint16_t csum, proto;	// csum: IP payload (iow excluding IP header)
+	uint16_t rsvd1, dflags;
+	uint32_t timestamp;
+	uint32_t rsvd2;
+	uint32_t rsvd3;
 } enet_long_desc_t;
 
 
