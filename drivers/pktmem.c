@@ -152,6 +152,8 @@ struct pbuf *net_allocDMAPbuf(addr_t *pa, size_t sz)
 	if (!bsz)
 		return NULL;
 
+	memset(data, 0, bsz);
+
 	*pa = mphys(data, &bsz);
 
 	if (bsz < sz)

@@ -6,11 +6,11 @@
 # Copyright 2019 Phoenix Systems
 #
 
-CROSS ?= i386-phoenix-
+CROSS ?= i386-pc-phoenix-
 
 CC = $(CROSS)gcc
 
-CFLAGS += -Os -Wall -Wstrict-prototypes -g -march=i586
+CFLAGS += -O0 -ggdb -Wall -Wstrict-prototypes -g -march=i686
 CFLAGS += -fdata-sections -ffunction-sections
 
 AR = $(CROSS)ar

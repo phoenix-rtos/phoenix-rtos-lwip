@@ -16,7 +16,6 @@
 #include <sys/msg.h>
 #include <posix/utils.h>
 
-#include<lwip/sockets.h>
 #include<lwip/inet.h>
 
 #include <stdio.h>
@@ -119,9 +118,14 @@ static void mainLoop(void)
 	msg_t msg = {0};
 	unsigned int rid;
 	unsigned port;
+	int error;
 	oid_t route_oid = {0, 0};
 	oid_t status_oid = {0, 1};
 	oid_t pf_oid = {0, 2};
+
+	for (;;) {
+		sleep(5);
+	}
 
 	if (portCreate(&port) < 0) {
 		printf("phoenix-rtos-lwip: can't create port\n");
@@ -132,6 +136,7 @@ static void mainLoop(void)
 	status_oid.port = port;
 	pf_oid.port = port;
 
+#if 0
 	if (create_dev(&route_oid, "/dev/route") < 0) {
 		printf("phoenix-rtos-lwip: can't create /dev/route\n");
 		return;
@@ -146,6 +151,7 @@ static void mainLoop(void)
 		printf("phoenix-rtos-lwip: can't create /dev/pf\n");
 		return;
 	}
+#endif
 
 	for (;;) {
 		if (msgRecv(port, &msg, &rid) < 0)
@@ -153,27 +159,32 @@ static void mainLoop(void)
 
 		switch (msg.type) {
 		case mtRead:
-				if (msg.i.io.oid.id == route_oid.id)
-					msg.o.io.err = writeRoutes(msg.o.data, msg.o.size, msg.i.io.offs);
-				else if (msg.i.io.oid.id == status_oid.id)
-					msg.o.io.err = writeStatus(msg.o.data, msg.o.size, msg.i.io.offs);
+				if (msg.object == route_oid.id)
+					error = writeRoutes(msg.o.data, msg.o.size, msg.i.io.offs);
+				else if (msg.object == status_oid.id)
+					error = writeStatus(msg.o.data, msg.o.size, msg.i.io.offs);
 				else
-					msg.o.io.err = -EINVAL;
+					error = -EINVAL;
 			break;
 
 		case mtWrite:
-				if (msg.i.io.oid.id == pf_oid.id)
-					msg.o.io.err = readPf(msg.i.data, msg.i.size, msg.i.io.offs);
+				if (msg.object == pf_oid.id)
+					error = readPf(msg.i.data, msg.i.size, msg.i.io.offs);
 				else
-					msg.o.io.err = -EINVAL;
-				msg.o.io.err = EOK;
+					error = -EINVAL;
+				error = EOK;
 			break;
 
 		default:
 			break;
 		}
 
-		msgRespond(port, &msg, rid);
+		if (error >= 0) {
+			msg.o.io = error;
+			error = EOK;
+		}
+
+		msgRespond(port, error, &msg, rid);
 	}
 }
 
@@ -190,9 +201,14 @@ int main(int argc, char **argv)
 	void register_driver_pppos(void);
 	void register_driver_tun(void);
 	void register_driver_tap(void);
+	if (fork())
+		_exit(EXIT_SUCCESS);
+
+	printf("lwip: initialized\n");
 
 	init_lwip_tcpip();
 	init_lwip_sockets();
+
 #ifdef HAVE_DRIVER_rtl
 	register_driver_rtl();
 #endif
@@ -223,7 +239,7 @@ int main(int argc, char **argv)
 			printf("phoenix-rtos-lwip: can't init netif from cfg \"%s\": %s\n", *argv, strerror(err));
 	}
 
-	/* printf("netsrv: %zu interface%s\n", have_intfs, have_intfs == 1 ? "" : "s"); */
+	printf("netsrv: %zu interface%s\n", have_intfs, have_intfs == 1 ? "" : "s");
 	if (!have_intfs)
 		exit(1);
 

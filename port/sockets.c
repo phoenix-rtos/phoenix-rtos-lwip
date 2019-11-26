@@ -1,158 +1,408 @@
 /*
  * Phoenix-RTOS --- LwIP port
  *
- * LwIP OS mode layer - BSD sockets server
+ * LwIP network stack OS interface
  *
- * Copyright 2018 Phoenix Systems
- * Author: Michał Mirosław
+ * Copyright 2018, 2019 Phoenix Systems
+ * Author: Jan Sikorski, Michal Miroslaw
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#define ifreq lwip_ifreq
-#include <lwip/netdb.h>
-#include <lwip/sockets.h>
-#include <lwip/sys.h>
-#include <lwip/netif.h>
-#include <lwip/netifapi.h>
-#include <lwip/dhcp.h>
-#include <lwip/prot/dhcp.h>
-#undef ifreq
-
 #include <errno.h>
 #include <poll.h>
 #include <stdlib.h>
+#include <fcntl.h>
 #include <string.h>
-#include <sys/file.h>
-#include <sys/sockport.h>
-#include <sys/sockios.h>
-#include <net/if.h>
-#include <net/route.h>
+#include <sys/stat.h>
 #include <net/if_arp.h>
-#include <sys/threads.h>
-#include <posix/utils.h>
+#include <netinet/in.h>
+#include <netdb.h>
+#include <lwip/tcpip.h>
+#include <lwip/tcp.h>
 
 #include "netif.h"
-#include "route.h"
 
-#define SOCKTHREAD_PRIO 4
-#define SOCKTHREAD_STACKSZ (4 * SIZE_PAGE)
-
-
-struct sock_start {
-	u32 port;
-	int sock;
-};
+#define LOG_INFO(fmt, ...) printf("%s:%d  %s(): " fmt "\n", __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__)
+#define LOG_ERROR(fmt, ...) printf("%s:%d  %s(): " fmt "\n", __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__)
 
 
-struct poll_state {
-	int socket;
-	fd_set rd, wr, ex;
-};
+#define MAX_SOCKETS 4096
+#define SOCKET_INDEX(id) ((id) & (MAX_SOCKETS - 1))
+
+enum { socket_tcp, socket_udp };
+
+typedef struct {
+	id_t id;
+	int refs;
+	u16_t inoffs;
+	struct pbuf *inbufs;
+	char type;
+
+	int backlog;
+	void **connections;
+
+	union {
+		struct tcp_pcb *tpcb;
+	};
+} socket_t;
 
 
-static int wrap_socket(u32 *port, int sock, int flags);
+static struct {
+	int portfd;
+
+	socket_t *sockets[MAX_SOCKETS];
+	uint64_t stack[2048];
+} socket_common;
 
 
-static ssize_t map_errno(ssize_t ret)
+static socket_t *socket_get(id_t id)
 {
-	return ret < 0 ? -errno : ret;
+	int index = SOCKET_INDEX(id);
+	socket_t *socket;
+
+	if (index < MAX_SOCKETS && (socket = socket_common.sockets[index]) != NULL && socket->id == id)
+		return socket;
+
+	return NULL;
 }
 
 
-// oh crap, there is no lwip_poll() ...
-static int poll_one(struct poll_state *p, int events, time_t timeout)
+static int do_getnameinfo(const struct sockaddr *sa, socklen_t addrlen, char *host, socklen_t hostsz, char *serv, socklen_t servsz, int flags)
 {
-	struct timeval to;
-	int err;
+	// TODO: implement real netdb (for now always return the IP representation)
+	if (sa == NULL)
+		return EAI_FAIL;
 
-	if (events & POLLIN)
-		FD_SET(p->socket, &p->rd);
-	else
-		FD_CLR(p->socket, &p->rd);
-	if (events & POLLOUT)
-		FD_SET(p->socket, &p->wr);
-	else
-		FD_CLR(p->socket, &p->wr);
-	if (events & POLLPRI)
-		FD_SET(p->socket, &p->ex);
-	else
-		FD_CLR(p->socket, &p->ex);
+	if (sa->sa_family == AF_INET) {
+		struct sockaddr_in *sa_in = (struct sockaddr_in *)sa;
 
-	to.tv_sec = timeout / 1000000;
-	to.tv_usec = timeout % 1000000;
+		if (host != NULL) {
+			snprintf(host, hostsz, "%u.%u.%u.%u", (unsigned char)sa->sa_data[2], (unsigned char)sa->sa_data[3],
+				(unsigned char)sa->sa_data[4], (unsigned char)sa->sa_data[5]);
+		}
 
-	if ((err = lwip_select(p->socket + 1, &p->rd, &p->wr, &p->ex, timeout >= 0 ? &to : NULL)) <= 0)
-		return err ? -errno : 0;
+		if (serv != NULL) {
+			snprintf(serv, servsz, "%u", ntohs(sa_in->sin_port));
+		}
 
-	events = 0;
-	if (FD_ISSET(p->socket, &p->rd))
-		events |= POLLIN;
-	if (FD_ISSET(p->socket, &p->wr))
-		events |= POLLOUT;
-	if (FD_ISSET(p->socket, &p->ex))
-		events |= POLLPRI;
+		return 0;
+	}
 
-	return events;
+	return EAI_FAMILY;
 }
 
 
-static const struct sockaddr *sa_convert_lwip_to_sys(const void *sa)
+static int socket_create(id_t *id, struct tpcb *pcb)
 {
-	// hack warning
-	*(uint16_t *)sa = ((uint8_t *)sa)[1];
-	return sa;
+	LOG_INFO("entered");
+
+	int i;
+	socket_t *socket;
+
+	if ((socket = calloc(1, sizeof(*socket))) == NULL)
+		return -ENOMEM;
+
+	socket->type = socket_tcp;
+
+	if (pcb == NULL && (pcb = tcp_new()) == NULL) {
+		free(socket);
+		return -ENOMEM;
+	}
+
+	socket->tpcb = pcb;
+
+	for (i = 0; i < MAX_SOCKETS; ++i) {
+		if (socket_common.sockets[i] == NULL) {
+			socket->id = i;
+			*id = (id_t)i;
+			socket_common.sockets[i] = socket;
+			break;
+		}
+	}
+
+	if (i == MAX_SOCKETS) {
+		tcp_free(socket->tpcb);
+		free(socket);
+		return -ENOMEM;
+	}
+
+	LOG_INFO("produced %llu", *id);
+	tcp_arg(socket->tpcb, socket);
+	return EOK;
 }
 
 
-static const struct sockaddr *sa_convert_sys_to_lwip(const void *sa, socklen_t salen)
+/* Callbacks */
+
+static err_t socket_received(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
 {
-	uint16_t fam = *(volatile uint16_t *)sa;
-	struct sockaddr *lsa = (void *)sa;
+	socket_t *socket = arg;
+	LOG_INFO("entered id=%llu", socket->id);
 
-	lsa->sa_len = (uint8_t)salen;
-	lsa->sa_family = (sa_family_t)fam;
+	if (p != NULL) {
+		LOG_INFO("got data :)");
+		if (socket->inbufs == NULL)
+			socket->inbufs = p;
+		else
+			pbuf_cat(socket->inbufs, p);
+	}
+	else {
+		LOG_INFO("no data :(");
+		/* TODO: mark as closed? */
+	}
 
-	return lsa;
+	oid_t oid = { .port = 12, .id = socket->id };
+	eventRegister(&oid, POLLIN);
+	return ERR_OK;
 }
 
 
-static int socket_ioctl(int sock, unsigned long request, const void* in_data, void* out_data)
+static err_t socket_transmitted(void *arg, struct tcp_pcb *tpcb, u16_t len)
 {
+	socket_t *socket = arg;
+	LOG_INFO("entered id=%llu", socket->id);
+	return ERR_OK;
+}
 
-#if 0
-	printf("ioctl(type=0x%02x, cmd=0x%02x, size=%u, dev=%s)\n", (uint8_t)(request >> 8) & 0xFF, (uint8_t)request & 0xFF,
-			IOCPARM_LEN(request), ((struct ifreq *) out_data)->ifr_name);
-#endif
+
+static err_t socket_accepted(void *arg, struct tcp_pcb *new, err_t err)
+{
+	socket_t *socket = arg;
+	LOG_INFO("entered id=%llu", socket->id);
+	int i;
+
+	for (i = 0; i < socket->backlog; ++i) {
+		if (socket->connections[i] == NULL) {
+			socket->connections[i] = new;
+			tcp_backlog_delayed(new);
+			oid_t oid = { .port = 12, .id = socket->id };
+			eventRegister(&oid, POLLIN);
+			LOG_INFO("registered new connection :)");
+			return ERR_OK;
+		}
+	}
+
+	LOG_ERROR("rejected :(");
+	return ERR_MEM;
+}
+
+
+static void socket_error(void *arg, err_t err)
+{
+	socket_t *socket = arg;
+	LOG_ERROR("socket %d: %s", socket->id, lwip_strerr(err));
+}
+
+
+static err_t socket_connected(void *arg, struct tcp_pcb *tpcb, err_t err)
+{
+	socket_t *socket = arg;
+	LOG_INFO("entered id=%llu, err = %s", socket->id, lwip_strerr(err));
+	oid_t oid = { .port = 12, .id = socket->id };
+	tcp_recv(tpcb, socket_received);
+	tcp_sent(tpcb, socket_transmitted);
+	tcp_err(tpcb, socket_error);
+	eventRegister(&oid, POLLOUT);
+	return ERR_OK;
+}
+
+
+/* Handlers */
+
+static int socket_read(socket_t *socket, void *data, int size)
+{
+	LOG_INFO("entered id=%llu", socket->id);
+
+	int bytes = 0;
+	struct pbuf *p, *head;
+
+	if (socket->inbufs != NULL) {
+		bytes = pbuf_copy_partial(socket->inbufs, data, size, socket->inoffs);
+		p = pbuf_skip(socket->inbufs, bytes + socket->inoffs, &socket->inoffs);
+
+		while (p != (head = socket->inbufs)) {
+			socket->inbufs = pbuf_dechain(socket->inbufs);
+			pbuf_free(head);
+		}
+
+		LOG_INFO("got %d data :)", bytes);
+		tcp_recved(socket->tpcb, bytes);
+	}
+
+	return bytes;
+}
+
+
+static int socket_write(socket_t *socket, const void *data, int size)
+{
+	LOG_INFO("entered id=%llu, size: %d", socket->id, size);
+
+	err_t result;
+
+	/* TODO: no need to copy if we're not responding before data is acked! */
+ 	/* TODO: handle big writes by doing partial writes */
+	result = tcp_write(socket->tpcb, data, size, TCP_WRITE_FLAG_COPY);
+	if (result != ERR_OK) {
+		LOG_ERROR("%s (%d)\n", lwip_strerr(result), result);
+	}
+	else {
+		result = tcp_output(socket->tpcb);
+		if (result != ERR_OK)
+			LOG_ERROR("%s (%d)\n", lwip_strerr(result), result);
+	}
+
+	return -err_to_errno(result);
+}
+
+
+static int socket_close(socket_t *socket)
+{
+	LOG_INFO("entered id=%llu", socket->id);
+
+	err_t result;
+
+	result = tcp_close(socket->tpcb);
+	if (result != ERR_OK)
+		LOG_ERROR("%s (%d)\n", lwip_strerr(result), result);
+
+	return -err_to_errno(result);
+}
+
+
+static int socket_bind(socket_t *socket, struct sockaddr *address, socklen_t len)
+{
+	LOG_INFO("entered id=%llu", socket->id);
+
+	err_t result;
+	struct sockaddr_in *ain = address;
+	ip_addr_t ipaddr = IPADDR4_INIT(ain->sin_addr.s_addr);
+
+	LOG_INFO("binding to ip addr: %x port %d", ipaddr.addr, (int)ain->sin_port);
+
+	result = tcp_bind(socket->tpcb, &ipaddr, ntohs(ain->sin_port));
+	if (result != ERR_OK)
+		LOG_ERROR("%s (%d)\n", lwip_strerr(result), result);
+
+	return -err_to_errno(result);
+}
+
+
+static int socket_listen(socket_t *socket, int backlog)
+{
+	LOG_INFO("entered id=%llu", socket->id);
+
+	if ((socket->tpcb = tcp_listen_with_backlog(socket->tpcb, backlog)) == NULL) {
+		LOG_ERROR("tcp_listen_with_backlog");
+		return -ENOMEM;
+	}
+
+	if ((socket->connections = calloc(backlog, sizeof(void *))) == NULL) {
+		LOG_ERROR("calloc");
+		return -ENOMEM;
+	}
+
+	socket->backlog = backlog;
+	tcp_accept(socket->tpcb, socket_accepted);
+	return EOK;
+}
+
+
+static int socket_accept(socket_t *socket, id_t *newsock, struct sockaddr *address, socklen_t addresslen, socklen_t *length)
+{
+	LOG_INFO("entered id=%llu", socket->id);
+
+	int i, retval = -EAGAIN;
+	struct tcp_pcb *new;
+
+	if ((new = socket->connections[0]) != NULL) {
+		LOG_INFO("got connection :)");
+		if ((retval = socket_create(newsock, new)) == EOK) {
+			tcp_backlog_accepted(new);
+
+			tcp_recv(new, socket_received);
+			tcp_sent(new, socket_transmitted);
+			tcp_err(new, socket_error);
+
+			for (i = 0; i < socket->backlog - 1; ++i) {
+				if ((socket->connections[i] = socket->connections[i + 1]) == NULL)
+					break;
+			}
+		}
+	}
+
+	return retval;
+}
+
+
+static int socket_connect(socket_t *socket, struct sockaddr *address, socklen_t len)
+{
+	LOG_INFO("entered id=%llu", socket->id);
+
+	err_t result;
+	struct sockaddr_in *ain = address;
+	ip_addr_t ipaddr = IPADDR4_INIT(ain->sin_addr.s_addr);
+
+	result = tcp_connect(socket->tpcb, &ipaddr, ntohs(ain->sin_port), socket_connected);
+	if (result != ERR_OK)
+		LOG_ERROR("%s (%d)\n", lwip_strerr(result), result);
+
+	return -err_to_errno(result);
+}
+
+
+static int socket_poll(socket_t *socket, int *events)
+{
+	LOG_INFO("entered id=%llu", socket->id);
+	*events = 0;
+
+	if (socket->connections != NULL && socket->connections[0] != NULL)
+		*events |= POLLIN;
+
+	if (socket->inbufs != NULL)
+		*events |= POLLIN;
+
+	/* TODO: check if we're connected? */
+	*events |= POLLOUT;
+	return EOK;
+}
+
+
+static int socket_ioctl(socket_t *socket, long request, void *buffer, size_t size)
+{
+	int error;
+
 	switch (request) {
 	case FIONREAD:
-	case FIONBIO:
-		/* implemented in LWiP socket layer */
-		return map_errno(lwip_ioctl(sock, request, out_data));
+//	case FIONBIO: legacy way to set nonblocking mode: should we support this anyway?
+		error = -ENOSYS;
+		break;
 
 	case SIOCGIFNAME: {
-		struct ifreq *ifreq = (struct ifreq *) out_data;
+		struct ifreq *ifreq = (struct ifreq *)buffer;
 		struct netif *it;
+
+		error = -ENXIO;
 		for (it = netif_list; it != NULL; it = it->next) {
 			if (it->num == ifreq->ifr_ifindex) {
 				strncpy(ifreq->ifr_name, it->name, IFNAMSIZ);
-				return EOK;
+				error = EOK;
 			}
 		}
-
-		return -ENXIO;
+		break;
 	}
 
 	case SIOCGIFINDEX: {
-			struct ifreq *ifreq = (struct ifreq *) out_data;
-			struct netif *interface = netif_find(ifreq->ifr_name);
-			if (interface == NULL)
-				return -ENXIO;
-
-			ifreq->ifr_ifindex = interface->num;
+		struct ifreq *ifreq = (struct ifreq *) buffer;
+		struct netif *interface = netif_find(ifreq->ifr_name);
+		if (interface == NULL) {
+			error = -ENXIO;
+			break;
 		}
-
-		return EOK;
+		ifreq->ifr_ifindex = interface->num;
+		error = EOK;
+		break;
+	}
 
 	case SIOCGIFFLAGS: {
 		/*
@@ -173,16 +423,19 @@ static int socket_ioctl(int sock, unsigned long request, const void* in_data, vo
 		IFF_ECHO          Echo sent packets (since Linux 2.6.25)
 		*/
 
-		struct ifreq *ifreq = (struct ifreq *) out_data;
+		struct ifreq *ifreq = (struct ifreq *)buffer;
 		struct netif *interface = netif_find(ifreq->ifr_name);
-		if (interface == NULL)
-			return -ENXIO;
+		if (interface == NULL) {
+			error = -ENXIO;
+			break;
+		}
 
 		ifreq->ifr_flags = 0;
 		ifreq->ifr_flags |= netif_is_up(interface) ? IFF_UP : 0;
 		ifreq->ifr_flags |= netif_is_link_up(interface) ? IFF_RUNNING : 0;
 		ifreq->ifr_flags |= ip_addr_isloopback(&interface->ip_addr) ? IFF_LOOPBACK : 0;
 		ifreq->ifr_flags |= (interface->flags & NETIF_FLAG_IGMP) ? IFF_MULTICAST : 0;
+
 		if (netif_is_ppp(interface) || netif_is_tun(interface)) {
 			ifreq->ifr_flags |= IFF_POINTOPOINT;
 		} else {
@@ -193,26 +446,30 @@ static int socket_ioctl(int sock, unsigned long request, const void* in_data, vo
 		if (netif_is_dhcp(interface))
 			ifreq->ifr_flags |= IFF_DYNAMIC;
 #endif
-		return EOK;
+		error = EOK;
+		break;
 	}
+
 	case SIOCSIFFLAGS: {
-		struct ifreq *ifreq = (struct ifreq *) in_data;
+		struct ifreq *ifreq = (struct ifreq *)buffer;
 		struct netif *interface = netif_find(ifreq->ifr_name);
-		if (interface == NULL)
-			return -ENXIO;
+		if (interface == NULL) {
+			error = -ENXIO;
+			break;
+		}
 
 		// only IFF_UP flag supported
 		if ((ifreq->ifr_flags & IFF_UP) && !netif_is_up(interface)) {
 			netif_set_up(interface);
 #ifdef LWIP_DHCP
 			if (netif_is_dhcp(interface))
-				netifapi_dhcp_start(interface);
+				dhcp_start(interface);
 #endif
 		}
 		if (!(ifreq->ifr_flags & IFF_UP) && netif_is_up(interface)) {
 #ifdef LWIP_DHCP
 			if (netif_is_dhcp(interface))
-				netifapi_dhcp_release(interface);
+				dhcp_release(interface);
 #endif
 			netif_set_down(interface);
 		}
@@ -223,30 +480,34 @@ static int socket_ioctl(int sock, unsigned long request, const void* in_data, vo
 			 * any information about dynamic flag it is not possible to 'set' interface
 			 * as dynamic when it is downfc */
 			if (netif_is_up(interface) && (ifreq->ifr_flags & IFF_DYNAMIC) && !netif_is_dhcp(interface))
-				netifapi_dhcp_start(interface);
+				dhcp_start(interface);
 
 			if (!(ifreq->ifr_flags & IFF_DYNAMIC) && netif_is_dhcp(interface)) {
-				netifapi_dhcp_release(interface);
-				netifapi_dhcp_stop(interface);
+				dhcp_release(interface);
+				dhcp_stop(interface);
 			}
 		}
 #endif
-		return EOK;
+		error = EOK;
+		break;
 	}
 
 	case SIOCGIFADDR:
 	case SIOCGIFNETMASK:
 	case SIOCGIFBRDADDR:
 	case SIOCGIFDSTADDR: {
-		struct ifreq *ifreq = (struct ifreq *) out_data;
-		struct netif *interface = netif_find(ifreq->ifr_name);
-		if (interface == NULL)
-			return -ENXIO;
-
+		struct ifreq *ifreq = (struct ifreq *)buffer;
 		struct sockaddr_in *sin = NULL;
+		struct netif *interface = netif_find(ifreq->ifr_name);
+		if (interface == NULL) {
+			error = -ENXIO;
+			break;
+		}
+		error = EOK;
 		switch (request) {
 		case SIOCGIFADDR:
 			sin = (struct sockaddr_in *) &ifreq->ifr_addr;
+			sin->sin_family = AF_INET; /* FIXME */
 			sin->sin_addr.s_addr = interface->ip_addr.addr;
 			break;
 		case SIOCGIFNETMASK:
@@ -258,7 +519,7 @@ static int socket_ioctl(int sock, unsigned long request, const void* in_data, vo
 				sin = (struct sockaddr_in *) &ifreq->ifr_broadaddr;
 				sin->sin_addr.s_addr = interface->ip_addr.addr | ~(interface->netmask.addr);
 			} else {
-				return -EOPNOTSUPP;
+				error = -EOPNOTSUPP;
 			}
 			break;
 		case SIOCGIFDSTADDR:
@@ -266,25 +527,27 @@ static int socket_ioctl(int sock, unsigned long request, const void* in_data, vo
 				sin = (struct sockaddr_in *) &ifreq->ifr_dstaddr;
 				sin->sin_addr.s_addr = netif_ip4_gw(interface)->addr;
 			} else {
-				return -EOPNOTSUPP;
+				error = -EOPNOTSUPP;
 			}
 			break;
 		}
-
-		return EOK;
+		break;
 	}
 
 	case SIOCSIFADDR:
 	case SIOCSIFNETMASK:
 	case SIOCSIFBRDADDR:
 	case SIOCSIFDSTADDR: {
-		struct ifreq *ifreq = (struct ifreq *) in_data;
+		struct ifreq *ifreq = (struct ifreq *)buffer;
+		struct sockaddr_in *sin;
 		struct netif *interface = netif_find(ifreq->ifr_name);
 		ip_addr_t ipaddr;
-		if (interface == NULL)
-			return -ENXIO;
 
-		struct sockaddr_in *sin;
+		if (interface == NULL) {
+			error = -ENXIO;
+			break;
+		}
+		error = EOK;
 		switch (request) {
 		case SIOCSIFADDR:
 			sin = (struct sockaddr_in *) &ifreq->ifr_addr;
@@ -297,28 +560,33 @@ static int socket_ioctl(int sock, unsigned long request, const void* in_data, vo
 			netif_set_netmask(interface, &ipaddr);
 			break;
 		case SIOCSIFBRDADDR:
-			return -EOPNOTSUPP;
+			error = -EOPNOTSUPP;
+			break;
 		case SIOCSIFDSTADDR:
 			if (netif_is_tun(interface)) {
 				sin = (struct sockaddr_in *) &ifreq->ifr_dstaddr;
 				ipaddr.addr = sin->sin_addr.s_addr;
 				netif_set_gw(interface, &ipaddr);
-				break;
 			}
-			return -EOPNOTSUPP;
+			else {
+				error = -EOPNOTSUPP;
+			}
+			break;
 		}
 
 #ifdef LWIP_DHCP
-		netifapi_dhcp_inform(interface);
+		dhcp_inform(interface);
 #endif
-		return EOK;
+		break;
 	}
 
 	case SIOCGIFHWADDR: {
-		struct ifreq *ifreq = (struct ifreq *) out_data;
+		struct ifreq *ifreq = (struct ifreq *)buffer;
 		struct netif *interface = netif_find(ifreq->ifr_name);
-		if (interface == NULL)
-			return -ENXIO;
+		if (interface == NULL) {
+			error = -ENXIO;
+			break;
+		}
 
 		if (ip_addr_isloopback(&interface->ip_addr)) {
 			ifreq->ifr_hwaddr.sa_family = ARPHRD_LOOPBACK;
@@ -329,26 +597,28 @@ static int socket_ioctl(int sock, unsigned long request, const void* in_data, vo
 			ifreq->ifr_hwaddr.sa_family = -1;
 		} else {
 			ifreq->ifr_hwaddr.sa_family = ARPHRD_ETHER;
-			ifreq->ifr_hwaddr.sa_len = interface->hwaddr_len;
+//			ifreq->ifr_hwaddr.sa_len = interface->hwaddr_len; TODO: add sa_len field to struct sockaddr?
 			memcpy(ifreq->ifr_hwaddr.sa_data, interface->hwaddr, interface->hwaddr_len);
 		}
 
-		sa_convert_lwip_to_sys(&ifreq->ifr_hwaddr);
-		return EOK;
+		error = EOK;
+		break;
 	}
 
 	case SIOCSIFHWADDR: {
-		struct ifreq *ifreq = (struct ifreq *) in_data;
+		struct ifreq *ifreq = (struct ifreq *)buffer;
 		struct netif *interface = netif_find(ifreq->ifr_name);
-		if (interface == NULL)
-			return -ENXIO;
+		if (interface == NULL) {
+			error = -ENXIO;
+			break;
+		}
 
 		/* TODO: support changing HW address */
-		return -EOPNOTSUPP;
+		error = -EOPNOTSUPP;
+		break;
 	}
 
 #if 0
-
 	case SIOCADDMULTI:
 	case SIOCDELMULTI: {
 		struct ifreq *ifreq = (struct ifreq *) arg;
@@ -365,461 +635,278 @@ static int socket_ioctl(int sock, unsigned long request, const void* in_data, vo
 		return EOK;
 	}
 #endif
+
 	case SIOCGIFMTU: {
-		struct ifreq *ifreq = (struct ifreq *) out_data;
+		struct ifreq *ifreq = (struct ifreq *)buffer;
 		struct netif *interface = netif_find(ifreq->ifr_name);
-		if (interface == NULL)
-			return -ENXIO;
-
-		ifreq->ifr_mtu = interface->mtu;
-		return EOK;
-	}
-	case SIOCSIFMTU: {
-		struct ifreq *ifreq = (struct ifreq *) in_data;
-		struct netif *interface = netif_find(ifreq->ifr_name);
-		if (interface == NULL)
-			return -ENXIO;
-
-		//TODO: check MAC constraints
-		if (ifreq->ifr_mtu < 64 || ifreq->ifr_mtu > 32768)
-			return -EINVAL;
-
-		interface->mtu = ifreq->ifr_mtu;
-		return EOK;
-	}
-	case SIOCGIFMETRIC: {
-		struct ifreq *ifreq = (struct ifreq *) out_data;
-		struct netif *interface = netif_find(ifreq->ifr_name);
-		if (interface == NULL)
-			return -ENXIO;
-
-		ifreq->ifr_metric = 0;
-		return EOK;
-	}
-	case SIOCSIFMETRIC:
-		return -EOPNOTSUPP;
-
-	case SIOCGIFTXQLEN:
-		return -EOPNOTSUPP;
-
-	case SIOCSIFTXQLEN:
-		return -EOPNOTSUPP;
-
-	case SIOCGIFCONF: {
-		struct ifconf *ifconf = (struct ifconf *) out_data;
-		int maxlen = ifconf->ifc_len;
-		struct ifreq* ifreq = ifconf->ifc_req;
-		struct netif *netif;
-
-		ifconf->ifc_len = 0;
-		if (!ifreq)  // WARN: it is legal to pass NULL here (we should return the lenght sufficient for whole response)
-			return -EFAULT;
-
-		memset(ifreq, 0, maxlen);
-
-		for (netif = netif_list; netif != NULL; netif = netif->next) {
-			if (ifconf->ifc_len + sizeof(struct ifreq) > maxlen) {
-				break;
-			}
-			/* LWiP name is only 2 chars, we have to manually add the number */
-			snprintf(ifreq->ifr_name, IFNAMSIZ, "%c%c%d", netif->name[0], netif->name[1], netif->num);
-
-			struct sockaddr_in* sin = (struct sockaddr_in *) &ifreq->ifr_addr;
-			sin->sin_addr.s_addr = netif->ip_addr.addr;
-
-			ifconf->ifc_len += sizeof(struct ifreq);
-			ifreq += 1;
+		if (interface == NULL) {
+			error = -ENXIO;
+			break;
 		}
 
-		return EOK;
+		ifreq->ifr_mtu = interface->mtu;
+		error = EOK;
+		break;
 	}
+	case SIOCSIFMTU: {
+		struct ifreq *ifreq = (struct ifreq *)buffer;
+		struct netif *interface = netif_find(ifreq->ifr_name);
+		if (interface == NULL) {
+			error = -ENXIO;
+			break;
+		}
+
+		/* TODO: check MAC constraints */
+		if (ifreq->ifr_mtu < 64 || ifreq->ifr_mtu > 32768) {
+			LOG_ERROR("invalid mtu: %d", (int)ifreq->ifr_mtu);
+			error = -EINVAL;
+		}
+		else {
+			interface->mtu = ifreq->ifr_mtu;
+			error = EOK;
+		}
+		break;
+	}
+	case SIOCGIFMETRIC: {
+		struct ifreq *ifreq = (struct ifreq *)buffer;
+		struct netif *interface = netif_find(ifreq->ifr_name);
+		if (interface == NULL) {
+			error = -ENXIO;
+			break;
+		}
+
+		ifreq->ifr_metric = 0;
+		error = EOK;
+		break;
+	}
+	case SIOCSIFMETRIC:
+		error = -EOPNOTSUPP;
+		break;
+
+	case SIOCGIFTXQLEN:
+		error = -EOPNOTSUPP;
+		break;
+
+	case SIOCSIFTXQLEN:
+		error = -EOPNOTSUPP;
+		break;
+
+	case SIOCGIFCONF: {
+		struct ifreq *ifreq = buffer;
+		struct netif *netif;
+		int len = 0;
+
+		if (ifreq != NULL)
+			memset(ifreq, 0, size);
+
+		for (netif = netif_list; netif != NULL; netif = netif->next) {
+			if (len + sizeof(struct ifreq) < size) {
+				/* LWiP name is only 2 chars, we have to manually add the number */
+				snprintf(ifreq->ifr_name, IFNAMSIZ, "%c%c%d", netif->name[0], netif->name[1], netif->num);
+
+				struct sockaddr_in* sin = (struct sockaddr_in *)&ifreq->ifr_addr;
+				sin->sin_addr.s_addr = netif->ip_addr.addr;
+
+				ifreq += 1;
+			}
+
+			len += sizeof(struct ifreq);
+		}
+
+		error = len;
+		break;
+	}
+
 	/** ROUTING
 	 * net and host routing is supported and multiple gateways with ethernet interfaces
-	 * TODO: support metric
 	 */
 	case SIOCADDRT:
 	case SIOCDELRT: {
-		struct rtentry *rt = (struct rtentry *) in_data;
+		struct rtentry *rt = (struct rtentry *)buffer;
 		struct netif *interface = netif_find(rt->rt_dev);
 
 		if (interface == NULL) {
-			free(rt->rt_dev);
-			free(rt);
-			return -ENXIO;
+			error = -ENXIO;
+			break;
 		}
 
-		switch (request) {
-
-		case SIOCADDRT:
+		if (request == SIOCADDRT) {
 			route_add(interface, rt);
-			break;
-		case SIOCDELRT:
+		}
+		else {
 			route_del(interface, rt);
-			break;
 		}
 
-		free(rt->rt_dev);
-		free(rt);
-
-		return EOK;
-	}
+		error = EOK;
+		break;
 	}
 
-	return -EINVAL;
-}
-
-
-static void do_socket_ioctl(msg_t *msg, int sock)
-{
-	unsigned long request;
-	void *out_data = NULL;
-	const void *in_data = ioctl_unpackEx(msg, &request, NULL, &out_data);
-
-	int err = socket_ioctl(sock, request, in_data, out_data);
-	ioctl_setResponseErr(msg, request, err);
-}
-
-
-static int socket_op(msg_t *msg, int sock)
-{
-	const sockport_msg_t *smi = (const void *)msg->i.raw;
-	sockport_resp_t *smo = (void *)msg->o.raw;
-	struct poll_state polls = {0};
-	u32 new_port;
-	socklen_t salen;
-	int err;
-
-	polls.socket = sock;
-	salen = sizeof(smo->sockname.addr);
-
-	switch (msg->type) {
-	case sockmConnect:
-		smo->ret = map_errno(lwip_connect(sock, sa_convert_sys_to_lwip(smi->send.addr, smi->send.addrlen), smi->send.addrlen));
-		break;
-	case sockmBind:
-		smo->ret = map_errno(lwip_bind(sock, sa_convert_sys_to_lwip(smi->send.addr, smi->send.addrlen), smi->send.addrlen));
-		break;
-	case sockmListen:
-		smo->ret = map_errno(lwip_listen(sock, smi->listen.backlog));
-		break;
-	case sockmAccept:
-		err = lwip_accept(sock, (void *)smo->sockname.addr, &salen);
-		if (err >= 0) {
-			sa_convert_lwip_to_sys(smo->sockname.addr);
-			smo->sockname.addrlen = salen;
-			err = wrap_socket(&new_port, err, smi->send.flags);
-			smo->ret = err < 0 ? err : new_port;
-		} else {
-			smo->ret = -errno;
-		}
-		break;
-	case sockmSend:
-		smo->ret = map_errno(lwip_sendto(sock, msg->i.data, msg->i.size, smi->send.flags,
-			sa_convert_sys_to_lwip(smi->send.addr, smi->send.addrlen), smi->send.addrlen));
-		break;
-	case sockmRecv:
-		smo->ret = map_errno(lwip_recvfrom(sock, msg->o.data, msg->o.size, smi->send.flags, (void *)smo->sockname.addr, &salen));
-		if (smo->ret >= 0)
-			sa_convert_lwip_to_sys(smo->sockname.addr);
-		smo->sockname.addrlen = salen;
-		break;
-	case sockmGetSockName:
-		smo->ret = map_errno(lwip_getsockname(sock, (void *)smo->sockname.addr, &salen));
-		if (smo->ret >= 0)
-			sa_convert_lwip_to_sys(smo->sockname.addr);
-		smo->sockname.addrlen = salen;
-		break;
-	case sockmGetPeerName:
-		smo->ret = map_errno(lwip_getpeername(sock, (void *)smo->sockname.addr, &salen));
-		if (smo->ret >= 0)
-			sa_convert_lwip_to_sys(smo->sockname.addr);
-		smo->sockname.addrlen = salen;
-		break;
-	case sockmGetFl:
-		smo->ret = map_errno(lwip_fcntl(sock, F_GETFL, 0));
-		break;
-	case sockmSetFl:
-		smo->ret = map_errno(lwip_fcntl(sock, F_SETFL, smi->send.flags));
-		break;
-	case sockmGetOpt:
-		salen = msg->o.size;
-		smo->ret = lwip_getsockopt(sock, smi->opt.level, smi->opt.optname, msg->o.data, &salen) < 0 ? -errno : salen;
-		break;
-	case sockmSetOpt:
-		smo->ret = map_errno(lwip_setsockopt(sock, smi->opt.level, smi->opt.optname, msg->i.data, msg->i.size));
-		break;
-	case sockmShutdown:
-		smo->ret = map_errno(lwip_shutdown(sock, smi->send.flags));
-		break;
-	case mtRead:
-		if (msg->o.size < 1ull << (8 * sizeof(int) - 1))
-			msg->o.io.err = map_errno(lwip_read(sock, msg->o.data, msg->o.size));
-		else
-			msg->o.io.err = -EINVAL;
-		break;
-	case mtWrite:
-		if (msg->o.size < 1ull << (8 * sizeof(int) - 1))
-			msg->o.io.err = map_errno(lwip_write(sock, msg->i.data, msg->i.size));
-		else
-			msg->o.io.err = -EINVAL;
-		break;
-	case mtGetAttr:
-		if (msg->i.attr.type == atPollStatus)
-			msg->o.attr.val = poll_one(&polls, msg->i.attr.val, 0);
-		else
-			msg->o.attr.val = -EINVAL;
-		break;
-	case mtClose:
-		msg->o.io.err = map_errno(lwip_close(sock));
-		return 1;
-	case mtDevCtl:
-		do_socket_ioctl(msg, sock);
-		break;
 	default:
-		smo->ret = -EINVAL;
+		LOG_ERROR("unrecognized ioctl: %x", request);
+		error = -EINVAL;
 		break;
 	}
-
-	return 0;
+	return error;
 }
 
 
 static void socket_thread(void *arg)
 {
-	struct sock_start *ss = arg;
-	unsigned respid;
-	u32 port = ss->port;
-	int sock = ss->sock, err;
+	LOG_INFO("entered");
+
 	msg_t msg;
+	socket_t *socket;
+	unsigned int rid;
+	int error = EOK;
 
-	free(ss);
+	for (;;) {
+		if (msgRecv(socket_common.portfd, &msg, &rid) < 0)
+			continue;
 
-	while ((err = msgRecv(port, &msg, &respid)) >= 0) {
-		err = socket_op(&msg, sock);
-		msgRespond(port, &msg, respid);
-		if (err)
-			break;
-	}
+		error = EOK;
 
-	portDestroy(port);
-	if (err < 0)
-		lwip_close(sock);
-}
-
-
-static int wrap_socket(u32 *port, int sock, int flags)
-{
-	struct sock_start *ss;
-	int err;
-
-	if ((flags & SOCK_NONBLOCK) && (err = lwip_fcntl(sock, F_SETFL, O_NONBLOCK)) < 0) {
-		lwip_close(sock);
-		return err;
-	}
-
-	ss = malloc(sizeof(*ss));
-	if (!ss) {
-		lwip_close(sock);
-		return -ENOMEM;
-	}
-
-	ss->sock = sock;
-
-	if ((err = portCreate(&ss->port)) < 0) {
-		lwip_close(ss->sock);
-		free(ss);
-		return err;
-	}
-
-	*port = ss->port;
-
-	if ((err = sys_thread_opt_new("socket", socket_thread, ss, SOCKTHREAD_STACKSZ, SOCKTHREAD_PRIO, NULL))) {
-		portDestroy(ss->port);
-		lwip_close(ss->sock);
-		free(ss);
-		return err;
-	}
-
-	return EOK;
-}
-
-static int do_getnameinfo(const struct sockaddr *sa, socklen_t addrlen, char *host, socklen_t hostsz, char *serv, socklen_t servsz, int flags)
-{
-
-	// TODO: implement real netdb (for now always return the IP representation)
-	if (sa == NULL)
-		return EAI_FAIL;
-
-	if (sa->sa_family == AF_INET) {
-		struct sockaddr_in *sa_in = (struct sockaddr_in *)sa;
-
-		if (host != NULL) {
-			snprintf(host, hostsz, "%u.%u.%u.%u", (unsigned char)sa->sa_data[2], (unsigned char)sa->sa_data[3],
-				(unsigned char)sa->sa_data[4], (unsigned char)sa->sa_data[5]);
-			host[hostsz - 1] = '\0';
-		}
-
-		if (serv != NULL) {
-			snprintf(serv, servsz, "%u", ntohs(sa_in->sin_port));
-			serv[servsz - 1] = '\0';
-		}
-
-		return 0;
-	}
-
-	return EAI_FAMILY;
-}
-
-
-static int do_getaddrinfo(const char *name, const char *serv, const struct addrinfo *hints, void *buf, size_t *buflen)
-{
-	struct addrinfo *res, *ai, *dest;
-	size_t n, addr_needed, str_needed;
-	void *addrdest, *strdest;
-	int err;
-
-	if ((err = lwip_getaddrinfo(name, serv, hints, &res)))
-		return err;
-
-	n = addr_needed = str_needed = 0;
-	for (ai = res; ai; ai = ai->ai_next) {
-		++n;
-		if (ai->ai_addrlen)
-			addr_needed += (ai->ai_addrlen + sizeof(size_t) - 1) & ~(sizeof(size_t) - 1);
-		if (ai->ai_canonname)
-			str_needed += strlen(ai->ai_canonname) + 1;
-	}
-
-	str_needed += n * sizeof(*ai) + addr_needed;
-	if (*buflen < str_needed) {
-		*buflen = str_needed;
-		if (res)
-			lwip_freeaddrinfo(res);
-		return EAI_OVERFLOW;
-	}
-
-	*buflen = str_needed;
-	dest = buf;
-	addrdest = buf + n * sizeof(*ai);
-	strdest = addrdest + addr_needed;
-
-	for (ai = res; ai; ai = ai->ai_next) {
-		dest->ai_flags = ai->ai_flags;
-		dest->ai_family = ai->ai_family;
-		dest->ai_socktype = ai->ai_socktype;
-		dest->ai_protocol = ai->ai_protocol;
-
-		if ((dest->ai_addrlen = ai->ai_addrlen)) {
-			memcpy(addrdest, ai->ai_addr, ai->ai_addrlen);
-			sa_convert_lwip_to_sys(addrdest);
-			dest->ai_addr = (void *)(addrdest - buf);
-			addrdest += (ai->ai_addrlen + sizeof(size_t) - 1) & ~(sizeof(size_t) - 1);
-		}
-
-		if (ai->ai_canonname) {
-			n = strlen(ai->ai_canonname) + 1;
-			memcpy(strdest, ai->ai_canonname, n);
-			dest->ai_canonname = (void *)(strdest - buf);
-			strdest += n;
-		} else
-			dest->ai_canonname = NULL;
-
-		dest->ai_next = ai->ai_next ? (void *)((void *)(dest + 1) - buf) : NULL;
-		++dest;
-	}
-
-	if (res)
-		lwip_freeaddrinfo(res);
-
-	return 0;
-}
-
-
-static void socketsrv_thread(void *arg)
-{
-	struct addrinfo hint = { 0 };
-	unsigned respid;
-	char *node, *serv;
-	size_t sz;
-	msg_t msg;
-	u32 port;
-	int err, sock;
-
-	port = (unsigned)arg;
-
-	while ((err = msgRecv(port, &msg, &respid)) >= 0) {
-		const sockport_msg_t *smi = (const void *)msg.i.raw;
-		sockport_resp_t *smo = (void *)msg.o.raw;
-
-		switch (msg.type) {
-		case sockmSocket:
-			sock = smi->socket.type & ~(SOCK_NONBLOCK|SOCK_CLOEXEC);
-			if ((sock = lwip_socket(smi->socket.domain, sock, smi->socket.protocol)) < 0)
-				msg.o.lookup.err = -errno;
-			else {
-				msg.o.lookup.err = wrap_socket(&msg.o.lookup.dev.port, sock, smi->socket.type);
-				msg.o.lookup.fil = msg.o.lookup.dev;
-			}
-			break;
-
-		case sockmGetNameInfo:
-			if (msg.i.size != sizeof(size_t) || (sz = *(size_t *)msg.i.data) > msg.o.size) {
-				smo->ret = EAI_SYSTEM;
-				smo->sys.err = -EINVAL;
+		if (msg.object == (id_t)-1) {
+			switch (msg.type) {
+			case mtOpen:
+				LOCK_TCPIP_CORE();
+				error = socket_create(&msg.o.open, NULL);
+				UNLOCK_TCPIP_CORE();
+				break;
+			case mtClose:
+				LOG_ERROR("invalid close", msg.type);
+				break;
+			default:
+				LOG_ERROR("invalid message: %d", msg.type);
+				error = -EINVAL;
 				break;
 			}
+		}
+		else if ((socket = socket_get(msg.object)) == NULL) {
+			error = -ENOENT;
+		}
+		else {
+			LOCK_TCPIP_CORE();
+			switch (msg.type) {
+			case mtBind:
+				error = socket_bind(socket, msg.i.data, msg.i.size);
+				break;
+			case mtAccept:
+				error = socket_accept(socket, &msg.o.accept.id, msg.o.data, msg.o.size, &msg.o.accept.length);
+				break;
+			case mtListen:
+				error = socket_listen(socket, msg.i.listen);
+				break;
+			case mtConnect:
+				error = socket_connect(socket, msg.i.data, msg.i.size);
+				break;
+			case mtRead:
+				/* TODO: handle closed socket */
+				msg.o.io = socket_read(socket, msg.o.data, msg.o.size);
+				break;
+			case mtWrite:
+				/* TODO: handle closed socket */
+				if ((error = socket_write(socket, msg.i.data, msg.i.size)) == EOK)
+					msg.o.io = msg.i.size;
+				break;
+			case mtClose:
+				error = socket_close(socket);
+				break;
+			case mtGetAttr:
+				switch (msg.i.attr) {
+				case atEvents:
+					error = socket_poll(socket, msg.o.data);
+					break;
+				case atLocalAddr: {
+					if (socket->tpcb != NULL) {
+						struct sockaddr_in *sin = msg.o.data;
+						sin->sin_family = AF_INET;
+						sin->sin_port = htons(socket->tpcb->local_port);
+						sin->sin_addr.s_addr = socket->tpcb->local_ip.addr;
+						error = sizeof(*sin);
+					}
+					else {
+						error = -ENOTCONN;
+					}
+					break;
+				}
+				case atRemoteAddr: {
+					if (socket->tpcb != NULL) {
+						struct sockaddr_in *sin = msg.o.data;
+						sin->sin_family = AF_INET;
+						sin->sin_port = htons(socket->tpcb->remote_port);
+						sin->sin_addr.s_addr = socket->tpcb->remote_ip.addr;
+						error = sizeof(*sin);
+					}
+					else {
+						error = -ENOTCONN;
+					}
+					break;
+				}
+				default:
+					LOG_ERROR("invalid getattr: %d", msg.i.attr);
+					error = -EINVAL;
+					break;
+				}
+				break;
+			case mtSetAttr:
+				switch (msg.i.attr) {
+				case atEvents:
+					error = EOK;
+					break;
+				default:
+					LOG_ERROR("invalid setattr: %d", msg.i.attr);
+					error = -EINVAL;
+					break;
+				}
+				break;
+			case mtDevCtl: {
+				void *buffer;
+				size_t size;
 
-			smo->ret = do_getnameinfo(sa_convert_sys_to_lwip(smi->send.addr, smi->send.addrlen), smi->send.addrlen, msg.o.data, sz, msg.o.data + sz, msg.o.size - sz, smi->send.flags);
-			smo->sys.err = smo->ret == EAI_SYSTEM ? errno : 0;
-			smo->nameinfo.hostlen = sz > 0 ? strlen(msg.o.data) + 1  : 0;
-			smo->nameinfo.servlen = msg.o.size - sz > 0 ? strlen(msg.o.data + sz) + 1 : 0;
-			break;
+				switch (msg.i.devctl & IOC_DIRMASK) {
+				case IOC_IN:
+					buffer = msg.i.data;
+					size = msg.i.size;
+					break;
+				case IOC_INOUT:
+					memcpy(msg.o.data, msg.i.data, msg.i.size < msg.o.size ? msg.i.size : msg.o.size);
+					/* fallthrough */
+				case IOC_OUT:
+					buffer = msg.o.data;
+					size = msg.o.size;
+					break;
+				case IOC_VOID:
+				default:
+					size = 0;
+					buffer = NULL;
+					break;
+				}
 
-		case sockmGetAddrInfo:
-			node = smi->socket.ai_node_sz ? msg.i.data : NULL;
-			serv = msg.i.size > smi->socket.ai_node_sz ? msg.i.data + smi->socket.ai_node_sz : NULL;
+				msg.o.io = error = socket_ioctl(socket, msg.i.devctl, buffer, size);
 
-			if (smi->socket.ai_node_sz > msg.i.size || (node && node[smi->socket.ai_node_sz - 1]) || (serv && ((char *)msg.i.data)[msg.i.size - 1])) {
-				smo->ret = EAI_SYSTEM;
-				smo->sys.err = -EINVAL;
+				if (error > 0)
+					error = EOK;
+
 				break;
 			}
-
-			hint.ai_flags = smi->socket.flags;
-			hint.ai_family = smi->socket.domain;
-			hint.ai_socktype = smi->socket.type;
-			hint.ai_protocol = smi->socket.protocol;
-			smo->sys.buflen = msg.o.size;
-			smo->ret = do_getaddrinfo(node, serv, &hint, msg.o.data, &smo->sys.buflen);
-			smo->sys.err = smo->ret == EAI_SYSTEM ? errno : 0;
-			break;
-
-		default:
-			msg.o.io.err = -EINVAL;
+			default:
+				LOG_ERROR("invalid message: %d", msg.type);
+				error = -EINVAL;
+				break;
+			}
+			UNLOCK_TCPIP_CORE();
 		}
 
-		msgRespond(port, &msg, respid);
+		msgRespond(socket_common.portfd, error, &msg, rid);
 	}
-
-	errout(err, "msgRecv(socketsrv)");
 }
 
+extern int deviceCreate(int cwd, const char *, int portfd, id_t id, mode_t mode);
 
-__constructor__(1000)
 void init_lwip_sockets(void)
 {
-	oid_t oid = { 0 };
-	int err;
-
-	if ((err = portCreate(&oid.port)) < 0)
-		errout(err, "portCreate(socketsrv)");
-
-	if ((err = create_dev(&oid, PATH_SOCKSRV))) {
-		errout(err, "create_dev(%s)", PATH_SOCKSRV);
-	}
-
-	if ((err = sys_thread_opt_new("socketsrv", socketsrv_thread, (void *)oid.port, SOCKTHREAD_STACKSZ, SOCKTHREAD_PRIO, NULL))) {
-		portDestroy(oid.port);
-		errout(err, "thread(socketsrv)");
-	}
+	memset(socket_common.sockets, 0, sizeof(socket_common.sockets));
+	socket_common.portfd = 3; /* set up in pinit */
+	beginthread(socket_thread, 3, socket_common.stack, sizeof(socket_common.stack), NULL);
+	deviceCreate(AT_FDCWD, "/dev/net", socket_common.portfd, (id_t)-1, S_IFCHR | 0777);
 }

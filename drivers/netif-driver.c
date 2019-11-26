@@ -156,6 +156,7 @@ int create_netif(char *conf)
 
 		ipaddr.addr = PP_HTONL(0x0A020000 + ni->num);
 		netif_set_ipaddr(ni, &ipaddr);
+		netif_set_up(ni);
 	} else {
 		ni->state = (char *)storage + sz;
 		err = storage->drv->init(ni, storage->cfg);

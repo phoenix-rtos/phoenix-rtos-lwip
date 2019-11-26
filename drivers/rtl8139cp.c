@@ -397,7 +397,7 @@ static netif_driver_t rtl_drv = {
 	.init = rtl_netifInit,
 	.state_sz = sizeof(rtl_priv_t),
 	.state_align = _Alignof(rtl_priv_t),
-	.name = "rtl",
+	.name = "enet",
 };
 
 
