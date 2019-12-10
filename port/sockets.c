@@ -39,6 +39,9 @@ typedef struct {
 	uint16_t inoffs;
 	struct pbuf *inbufs;
 	char type;
+	err_t error;
+
+	int connected;
 
 	int backlog;
 	void **connections;
@@ -94,7 +97,7 @@ static int do_getnameinfo(const struct sockaddr *sa, socklen_t addrlen, char *ho
 }
 
 
-static int socket_create(id_t *id, struct tpcb *pcb)
+static int socket_create(id_t *id, struct tpcb *pcb, int connected)
 {
 	LOG_INFO("entered");
 
@@ -105,6 +108,8 @@ static int socket_create(id_t *id, struct tpcb *pcb)
 		return -ENOMEM;
 
 	socket->type = socket_tcp;
+	socket->connected = connected;
+	socket->error = ERR_OK;
 
 	if (pcb == NULL && (pcb = tcp_new()) == NULL) {
 		free(socket);
@@ -140,21 +145,33 @@ static err_t socket_received(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, er
 {
 	socket_t *socket = arg;
 	LOG_INFO("entered id=%llu", socket->id);
+	int event;
 
 	if (p != NULL) {
-		LOG_INFO("got data :)");
-		if (socket->inbufs == NULL)
+		event = POLLIN;
+		LOG_INFO("got data (%d) :)", p->tot_len);
+		if (socket->inbufs == NULL) {
 			socket->inbufs = p;
-		else
+		}
+		else {
+			LOG_INFO("i'll cat");
 			pbuf_cat(socket->inbufs, p);
+			LOG_INFO("i catted");
+		}
 	}
 	else {
-		LOG_INFO("no data :(");
+		event = POLLHUP;
+		LOG_ERROR("received empty pbuf");
 		/* TODO: mark as closed? */
+		socket->connected = 0;
+		socket->error = ERR_CONN;
 	}
 
 	oid_t oid = { .port = 12, .id = socket->id };
-	eventRegister(&oid, POLLIN);
+	if (eventRegister(&oid, event)) {
+		LOG_INFO("no interest");
+	}
+
 	return ERR_OK;
 }
 
@@ -162,7 +179,10 @@ static err_t socket_received(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, er
 static err_t socket_transmitted(void *arg, struct tcp_pcb *tpcb, uint16_t len)
 {
 	socket_t *socket = arg;
+	oid_t oid = { .port = 12, .id = socket->id };
 	LOG_INFO("entered id=%llu", socket->id);
+	if (eventRegister(&oid, POLLOUT) < 0)
+		LOG_INFO("no interest");
 	return ERR_OK;
 }
 
@@ -192,7 +212,12 @@ static err_t socket_accepted(void *arg, struct tcp_pcb *new, err_t err)
 static void socket_error(void *arg, err_t err)
 {
 	socket_t *socket = arg;
-	LOG_ERROR("socket %d: %s", socket->id, lwip_strerr(err));
+	LOG_ERROR("socket %llu: %s (%d)", socket->id, lwip_strerr(err), err);
+	oid_t oid = { .port = 12, .id = socket->id };
+	socket->error = err;
+	socket->connected = 0;
+	socket->tpcb = NULL;
+	eventRegister(&oid, POLLHUP|POLLERR);
 }
 
 
@@ -204,6 +229,7 @@ static err_t socket_connected(void *arg, struct tcp_pcb *tpcb, err_t err)
 	tcp_recv(tpcb, socket_received);
 	tcp_sent(tpcb, socket_transmitted);
 	tcp_err(tpcb, socket_error);
+	socket->connected = 1;
 	eventRegister(&oid, POLLOUT);
 	return ERR_OK;
 }
@@ -222,7 +248,10 @@ static int socket_read(socket_t *socket, void *data, int size)
 		bytes = pbuf_copy_partial(socket->inbufs, data, size, socket->inoffs);
 		p = pbuf_skip(socket->inbufs, bytes + socket->inoffs, &socket->inoffs);
 
-		while (p != (head = socket->inbufs)) {
+		LOG_INFO("p after skipping is %p", p);
+
+		while (p != (head = socket->inbufs) && head != NULL) {
+			LOG_INFO("dechaining %p", head);
 			socket->inbufs = pbuf_dechain(socket->inbufs);
 			pbuf_free(head);
 		}
@@ -240,10 +269,14 @@ static int socket_write(socket_t *socket, const void *data, int size)
 	LOG_INFO("entered id=%llu, size: %d", socket->id, size);
 
 	err_t result;
+	int writesz = tcp_sndbuf(socket->tpcb);
+
+	if (writesz > size)
+		writesz = size;
 
 	/* TODO: no need to copy if we're not responding before data is acked! */
- 	/* TODO: handle big writes by doing partial writes */
-	result = tcp_write(socket->tpcb, data, size, TCP_WRITE_FLAG_COPY);
+	result = tcp_write(socket->tpcb, data, writesz, TCP_WRITE_FLAG_COPY);
+
 	if (result != ERR_OK) {
 		LOG_ERROR("%s (%d)\n", lwip_strerr(result), result);
 	}
@@ -253,7 +286,7 @@ static int socket_write(socket_t *socket, const void *data, int size)
 			LOG_ERROR("%s (%d)\n", lwip_strerr(result), result);
 	}
 
-	return -err_to_errno(result);
+	return result == ERR_OK ? writesz : -err_to_errno(result);
 }
 
 
@@ -261,13 +294,21 @@ static int socket_close(socket_t *socket)
 {
 	LOG_INFO("entered id=%llu", socket->id);
 
-	err_t result;
+	err_t result = ERR_OK;
 
-	result = tcp_close(socket->tpcb);
+	if (socket->tpcb != NULL)
+		result = tcp_close(socket->tpcb);
+
 	if (result != ERR_OK)
 		LOG_ERROR("%s (%d)\n", lwip_strerr(result), result);
 
 	return -err_to_errno(result);
+}
+
+
+static int socket_shutdown(socket_t *socket, int how)
+{
+	return EOK;
 }
 
 
@@ -279,7 +320,7 @@ static int socket_bind(socket_t *socket, struct sockaddr *address, socklen_t len
 	struct sockaddr_in *ain = address;
 	ip_addr_t ipaddr = IPADDR4_INIT(ain->sin_addr.s_addr);
 
-	LOG_INFO("binding to ip addr: %x port %d", ipaddr.addr, (int)ain->sin_port);
+	LOG_INFO("binding to ip addr: %x port %d", ipaddr.addr, (int)ntohs(ain->sin_port));
 
 	result = tcp_bind(socket->tpcb, &ipaddr, ntohs(ain->sin_port));
 	if (result != ERR_OK)
@@ -305,6 +346,7 @@ static int socket_listen(socket_t *socket, int backlog)
 
 	socket->backlog = backlog;
 	tcp_accept(socket->tpcb, socket_accepted);
+
 	return EOK;
 }
 
@@ -318,13 +360,13 @@ static int socket_accept(socket_t *socket, id_t *newsock, struct sockaddr *addre
 
 	if ((new = socket->connections[0]) != NULL) {
 		LOG_INFO("got connection :)");
-		if ((retval = socket_create(newsock, new)) == EOK) {
+		if ((retval = socket_create(newsock, new, 1)) == EOK) {
 			tcp_backlog_accepted(new);
 
 			tcp_recv(new, socket_received);
 			tcp_sent(new, socket_transmitted);
 			tcp_err(new, socket_error);
-
+			socket->connections[0] = NULL;
 			for (i = 0; i < socket->backlog - 1; ++i) {
 				if ((socket->connections[i] = socket->connections[i + 1]) == NULL)
 					break;
@@ -344,11 +386,19 @@ static int socket_connect(socket_t *socket, struct sockaddr *address, socklen_t 
 	struct sockaddr_in *ain = address;
 	ip_addr_t ipaddr = IPADDR4_INIT(ain->sin_addr.s_addr);
 
+	if (socket->connected)
+		return -EALREADY;
+
+	/* TODO: check error in common code? clear it after reporting? */
+	if (socket->error != ERR_OK)
+		return -err_to_errno(socket->error);
+
+	tcp_err(socket->tpcb, socket_error);
 	result = tcp_connect(socket->tpcb, &ipaddr, ntohs(ain->sin_port), socket_connected);
 	if (result != ERR_OK)
 		LOG_ERROR("%s (%d)\n", lwip_strerr(result), result);
 
-	return -err_to_errno(result);
+	return result == ERR_OK ? -EINPROGRESS : -err_to_errno(result);
 }
 
 
@@ -364,7 +414,8 @@ static int socket_poll(socket_t *socket, int *events)
 		*events |= POLLIN;
 
 	/* TODO: check if we're connected? */
-	*events |= POLLOUT;
+	if (socket->connected)
+		*events |= POLLOUT;
 	return EOK;
 }
 
@@ -770,7 +821,7 @@ static void socket_thread(void *arg)
 			switch (msg.type) {
 			case mtOpen:
 				LOCK_TCPIP_CORE();
-				error = socket_create(&msg.o.open, NULL);
+				error = socket_create(&msg.o.open, NULL, 0);
 				UNLOCK_TCPIP_CORE();
 				break;
 			case mtClose:
@@ -802,20 +853,55 @@ static void socket_thread(void *arg)
 				break;
 			case mtRead:
 				/* TODO: handle closed socket */
-				msg.o.io = socket_read(socket, msg.o.data, msg.o.size);
+				if (socket->error) {
+					error = -err_to_errno(socket->error);
+					msg.o.io = 0;
+				}
+				else if (!socket->connected) {
+					error = -ENOTCONN;
+					msg.o.io = 0;
+				}
+				else if ((error = socket_read(socket, msg.o.data, msg.o.size)) > 0) {
+					msg.o.io = error;
+					error = EOK;
+				}
+				else if (!error) {
+					msg.o.io = 0;
+					error = -EAGAIN;
+				}
 				break;
 			case mtWrite:
 				/* TODO: handle closed socket */
-				if ((error = socket_write(socket, msg.i.data, msg.i.size)) == EOK)
-					msg.o.io = msg.i.size;
+				if (socket->error) {
+					error = -err_to_errno(socket->error);
+					msg.o.io = 0;
+				}
+				else if (!socket->connected) {
+					error = -ENOTCONN;
+					msg.o.io = 0;
+				}
+				else if ((error = socket_write(socket, msg.i.data, msg.i.size)) > 0) {
+					msg.o.io = error;
+					error = EOK;
+				}
+				else if (!error) {
+					msg.o.io = 0;
+					error = -EAGAIN;
+				}
 				break;
 			case mtClose:
 				error = socket_close(socket);
+				break;
+			case mtShutdown:
+				error = socket_shutdown(socket, msg.i.shutdown);
 				break;
 			case mtGetAttr:
 				switch (msg.i.attr) {
 				case atEvents:
 					error = socket_poll(socket, msg.o.data);
+					/* TODO: distinguish hang up from error */
+					if (socket->error)
+						error |= POLLHUP|POLLERR;
 					break;
 				case atLocalAddr: {
 					if (socket->tpcb != NULL) {
