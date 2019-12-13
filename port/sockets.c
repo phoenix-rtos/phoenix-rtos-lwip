@@ -167,11 +167,7 @@ static err_t socket_received(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, er
 		socket->error = ERR_CONN;
 	}
 
-	oid_t oid = { .port = 12, .id = socket->id };
-	if (eventRegister(&oid, event)) {
-		LOG_INFO("no interest");
-	}
-
+	portEvent(socket_common.portfd, socket->id, event);
 	return ERR_OK;
 }
 
@@ -179,10 +175,8 @@ static err_t socket_received(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, er
 static err_t socket_transmitted(void *arg, struct tcp_pcb *tpcb, uint16_t len)
 {
 	socket_t *socket = arg;
-	oid_t oid = { .port = 12, .id = socket->id };
 	LOG_INFO("entered id=%llu", socket->id);
-	if (eventRegister(&oid, POLLOUT) < 0)
-		LOG_INFO("no interest");
+	portEvent(socket_common.portfd, socket->id, POLLOUT);
 	return ERR_OK;
 }
 
@@ -197,8 +191,7 @@ static err_t socket_accepted(void *arg, struct tcp_pcb *new, err_t err)
 		if (socket->connections[i] == NULL) {
 			socket->connections[i] = new;
 			tcp_backlog_delayed(new);
-			oid_t oid = { .port = 12, .id = socket->id };
-			eventRegister(&oid, POLLIN);
+			portEvent(socket_common.portfd, socket->id, POLLIN);
 			LOG_INFO("registered new connection :)");
 			return ERR_OK;
 		}
@@ -213,11 +206,10 @@ static void socket_error(void *arg, err_t err)
 {
 	socket_t *socket = arg;
 	LOG_ERROR("socket %llu: %s (%d)", socket->id, lwip_strerr(err), err);
-	oid_t oid = { .port = 12, .id = socket->id };
 	socket->error = err;
 	socket->connected = 0;
 	socket->tpcb = NULL;
-	eventRegister(&oid, POLLHUP|POLLERR);
+	portEvent(socket_common.portfd, socket->id, POLLHUP|POLLERR);
 }
 
 
@@ -225,12 +217,11 @@ static err_t socket_connected(void *arg, struct tcp_pcb *tpcb, err_t err)
 {
 	socket_t *socket = arg;
 	LOG_INFO("entered id=%llu, err = %s", socket->id, lwip_strerr(err));
-	oid_t oid = { .port = 12, .id = socket->id };
 	tcp_recv(tpcb, socket_received);
 	tcp_sent(tpcb, socket_transmitted);
 	tcp_err(tpcb, socket_error);
 	socket->connected = 1;
-	eventRegister(&oid, POLLOUT);
+	portEvent(socket_common.portfd, socket->id, POLLOUT);
 	return ERR_OK;
 }
 
