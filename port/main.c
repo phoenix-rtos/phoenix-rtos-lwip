@@ -197,6 +197,7 @@ int main(int argc, char **argv)
 	void init_lwip_tcpip(void);
 	void init_lwip_sockets(void);
 	void register_driver_rtl(void);
+	void register_driver_virtio(void);
 	void register_driver_enet(void);
 	void register_driver_pppos(void);
 	void register_driver_tun(void);
@@ -211,6 +212,9 @@ int main(int argc, char **argv)
 
 #ifdef HAVE_DRIVER_rtl
 	register_driver_rtl();
+#endif
+#ifdef HAVE_DRIVER_virtio
+	register_driver_virtio();
 #endif
 #ifdef HAVE_DRIVER_enet
 	register_driver_enet();

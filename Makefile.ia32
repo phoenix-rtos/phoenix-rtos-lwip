@@ -10,7 +10,7 @@ CROSS ?= i386-pc-phoenix-
 
 CC = $(CROSS)gcc
 
-CFLAGS += -O0 -ggdb -Wall -Wstrict-prototypes -g -march=i686
+CFLAGS += -O0 -ggdb -Wall -Wstrict-prototypes -g -march=i686 -msse2
 CFLAGS += -fdata-sections -ffunction-sections
 
 AR = $(CROSS)ar
