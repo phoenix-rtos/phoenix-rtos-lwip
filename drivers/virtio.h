@@ -106,7 +106,20 @@ typedef struct {
 		volatile uint8_t *base;
 		uint32_t size;
 	} isr;
+	uint64_t features;
 } virtio_device_t;
+
+
+#define VIRTIO_CFG_DEVICE_FEATURE 	0
+#define VIRTIO_CFG_DRIVER_FEATURE 	4
+#define VIRTIO_CFG_VQ_ADDR 			8
+#define VIRTIO_CFG_VQ_SIZE 			12
+#define VIRTIO_CFG_VQ_SEL			14
+#define VIRTIO_CFG_VQ_NOTI			16
+#define VIRTIO_CFG_DEVICE_STATUS	18
+#define VIRTIO_CFG_ISR_STATUS		19
+#define VIRTIO_CFG_DEVICE_SPEC		20
+
 
 typedef struct {
 	virtio_device_t virtio_dev;
@@ -114,6 +127,9 @@ typedef struct {
 	pci_device_t pci_dev;
 	pci_cap_list_t pci_cap_list;
 	void *bar[6];
+
+	uint8_t legacy;
+
 } virtio_pci_device_t;
 
 
@@ -133,6 +149,7 @@ struct virtq_desc {
 };
 
 #define VIRTQ_MAX_SIZE 256
+#define VIRTQ_LEGACY_MAX_SIZE 256
 
 struct virtq_avail {
 #define VIRTQ_AVAIL_F_NO_INTERRUPT      1
@@ -157,7 +174,6 @@ struct virtq_used {
 	volatile struct virtq_used_elem ring[VIRTQ_MAX_SIZE];
 	volatile uint16_t avail_event; /* Only if VIRTIO_F_EVENT_IDX */
 };
-
 
 struct virtq {
 	struct virtq_desc *desc;
@@ -204,6 +220,9 @@ struct virtq {
 #define VIRTIO_NET_S_LINK_UP     1
 #define VIRTIO_NET_S_ANNOUNCE    2
 
+#define VIRTIO_NET_HDR_SIZE 		12
+#define VIRTIO_NET_HDR_SIZE_LEGACY 	10
+
 struct virtio_net_hdr {
 #define VIRTIO_NET_HDR_F_NEEDS_CSUM    1
 #define VIRTIO_NET_HDR_F_DATA_VALID    2
@@ -219,7 +238,7 @@ struct virtio_net_hdr {
 	uint16_t gso_size;
 	uint16_t csum_start;
 	uint16_t csum_offset;
-//	uint16_t num_buffers;
+	uint16_t num_buffers;
 };
 
 #endif /* _LIBVIRTIO_H_ */
