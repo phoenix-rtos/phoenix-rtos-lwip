@@ -149,7 +149,6 @@ struct virtq_desc {
 };
 
 #define VIRTQ_MAX_SIZE 256
-#define VIRTQ_LEGACY_MAX_SIZE 256
 
 struct virtq_avail {
 #define VIRTQ_AVAIL_F_NO_INTERRUPT      1
