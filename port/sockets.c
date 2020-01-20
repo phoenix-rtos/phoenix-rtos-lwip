@@ -889,10 +889,12 @@ static void socket_thread(void *arg)
 			case mtGetAttr:
 				switch (msg.i.attr) {
 				case atEvents:
-					error = socket_poll(socket, msg.o.data);
+					*(int *)msg.o.data = 0;
+					socket_poll(socket, msg.o.data);
 					/* TODO: distinguish hang up from error */
 					if (socket->error)
-						error |= POLLHUP|POLLERR;
+						*(int *)msg.o.data |= POLLHUP|POLLERR;
+					error = sizeof(int);
 					break;
 				case atLocalAddr: {
 					if (socket->tpcb != NULL) {
