@@ -118,7 +118,6 @@ int virtio_pciGetCap(virtio_pci_device_t *dev, const uint8_t type, void **data, 
 	cap = (struct virtio_pci_cap *)&dev->pci_cap_list.data[0];
 
 	do {
-
 		if (cap->cap_vndr != 0x09 || cap->cfg_type != type) {
 			i++;
 			cap = (struct virtio_pci_cap *)&dev->pci_cap_list.data[cap->cap_next];
@@ -293,9 +292,8 @@ static void virtio_pciNetNotify(virtio_pci_net_device_t *dev, struct virtq *virt
 	uint32_t base;
 
 	base = (uint32_t)VIRTIO_PCI(dev)->pci_dev.resources[0].base;
-
 	if (VIRTIO_PCI(dev)->legacy)
-		outw((void *)(base + VIRTIO_CFG_VQ_NOTI), virtq->index);
+		outw((void *)(base + VIRTIO_CFG_VQ_NOTI), 1);
 	else
 		*virtq->notify_addr = virtq->index;
 	MB();
@@ -311,22 +309,26 @@ static err_t virtio_netifOutput(struct netif *netif, struct pbuf *p)
 
 	mutexLock(dev->tx_lock);
 	avail = tx->avail->idx;
+
+	/* TODO: clear used descriptors */
 	TRACE("output avail %u used %u", avail, tx->used->idx % tx->size);
-	if ((avail + 1) % tx->size == tx->used->idx % tx->size) {
+	if ((avail + tx->size / 2 + 1) % tx->size == tx->used->idx % tx->size) {
 		/* tx ring is full. TODO: handle it */
 		DTRACE("tx full");
+		mutexUnlock(dev->tx_lock);
 		return -ERANGE;
 	}
 
 	if (p->tot_len > VIRTIO_BUFF_SIZE - dev->net_hdr_size) {
 		/* TODO: handle it */
 		DTRACE("pbuf too big");
+		mutexUnlock(dev->tx_lock);
 		return -ERANGE;
 	}
 
 	tot_len = p->tot_len;
-	len = 0;
 	hdr = (struct virtio_net_hdr *)tx->vbuffs[avail % tx->size];
+	memset(hdr, 0, sizeof(struct virtio_net_hdr));
 	hdr->flags = 0;
 	hdr->gso_type = VIRTIO_NET_HDR_GSO_NONE;
 	hdr->num_buffers = 0;
@@ -346,23 +348,25 @@ static err_t virtio_netifOutput(struct netif *netif, struct pbuf *p)
 		}
 	}
 
-	if (len < 60)
-		len = 60;
-	len += dev->net_hdr_size;
+	tx->desc[tx->last % tx->size].addr = tx->pbuffs[avail % tx->size] & 0xFFFFFFFF;
+	tx->desc[tx->last % tx->size].len = dev->net_hdr_size;
+	tx->desc[tx->last % tx->size].flags = VIRTQ_DESC_F_NEXT;
+	tx->desc[tx->last % tx->size].next = (tx->last + 1) % tx->size;
+	tx->avail->ring[avail % tx->size] = tx->last % tx->size;
+	tx->last++;
 
-	tx->desc[avail % tx->size].addr = tx->pbuffs[avail % tx->size];
-	tx->desc[avail % tx->size].len = len;
-	tx->desc[avail % tx->size].flags = 0;
-	tx->avail->ring[avail % tx->size] = avail % tx->size;
+	tx->desc[tx->last % tx->size].addr = (tx->pbuffs[avail % tx->size] + dev->net_hdr_size) & 0xFFFFFFFF;
+	tx->desc[tx->last % tx->size].len = len;
+	tx->desc[tx->last % tx->size].flags = 0;
 	avail++;
-
+	tx->last++;
 	MB();
 	tx->avail->idx = avail;
 	MB();
-	mutexUnlock(dev->tx_lock);
 
 	if (!tx->used->flags)
 		virtio_pciNetNotify(dev, tx);
+	mutexUnlock(dev->tx_lock);
 	return ERR_OK;
 }
 
@@ -491,7 +495,6 @@ static int virtio_pciInitDevice(virtio_pci_device_t *dev)
 	int i;
 	unsigned int base, size, idx;
 
-	TRACE("%s DEVICE", dev->pci_dev.revision ? "MODERN" : "LEGACY");
 	if (!dev->pci_dev.revision)
 		dev->legacy = 1;
 	else
@@ -536,8 +539,8 @@ static int virtio_pciInitDevice(virtio_pci_device_t *dev)
 					return -ENOMEM;
 
 				/* if there is mm bar we assume device is transitional */
-				//if (dev->legacy)
-				//	dev->legacy = 0;
+				if (dev->legacy)
+					dev->legacy = 0;
 			}
 		}
 	}
@@ -565,6 +568,8 @@ static int virtio_pciInitDevice(virtio_pci_device_t *dev)
 	virtio_pciSetStatus(dev, VIRTIO_RST);
 	virtio_pciSetStatus(dev, VIRTIO_ACK);
 	virtio_pciSetStatus(dev, VIRTIO_DRV);
+
+	TRACE("%s DEVICE", !dev->legacy ? (dev->pci_dev.revision ? "MODERN" : "TRANSITIONAL") : "LEGACY");
 
 	return EOK;
 }
@@ -599,9 +604,8 @@ static void virtio_irqThread(void *virtio_pci_net_dev)
 
 	while (1) {
 		mutexLock(dev->rx_lock);
-		while (!dev->isr_status) {
+		while (!dev->isr_status)
 			condWait(dev->rx_cond, dev->rx_lock, 0);
-		}
 
 		virtio_netRefillRx(dev);
 
@@ -709,6 +713,9 @@ static int virtio_pciNetCompleteInitLegacy(virtio_pci_net_device_t *dev)
 	dev->rx.size = VIRTQ_MAX_SIZE;
 	dev->tx.size = VIRTQ_MAX_SIZE;
 
+	dev->rx.buff_size = VIRTIO_BUFF_SIZE;
+	dev->tx.buff_size = VIRTIO_BUFF_SIZE;
+
 	dev->rx.vbuffs = calloc(VIRTQ_MAX_SIZE, sizeof(addr_t));
 	dev->rx.pbuffs = calloc(VIRTQ_MAX_SIZE, sizeof(addr_t));
 	dev->tx.vbuffs = calloc(VIRTQ_MAX_SIZE, sizeof(addr_t));
@@ -743,18 +750,13 @@ static int virtio_pciNetCompleteInitLegacy(virtio_pci_net_device_t *dev)
 //	offset +=2;
 //	dev->net_cfg->mtu = inw((void *)(base + offset));
 
-
-	MB();
 	outw((void *)(base + VIRTIO_CFG_VQ_SEL), dev->rx.index);
 	MB();
 	outl((void *)(base + VIRTIO_CFG_VQ_ADDR), va2pa(rx) / _PAGE_SIZE);
 	MB();
-	TRACE("virq 0 0x%x", inl((void *)(base + VIRTIO_CFG_VQ_ADDR)));
 	outw((void *)(base + VIRTIO_CFG_VQ_SEL), dev->tx.index);
 	MB();
 	outl((void *)(base + VIRTIO_CFG_VQ_ADDR), va2pa(tx) / _PAGE_SIZE);
-	MB();
-	TRACE("virq 1 0x%x", inl((void *)(base + VIRTIO_CFG_VQ_ADDR)));
 	return EOK;
 }
 
@@ -789,6 +791,7 @@ static int virtio_pciNetInitDevice(virtio_pci_net_device_t *dev)
 
 	/* tell the device that we are ready for action */
 	virtio_pciSetStatus(VIRTIO_PCI(dev), VIRTIO_DRV_OK);
+
 	return res;
 }
 
@@ -797,7 +800,7 @@ static int virtio_netifInit(struct netif *netif, char *cfg)
 {
 	int i, res = -ENODEV;
 	virtio_pci_net_device_t *net_dev;
-	platformctl_t pctl = { 0 };
+	platformctl_t pctl = { 0 }, bm = { 0 };
 
 	netif->linkoutput = virtio_netifOutput;
 
@@ -811,8 +814,22 @@ static int virtio_netifInit(struct netif *netif, char *cfg)
 
 	for (i = 0; i < sizeof(virtio_pci_tbl)/sizeof(virtio_pci_tbl[0]); i++) {
 		pctl.pci.id = virtio_pci_tbl[i];
+		/* find device */
 		if ((res = platformctl(&pctl)) != EOK)
 			continue;
+
+		bm.action = pctl_set;
+		bm.type = pctl_busmaster;
+		bm.busmaster.enable = 1;
+		bm.busmaster.dev = pctl.pci.dev;
+
+		/* set busmaster */
+		if((res = platformctl(&bm)))
+			return res;
+
+		/* fetch again */
+		if ((res = platformctl(&pctl)))
+			return res;
 
 		net_dev->virtio_pci_dev.pci_dev = pctl.pci.dev;
 

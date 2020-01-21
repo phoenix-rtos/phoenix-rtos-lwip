@@ -59,7 +59,7 @@ struct virtio_pci_cap {
 	uint8_t padding[3]; /* Pad to full dword. */
 	uint32_t offset; 	/* Offset within bar. */
 	uint32_t length; 	/* Length of the structure, in bytes. */
-};
+}__attribute__((packed));
 
 
 struct virtio_pci_common_cfg {
@@ -146,7 +146,7 @@ struct virtq_desc {
 #define VIRTQ_DESC_F_INDIRECT 4
 	volatile uint16_t flags;
 	volatile uint16_t next;
-};
+}__attribute__((packed));
 
 #define VIRTQ_MAX_SIZE 256
 
@@ -156,7 +156,7 @@ struct virtq_avail {
 	volatile uint16_t idx;
 	volatile uint16_t ring[VIRTQ_MAX_SIZE];
 	volatile uint16_t used_event; /* Only if VIRTIO_F_EVENT_IDX */
-};
+} __attribute__((packed));
 
 /* le32 is used here for ids for padding reasons. */
 struct virtq_used_elem {
@@ -164,7 +164,7 @@ struct virtq_used_elem {
 	uint32_t id;
 	/* Total length of the descriptor chain which was used (written to) */
 	uint32_t len;
-};
+} __attribute__((packed));
 
 struct virtq_used {
 #define VIRTQ_USED_F_NO_NOTIFY  1
@@ -172,7 +172,7 @@ struct virtq_used {
 	volatile uint16_t idx;
 	volatile struct virtq_used_elem ring[VIRTQ_MAX_SIZE];
 	volatile uint16_t avail_event; /* Only if VIRTIO_F_EVENT_IDX */
-};
+} __attribute__((packed));
 
 struct virtq {
 	struct virtq_desc *desc;
@@ -238,6 +238,6 @@ struct virtio_net_hdr {
 	uint16_t csum_start;
 	uint16_t csum_offset;
 	uint16_t num_buffers;
-};
+} __attribute__((packed));
 
 #endif /* _LIBVIRTIO_H_ */
