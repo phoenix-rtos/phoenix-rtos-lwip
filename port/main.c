@@ -23,6 +23,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
+#include <sys/stat.h>
 
 #include "netif.h"
 #include "route.h"
@@ -117,71 +118,70 @@ static void mainLoop(void)
 {
 	msg_t msg = {0};
 	unsigned int rid;
-	unsigned port;
+	int port;
 	int error;
-	oid_t route_oid = {0, 0};
-	oid_t status_oid = {0, 1};
-	oid_t pf_oid = {0, 2};
+	id_t route_id = 0;
+	id_t status_id = 1;
+	id_t pf_id = 2;
 
-	for (;;) {
-		sleep(5);
-	}
-
-	if (portCreate(&port) < 0) {
-		printf("phoenix-rtos-lwip: can't create port\n");
+	if ((port = portCreate(0)) < 0) {
+		debug("phoenix-rtos-lwip: can't create port\n");
 		return;
 	}
 
-	route_oid.port = port;
-	status_oid.port = port;
-	pf_oid.port = port;
-
-#if 0
-	if (create_dev(&route_oid, "/dev/route") < 0) {
-		printf("phoenix-rtos-lwip: can't create /dev/route\n");
+	if (create_dev(port, route_id, "/dev/route", S_IFCHR) < 0) {
+		debug("phoenix-rtos-lwip: can't create /dev/route\n");
 		return;
 	}
 
-	if (create_dev(&status_oid, "/dev/ifstatus") < 0) {
-		printf("phoenix-rtos-lwip: can't create /dev/ifstatus\n");
+	if (create_dev(port, status_id, "/dev/ifstatus", S_IFCHR) < 0) {
+		debug("phoenix-rtos-lwip: can't create /dev/ifstatus\n");
 		return;
 	}
 
-	if (create_dev(&pf_oid, "/dev/pf") < 0) {
-		printf("phoenix-rtos-lwip: can't create /dev/pf\n");
+	if (create_dev(port, pf_id, "/dev/pf", S_IFCHR) < 0) {
+		debug("phoenix-rtos-lwip: can't create /dev/pf\n");
 		return;
 	}
-#endif
 
 	for (;;) {
 		if (msgRecv(port, &msg, &rid) < 0)
 			continue;
 
+		error = EOK;
+
 		switch (msg.type) {
+		case mtOpen:
+			msg.o.open = msg.object;
+			break;
+		case mtClose:
+			break;
 		case mtRead:
-				if (msg.object == route_oid.id)
-					error = writeRoutes(msg.o.data, msg.o.size, msg.i.io.offs);
-				else if (msg.object == status_oid.id)
-					error = writeStatus(msg.o.data, msg.o.size, msg.i.io.offs);
-				else
+				if (msg.object == route_id) {
+					msg.o.io = writeRoutes(msg.o.data, msg.o.size, msg.i.io.offs);
+				}
+				else if (msg.object == status_id) {
+					msg.o.io = writeStatus(msg.o.data, msg.o.size, msg.i.io.offs);
+				}
+				else {
+					msg.o.io = 0;
 					error = -EINVAL;
+				}
 			break;
 
 		case mtWrite:
-				if (msg.object == pf_oid.id)
-					error = readPf(msg.i.data, msg.i.size, msg.i.io.offs);
-				else
+				if (msg.object == pf_id) {
+					msg.o.io = readPf(msg.i.data, msg.i.size, msg.i.io.offs);
+				}
+				else {
+					msg.o.io = 0;
 					error = -EINVAL;
-				error = EOK;
+				}
 			break;
 
 		default:
+			error = -EINVAL;
 			break;
-		}
-
-		if (error >= 0) {
-			msg.o.io = error;
-			error = EOK;
 		}
 
 		msgRespond(port, error, &msg, rid);
