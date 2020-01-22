@@ -104,9 +104,6 @@ typedef struct virtio_pci_net_device {
 } virtio_pci_net_device_t;
 
 
-static uint8_t virtio_pciGetStatus(virtio_pci_device_t *dev);
-static uint8_t virtio_pciGetIsrStatus(virtio_pci_device_t *dev);
-
 int virtio_pciGetCap(virtio_pci_device_t *dev, const uint8_t type, void **data, const size_t sz)
 {
 	struct virtio_pci_cap *cap;
@@ -293,7 +290,7 @@ static void virtio_pciNetNotify(virtio_pci_net_device_t *dev, struct virtq *virt
 
 	base = (uint32_t)VIRTIO_PCI(dev)->pci_dev.resources[0].base;
 	if (VIRTIO_PCI(dev)->legacy)
-		outw((void *)(base + VIRTIO_CFG_VQ_NOTI), 1);
+		outw((void *)(base + VIRTIO_CFG_VQ_NOTI), virtq->index);
 	else
 		*virtq->notify_addr = virtq->index;
 	MB();
@@ -311,7 +308,7 @@ static err_t virtio_netifOutput(struct netif *netif, struct pbuf *p)
 	avail = tx->avail->idx;
 
 	/* TODO: clear used descriptors */
-	TRACE("output avail %u used %u", avail, tx->used->idx % tx->size);
+	TRACE("sending %u", p->tot_len);
 	if ((avail + tx->size / 2 + 1) % tx->size == tx->used->idx % tx->size) {
 		/* tx ring is full. TODO: handle it */
 		DTRACE("tx full");
@@ -388,9 +385,10 @@ static void virtio_netRefillRx(virtio_pci_net_device_t *dev)
 
 	used = rx->used->idx;
 	while ((rx->last) % rx->size != used % rx->size) {
-		TRACE("incoming used idx %u last id %u packet id %u len %u", used, rx->last, rx->used->ring[rx->last % rx->size].id, rx->used->ring[rx->last % rx->size].len);
+		TRACE("received len %u",rx->used->ring[rx->last % rx->size].len - dev->net_hdr_size);
 
 		if (VIRTIO_DEV(dev)->features & VIRTIO_NET_F_MRG_RXBUF) {
+			/* TODO: handle it */
 			hdr = (struct virtio_net_hdr *)rx->vbuffs[rx->last % rx->size];
 			if (hdr->num_buffers > 1)
 				DTRACE("DANGER DANGER - SPLIT PACKET");
@@ -398,7 +396,6 @@ static void virtio_netRefillRx(virtio_pci_net_device_t *dev)
 
 		pc = mem_malloc(sizeof(*pc));
 		pc->custom_free_function = virtio_freePbuf;
-		//TRACE("vbuff 0x%p", rx->vbuffs[rx->last % rx->size] + 12);
 		p = pbuf_alloced_custom(PBUF_RAW, 
 				rx->used->ring[rx->last % rx->size].len - dev->net_hdr_size,
 				PBUF_REF, pc,
@@ -479,16 +476,6 @@ static void virtio_pciSetStatus(virtio_pci_device_t *dev, uint8_t status)
 	MB();
 }
 
-static uint8_t virtio_pciGetStatus(virtio_pci_device_t *dev)
-{
-	uint32_t base;
-
-	base = (uint32_t)VIRTIO_PCI(dev)->pci_dev.resources[0].base;
-	if (dev->legacy)
-		return inb((void *)(base + VIRTIO_CFG_DEVICE_STATUS));
-	return dev->virtio_dev.common_cfg->device_status;
-}
-
 
 static int virtio_pciInitDevice(virtio_pci_device_t *dev)
 {
@@ -506,8 +493,6 @@ static int virtio_pciInitDevice(virtio_pci_device_t *dev)
 	for (i = 0; i < 6; i++) {
 		/* check if bar is used */
 		if (dev->pci_dev.resources[i].base && dev->pci_dev.resources[i].limit) {
-			TRACE("BAR[%d] = b 0x%lx f 0x%x l 0x%lx", i, dev->pci_dev.resources[i].base,
-				dev->pci_dev.resources[i].flags, dev->pci_dev.resources[i].limit);
 			/* check if it is mm bar */
 			if (!(dev->pci_dev.resources[i].flags & 1)) {
 
@@ -569,7 +554,7 @@ static int virtio_pciInitDevice(virtio_pci_device_t *dev)
 	virtio_pciSetStatus(dev, VIRTIO_ACK);
 	virtio_pciSetStatus(dev, VIRTIO_DRV);
 
-	TRACE("%s DEVICE", !dev->legacy ? (dev->pci_dev.revision ? "MODERN" : "TRANSITIONAL") : "LEGACY");
+	TRACE("Virtio-net %s device", !dev->legacy ? (dev->pci_dev.revision ? "modern" : "transitional") : "legacy");
 
 	return EOK;
 }
@@ -610,8 +595,8 @@ static void virtio_irqThread(void *virtio_pci_net_dev)
 		virtio_netRefillRx(dev);
 
 		dev->isr_status = 0;
-		dev->rx.avail->flags &= ~VIRTQ_AVAIL_F_NO_INTERRUPT;
 		MB();
+		dev->rx.avail->flags &= ~VIRTQ_AVAIL_F_NO_INTERRUPT;
 		mutexUnlock(dev->rx_lock);
 	}
 }
@@ -637,7 +622,6 @@ static int virtio_pciNetCompleteInit(virtio_pci_net_device_t *dev)
 	else
 		dev->net_hdr_size = VIRTIO_NET_HDR_SIZE;
 
-	TRACE("features 0x%x", VIRTIO_DEV(dev)->common_cfg->device_feature);
 	if ((VIRTIO_DEV(dev)->common_cfg->device_feature & features) != features) {
 		DTRACE("Unsupported device");
 		VIRTIO_DEV(dev)->common_cfg->device_status = VIRTIO_FAILED;
@@ -676,7 +660,7 @@ static int virtio_pciNetCompleteInitLegacy(virtio_pci_net_device_t *dev)
 		dev->net_hdr_size = VIRTIO_NET_HDR_SIZE;
 
 	outl((void *)(base + VIRTIO_CFG_DRIVER_FEATURE), VIRTIO_DEV(dev)->features);
-	TRACE("negotiated features 0x%x should be 0x%llx", inl((void *)(base + VIRTIO_CFG_DRIVER_FEATURE)), VIRTIO_DEV(dev)->features);
+	TRACE("selected 0x%x wanted 0x%llx", inl((void *)(base + VIRTIO_CFG_DRIVER_FEATURE)), VIRTIO_DEV(dev)->features);
 
 	rx = mmap(NULL, 3 * _PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_UNCACHED, FD_CONTIGUOUS, 0);
 	tx = mmap(NULL, 3 * _PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_UNCACHED, FD_CONTIGUOUS, 0);
@@ -745,10 +729,6 @@ static int virtio_pciNetCompleteInitLegacy(virtio_pci_net_device_t *dev)
 	dev->net_cfg->mac[4] = inb((void *)(base + offset++));
 	dev->net_cfg->mac[5] = inb((void *)(base + offset++));
 	dev->net_cfg->status = inw((void *)(base + offset));
-//	offset +=2;
-//	dev->net_cfg->max_virtqueue_pairs = inw((void *)(base + offset));
-//	offset +=2;
-//	dev->net_cfg->mtu = inw((void *)(base + offset));
 
 	outw((void *)(base + VIRTIO_CFG_VQ_SEL), dev->rx.index);
 	MB();
