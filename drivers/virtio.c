@@ -309,7 +309,7 @@ static err_t virtio_netifOutput(struct netif *netif, struct pbuf *p)
 
 	/* TODO: clear used descriptors */
 	TRACE("sending %u", p->tot_len);
-	if ((avail + tx->size / 2 + 1) % tx->size == tx->used->idx % tx->size) {
+	if ((avail + tx->size / 2) % tx->size == tx->used->idx % tx->size) {
 		/* tx ring is full. TODO: handle it */
 		DTRACE("tx full");
 		mutexUnlock(dev->tx_lock);
@@ -816,12 +816,11 @@ static int virtio_netifInit(struct netif *netif, char *cfg)
 		if ((res = virtio_pciNetInitDevice(net_dev)))
 			return res;
 
+		memcpy(net_dev->netif->hwaddr, net_dev->net_cfg->mac, net_dev->netif->hwaddr_len);
+		net_dev->netif->mtu = 1500;
+
 		break;
 	}
-
-	memcpy(net_dev->netif->hwaddr, net_dev->net_cfg->mac, net_dev->netif->hwaddr_len);
-
-	net_dev->netif->mtu = 1500;
 
 	DTRACE("virtio init %s [ %d ]", !res ? "OK" : "FAILED", res);
 	return res;
