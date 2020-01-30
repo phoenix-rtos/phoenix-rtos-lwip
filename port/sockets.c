@@ -24,7 +24,7 @@
 
 #include "netif.h"
 
-#define LOG_INFO(fmt, ...) printf("%s:%d  %s(): " fmt "\n", __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__)
+#define LOG_INFO(fmt, ...) // printf("%s:%d  %s(): " fmt "\n", __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__)
 #define LOG_ERROR(fmt, ...) printf("%s:%d  %s(): " fmt "\n", __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__)
 
 
@@ -97,7 +97,7 @@ static int do_getnameinfo(const struct sockaddr *sa, socklen_t addrlen, char *ho
 }
 
 
-static int socket_create(id_t *id, struct tpcb *pcb, int connected)
+static int socket_create(id_t *id, struct tcp_pcb *pcb, int connected)
 {
 	LOG_INFO("entered");
 
@@ -147,6 +147,11 @@ static err_t socket_received(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, er
 	LOG_INFO("entered id=%llu", socket->id);
 	int event;
 
+	if (err) {
+		LOG_ERROR("error: %d", err);
+		return err;
+	}
+
 	if (p != NULL) {
 		event = POLLIN;
 		LOG_INFO("got data (%d) :)", p->tot_len);
@@ -161,7 +166,7 @@ static err_t socket_received(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, er
 	}
 	else {
 		event = POLLHUP;
-		LOG_ERROR("received empty pbuf");
+		LOG_INFO("received empty pbuf");
 		/* TODO: mark as closed? */
 		socket->connected = 0;
 		socket->error = ERR_CONN;
@@ -181,27 +186,6 @@ static err_t socket_transmitted(void *arg, struct tcp_pcb *tpcb, uint16_t len)
 }
 
 
-static err_t socket_accepted(void *arg, struct tcp_pcb *new, err_t err)
-{
-	socket_t *socket = arg;
-	LOG_INFO("entered id=%llu", socket->id);
-	int i;
-
-	for (i = 0; i < socket->backlog; ++i) {
-		if (socket->connections[i] == NULL) {
-			socket->connections[i] = new;
-			tcp_backlog_delayed(new);
-			portEvent(socket_common.portfd, socket->id, POLLIN);
-			LOG_INFO("registered new connection :)");
-			return ERR_OK;
-		}
-	}
-
-	LOG_ERROR("rejected :(");
-	return ERR_MEM;
-}
-
-
 static void socket_error(void *arg, err_t err)
 {
 	socket_t *socket = arg;
@@ -213,10 +197,53 @@ static void socket_error(void *arg, err_t err)
 }
 
 
+static err_t socket_accepted(void *arg, struct tcp_pcb *new, err_t err)
+{
+	socket_t *socket = arg, *newsocket;
+	id_t newsockid;
+	int i;
+
+	LOG_INFO("entered id=%llu", socket->id);
+
+	if (err) {
+		LOG_ERROR("error: %d", err);
+	}
+
+	for (i = 0; i < socket->backlog; ++i) {
+		if (socket->connections[i] == NULL) {
+			if (socket_create(&newsockid, new, 1) != EOK)
+				break;
+
+			newsocket = socket_get(newsockid);
+
+			tcp_recv(new, socket_received);
+			tcp_sent(new, socket_transmitted);
+			tcp_err(new, socket_error);
+
+			socket->connections[i] = newsocket;
+
+			tcp_backlog_delayed(new);
+			portEvent(socket_common.portfd, socket->id, POLLIN);
+			LOG_INFO("registered new connection :)");
+			return ERR_OK;
+		}
+	}
+
+	LOG_ERROR("rejected :(");
+	tcp_abort(new);
+	return ERR_ABRT;
+}
+
+
 static err_t socket_connected(void *arg, struct tcp_pcb *tpcb, err_t err)
 {
 	socket_t *socket = arg;
 	LOG_INFO("entered id=%llu, err = %s", socket->id, lwip_strerr(err));
+
+	if (err) {
+		LOG_ERROR("error: %d", err);
+	}
+
 	tcp_recv(tpcb, socket_received);
 	tcp_sent(tpcb, socket_transmitted);
 	tcp_err(tpcb, socket_error);
@@ -347,22 +374,19 @@ static int socket_accept(socket_t *socket, id_t *newsock, struct sockaddr *addre
 	LOG_INFO("entered id=%llu", socket->id);
 
 	int i, retval = -EAGAIN;
-	struct tcp_pcb *new;
+	socket_t *new;
 
 	if ((new = socket->connections[0]) != NULL) {
 		LOG_INFO("got connection :)");
-		if ((retval = socket_create(newsock, new, 1)) == EOK) {
-			tcp_backlog_accepted(new);
+		retval = EOK;
 
-			tcp_recv(new, socket_received);
-			tcp_sent(new, socket_transmitted);
-			tcp_err(new, socket_error);
-			socket->connections[0] = NULL;
-			for (i = 0; i < socket->backlog - 1; ++i) {
-				if ((socket->connections[i] = socket->connections[i + 1]) == NULL)
-					break;
-			}
-		}
+		*newsock = new->id;
+		tcp_backlog_accepted(new->tpcb);
+
+		for (i = 0; i < socket->backlog - 1; ++i)
+			socket->connections[i] = socket->connections[i + 1];
+
+		socket->connections[i] = NULL;
 	}
 
 	return retval;
@@ -808,12 +832,11 @@ static void socket_thread(void *arg)
 
 		error = EOK;
 
+		LOCK_TCPIP_CORE();
 		if (msg.object == (id_t)-1) {
 			switch (msg.type) {
 			case mtOpen:
-				LOCK_TCPIP_CORE();
 				error = socket_create(&msg.o.open, NULL, 0);
-				UNLOCK_TCPIP_CORE();
 				break;
 			case mtClose:
 				LOG_ERROR("invalid close", msg.type);
@@ -828,7 +851,6 @@ static void socket_thread(void *arg)
 			error = -ENOENT;
 		}
 		else {
-			LOCK_TCPIP_CORE();
 			switch (msg.type) {
 			case mtBind:
 				error = socket_bind(socket, msg.i.data, msg.i.size);
@@ -974,8 +996,8 @@ static void socket_thread(void *arg)
 				error = -EINVAL;
 				break;
 			}
-			UNLOCK_TCPIP_CORE();
 		}
+		UNLOCK_TCPIP_CORE();
 
 		msgRespond(socket_common.portfd, error, &msg, rid);
 	}
