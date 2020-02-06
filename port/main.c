@@ -153,8 +153,11 @@ static void mainLoop(void)
 
 		switch (msg.type) {
 		case mtRead:
-				if (msg.i.io.oid.id == route_oid.id)
+				if (msg.i.io.oid.id == route_oid.id) {
+					mutexLock(rt_table.lock);
 					msg.o.io.err = writeRoutes(msg.o.data, msg.o.size, msg.i.io.offs);
+					mutexUnlock(rt_table.lock);
+				}
 				else if (msg.i.io.oid.id == status_oid.id)
 					msg.o.io.err = writeStatus(msg.o.data, msg.o.size, msg.i.io.offs);
 				else
