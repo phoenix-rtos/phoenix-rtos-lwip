@@ -32,7 +32,7 @@
 #include "virtio.h"
 
 //#define TRACE(msg, ...)
-#define TRACE(msg, ...) do { printf(__FILE__ ":%d - " msg "\n", __LINE__, ##__VA_ARGS__ ); } while (0)
+#define TRACE(msg, ...) //do { printf(__FILE__ ":%d - " msg "\n", __LINE__, ##__VA_ARGS__ ); } while (0)
 #define DTRACE(msg, ...) do { printf(__FILE__ ":%d - " msg "\n", __LINE__, ##__VA_ARGS__ ); } while (0)
 
 #define print_hdr(msg, hdr) do { \
