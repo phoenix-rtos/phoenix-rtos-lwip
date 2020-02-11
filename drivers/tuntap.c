@@ -24,6 +24,7 @@
 #include <sys/threads.h>
 #include <sys/msg.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
 #include <syslog.h>
 #include <posix/utils.h>
 
@@ -43,7 +44,7 @@ typedef struct
 	int offset;
 
 	enum { DEV_TAP, DEV_TUN } type;
-	unsigned port;
+	int port;
 } tuntap_priv_t;
 
 
@@ -140,12 +141,15 @@ static void tuntap_mainLoop(void* _state)
 	tuntap_priv_t *state = _state;
 	msg_t msg;
 	unsigned rid;
+	int error;
 
 	while (1) {
 		if (msgRecv(state->port, &msg, &rid) < 0) {
 			usleep(100 * 1000);
 			continue;
 		}
+
+		error = EOK;
 
 		mutexLock(state->lock);
 		switch (msg.type) {
@@ -156,22 +160,39 @@ static void tuntap_mainLoop(void* _state)
 			state->netif->flags &= ~NETIF_FLAG_LINK_UP;
 			break;
 		case mtWrite:
-			msg.o.io.err = _tuntap_write(state, msg.i.data, msg.i.size);
+			if ((msg.o.io = _tuntap_write(state, msg.i.data, msg.i.size)) < 0) {
+				error = msg.o.io;
+				msg.o.io = 0;
+			}
 			break;
 		case mtRead:
-			msg.o.io.err = _tuntap_read(state, msg.o.data, msg.o.size);
+			if ((msg.o.io = _tuntap_read(state, msg.o.data, msg.o.size)) < 0) {
+				error = msg.o.io;
+				msg.o.io = 0;
+			}
 			break;
 		case mtGetAttr:
-			if (msg.i.attr.type == atPollStatus) {
-				msg.o.attr.val = POLLOUT;
-				if (!fifo_is_empty(state->queue))
-					msg.o.attr.val |= POLLIN;
+			if (msg.i.attr == atEvents) {
+				if (msg.o.size >= sizeof(int)) {
+					*(int *)msg.o.data = POLLOUT;
+					if (!fifo_is_empty(state->queue))
+						*(int *)msg.o.data |= POLLIN;
+				}
+				else {
+					error = -EINVAL;
+				}
 			}
+			else {
+				error = -EINVAL;
+			}
+			break;
+		default:
+			error = -EOPNOTSUPP;
 			break;
 		}
 		mutexUnlock(state->lock);
 
-		msgRespond(state->port, &msg, rid);
+		msgRespond(state->port, error, &msg, rid);
 	}
 
 	endthread();
@@ -180,7 +201,6 @@ static void tuntap_mainLoop(void* _state)
 
 static int _tuntap_init(struct netif *netif, char *cfg)
 {
-	oid_t dev;
 	tuntap_priv_t *state = netif->state;//malloc(sizeof(tuntap_priv_t));
 	if (state == NULL)
 		return ERR_MEM;
@@ -199,15 +219,14 @@ static int _tuntap_init(struct netif *netif, char *cfg)
 	if (state->lock < 0)
 		return ERR_MEM;
 
-	portCreate(&state->port);
-	if (!state->port)
+	state->port = portCreate(0);
+	if (state->port < 0)
 		return ERR_MEM;
 
 	state->netif = netif;
 	state->offset = 0;
 
-	dev.port = state->port;
-	create_dev(&dev, cfg);
+	create_dev(state->port, 0, cfg, S_IFCHR);
 
 	beginthread(tuntap_mainLoop, TUN_PRIO, state->stacks[0], sizeof(state->stacks[0]), state);
 	beginthread(tuntap_mainLoop, TUN_PRIO, state->stacks[1], sizeof(state->stacks[1]), state);
