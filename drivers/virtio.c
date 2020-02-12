@@ -196,13 +196,13 @@ static int virtio_allocVirtqDesc(struct virtq *virtq)
 	int i;
 
 	for (i = 0; i < virtq->size - 1; i += 2) {
-		virtq->vbuffs[i] = (addr_t)mmap(NULL, 2 * _PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_UNCACHED | MAP_ANONYMOUS, -1, 0);
+		virtq->vbuffs[i] = (addr_t)mmap(NULL, _PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_UNCACHED | MAP_ANONYMOUS, -1, 0);
 
 		if (!virtq->vbuffs[i])
 			return -ENOMEM;
 
-		memset((void *)virtq->vbuffs[i], 0, 2 * _PAGE_SIZE);
-		virtq->vbuffs[i + 1] = (addr_t)(virtq->vbuffs[i] + _PAGE_SIZE);
+		memset((void *)virtq->vbuffs[i], 0, _PAGE_SIZE);
+		virtq->vbuffs[i + 1] = (addr_t)(virtq->vbuffs[i] + (_PAGE_SIZE / 2));
 		virtq->pbuffs[i] = (addr_t)va2pa((void *)virtq->vbuffs[i]);
 		virtq->pbuffs[i + 1] = (addr_t)va2pa((void *)virtq->vbuffs[i + 1]);
 	}
