@@ -185,6 +185,8 @@ struct virtq {
 	volatile uint16_t *notify_addr;
 
 	uint32_t buff_size;
+	uint32_t buff_cnt;
+	uint32_t buff_avail;
 	addr_t  *pbuffs;
 	addr_t  *vbuffs;
 };

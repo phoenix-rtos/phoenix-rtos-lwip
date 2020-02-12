@@ -31,8 +31,8 @@
 
 #include "virtio.h"
 
-//#define TRACE(msg, ...)
-#define TRACE(msg, ...) //do { printf(__FILE__ ":%d - " msg "\n", __LINE__, ##__VA_ARGS__ ); } while (0)
+#define TRACE(msg, ...)
+//#define TRACE(msg, ...) do { printf(__FILE__ ":%d - " msg "\n", __LINE__, ##__VA_ARGS__ ); } while (0)
 #define DTRACE(msg, ...) do { printf(__FILE__ ":%d - " msg "\n", __LINE__, ##__VA_ARGS__ ); } while (0)
 
 #define print_hdr(msg, hdr) do { \
@@ -195,7 +195,7 @@ static int virtio_allocVirtqDesc(struct virtq *virtq)
 {
 	int i;
 
-	for (i = 0; i < virtq->size - 1; i += 2) {
+	for (i = 0; i < virtq->buff_cnt - 1; i += 2) {
 		virtq->vbuffs[i] = (addr_t)mmap(NULL, _PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_UNCACHED | MAP_ANONYMOUS, -1, 0);
 
 		if (!virtq->vbuffs[i])
@@ -225,8 +225,10 @@ static int virtio_allocVirtq(struct virtq *virtq, const uint16_t idx, const uint
 	virtq->avail = mmap(NULL, _PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_UNCACHED | MAP_ANONYMOUS, -1, 0);
 	virtq->used = mmap(NULL, _PAGE_SIZE, PROT_READ | PROT_WRITE, MAP_UNCACHED | MAP_ANONYMOUS, -1, 0);
 
-	virtq->vbuffs = calloc(VIRTQ_MAX_SIZE, sizeof(addr_t));
-	virtq->pbuffs = calloc(VIRTQ_MAX_SIZE, sizeof(addr_t));
+	virtq->buff_cnt = VIRTQ_MAX_SIZE / 8;
+	virtq->buff_avail = VIRTQ_MAX_SIZE / 8;
+	virtq->vbuffs = calloc(virtq->buff_cnt, sizeof(addr_t));
+	virtq->pbuffs = calloc(virtq->buff_cnt, sizeof(addr_t));
 
 	if (!virtq->desc || !virtq->avail || !virtq->used || !virtq->pbuffs || !virtq->vbuffs) {
 		munmap(virtq->desc, _PAGE_SIZE);
@@ -301,15 +303,18 @@ static err_t virtio_netifOutput(struct netif *netif, struct pbuf *p)
 {
 	virtio_pci_net_device_t *dev = (virtio_pci_net_device_t *)netif->state;
 	struct virtq *tx = &dev->tx;
-	uint32_t tot_len, avail, len = 0;
+	uint32_t tot_len, avail, used, len = 0;
 	struct virtio_net_hdr *hdr;
 
 	mutexLock(dev->tx_lock);
 	avail = tx->avail->idx;
+	used = tx->used->idx;
+
+	tx->buff_avail = tx->buff_cnt - ((avail % tx->size) - (used % tx->size));
 
 	/* TODO: clear used descriptors */
 	TRACE("sending %u", p->tot_len);
-	if ((avail + tx->size / 2) % tx->size == tx->used->idx % tx->size) {
+	if (!tx->buff_avail) {
 		/* tx ring is full. TODO: handle it */
 		DTRACE("tx full");
 		mutexUnlock(dev->tx_lock);
@@ -324,7 +329,7 @@ static err_t virtio_netifOutput(struct netif *netif, struct pbuf *p)
 	}
 
 	tot_len = p->tot_len;
-	hdr = (struct virtio_net_hdr *)tx->vbuffs[avail % tx->size];
+	hdr = (struct virtio_net_hdr *)tx->vbuffs[(avail % tx->size) % tx->buff_cnt];
 	memset(hdr, 0, sizeof(struct virtio_net_hdr));
 	hdr->flags = 0;
 	hdr->gso_type = VIRTIO_NET_HDR_GSO_NONE;
@@ -332,7 +337,7 @@ static err_t virtio_netifOutput(struct netif *netif, struct pbuf *p)
 
 	while (tot_len) {
 
-		memcpy((void *)(tx->vbuffs[avail % tx->size] + dev->net_hdr_size + len), p->payload, p->len);
+		memcpy((void *)(tx->vbuffs[(avail % tx->size) % tx->buff_cnt] + dev->net_hdr_size + len), p->payload, p->len);
 		tot_len -= p->len;
 		len += p->len;
 		if (tot_len) {
@@ -345,14 +350,14 @@ static err_t virtio_netifOutput(struct netif *netif, struct pbuf *p)
 		}
 	}
 
-	tx->desc[tx->last % tx->size].addr = tx->pbuffs[avail % tx->size] & 0xFFFFFFFF;
+	tx->desc[tx->last % tx->size].addr = tx->pbuffs[(avail % tx->size) % tx->buff_cnt] & 0xFFFFFFFF;
 	tx->desc[tx->last % tx->size].len = dev->net_hdr_size;
 	tx->desc[tx->last % tx->size].flags = VIRTQ_DESC_F_NEXT;
 	tx->desc[tx->last % tx->size].next = (tx->last + 1) % tx->size;
 	tx->avail->ring[avail % tx->size] = tx->last % tx->size;
 	tx->last++;
 
-	tx->desc[tx->last % tx->size].addr = (tx->pbuffs[avail % tx->size] + dev->net_hdr_size) & 0xFFFFFFFF;
+	tx->desc[tx->last % tx->size].addr = (tx->pbuffs[(avail % tx->size) % tx->buff_cnt] + dev->net_hdr_size) & 0xFFFFFFFF;
 	tx->desc[tx->last % tx->size].len = len;
 	tx->desc[tx->last % tx->size].flags = 0;
 	avail++;
@@ -384,12 +389,20 @@ static void virtio_netRefillRx(virtio_pci_net_device_t *dev)
 	uint16_t used, avail, cnt = 0;
 
 	used = rx->used->idx;
+	avail = rx->avail->idx;
+	rx->buff_avail = rx->buff_cnt - ((avail % rx->size) - (used % rx->size));
 	while ((rx->last) % rx->size != used % rx->size) {
+
+		if (!rx->buff_avail) {
+			TRACE("rx no avail");
+			break;
+		}
+
 		TRACE("received len %u",rx->used->ring[rx->last % rx->size].len - dev->net_hdr_size);
 
 		if (VIRTIO_DEV(dev)->features & VIRTIO_NET_F_MRG_RXBUF) {
 			/* TODO: handle it */
-			hdr = (struct virtio_net_hdr *)rx->vbuffs[rx->last % rx->size];
+			hdr = (struct virtio_net_hdr *)rx->vbuffs[(rx->last % rx->size) % rx->buff_cnt];
 			if (hdr->num_buffers > 1)
 				DTRACE("DANGER DANGER - SPLIT PACKET");
 		}
@@ -399,7 +412,7 @@ static void virtio_netRefillRx(virtio_pci_net_device_t *dev)
 		p = pbuf_alloced_custom(PBUF_RAW, 
 				rx->used->ring[rx->last % rx->size].len - dev->net_hdr_size,
 				PBUF_REF, pc,
-				(void *)rx->vbuffs[rx->last % rx->size] + dev->net_hdr_size,
+				(void *)rx->vbuffs[(rx->last % rx->size) % rx->buff_cnt] + dev->net_hdr_size,
 				VIRTIO_BUFF_SIZE - dev->net_hdr_size);
 
 		if (p == NULL) {
@@ -416,6 +429,7 @@ static void virtio_netRefillRx(virtio_pci_net_device_t *dev)
 		rx->last++;
 		cnt++;
 		used = rx->used->idx;
+		rx->buff_avail = rx->buff_cnt - ((avail % rx->size) - (used % rx->size));
 	}
 
 	avail = rx->avail->idx + cnt;
@@ -437,15 +451,16 @@ static void virtio_netFillRx(virtio_pci_net_device_t *dev)
 		avail = rx->used->idx;
 		do {
 			/* prep rx buffs */
-			rx->desc[avail % rx->size].addr = rx->pbuffs[avail % rx->size] & 0xFFFFFFFF;
+			rx->desc[avail % rx->size].addr = rx->pbuffs[(avail % rx->size) % rx->buff_cnt] & 0xFFFFFFFF;
 			rx->desc[avail % rx->size].len = VIRTIO_BUFF_SIZE;
 			rx->desc[avail % rx->size].flags = VIRTQ_DESC_F_WRITE;
 			rx->avail->ring[avail % rx->size] = avail % rx->size;
 			avail++;
 		} while ((avail) % rx->size != rx->used->idx % rx->size);
 
+		rx->buff_avail = 0;
 		MB();
-		rx->avail->idx = avail - 1 % rx->size;
+		rx->avail->idx = rx->buff_cnt % rx->size;
 		MB();
 		if (!rx->used->flags)
 			virtio_pciNetNotify(dev, rx);
@@ -700,10 +715,15 @@ static int virtio_pciNetCompleteInitLegacy(virtio_pci_net_device_t *dev)
 	dev->rx.buff_size = VIRTIO_BUFF_SIZE;
 	dev->tx.buff_size = VIRTIO_BUFF_SIZE;
 
-	dev->rx.vbuffs = calloc(VIRTQ_MAX_SIZE, sizeof(addr_t));
-	dev->rx.pbuffs = calloc(VIRTQ_MAX_SIZE, sizeof(addr_t));
-	dev->tx.vbuffs = calloc(VIRTQ_MAX_SIZE, sizeof(addr_t));
-	dev->tx.pbuffs = calloc(VIRTQ_MAX_SIZE, sizeof(addr_t));
+	dev->rx.buff_cnt = VIRTQ_MAX_SIZE / 8;
+	dev->rx.buff_avail = VIRTQ_MAX_SIZE / 8;
+	dev->tx.buff_cnt = VIRTQ_MAX_SIZE / 8;
+	dev->tx.buff_avail = VIRTQ_MAX_SIZE / 8;
+
+	dev->rx.vbuffs = calloc(dev->rx.buff_cnt, sizeof(addr_t));
+	dev->rx.pbuffs = calloc(dev->rx.buff_cnt, sizeof(addr_t));
+	dev->tx.vbuffs = calloc(dev->tx.buff_cnt, sizeof(addr_t));
+	dev->tx.pbuffs = calloc(dev->tx.buff_cnt, sizeof(addr_t));
 
 	dev->rx.last = 0;
 	dev->tx.last = 0;
