@@ -31,6 +31,11 @@
 #define MAX_SOCKETS 4096
 #define SOCKET_INDEX(id) ((id) & (MAX_SOCKETS - 1))
 
+#define SOCK_BOUND (1 << 0)
+#define SOCK_LISTENING (1 << 1)
+#define SOCK_CONNECTING (1 << 2)
+#define SOCK_CONNECTED (1 << 3)
+
 enum { socket_tcp, socket_udp };
 
 typedef struct {
@@ -38,10 +43,11 @@ typedef struct {
 	int refs;
 	uint16_t inoffs;
 	struct pbuf *inbufs;
-	char type;
-	err_t error;
 
-	int connected;
+	unsigned char type;
+	unsigned char state;
+
+	err_t error;
 
 	int backlog;
 	void **connections;
@@ -97,7 +103,7 @@ static int do_getnameinfo(const struct sockaddr *sa, socklen_t addrlen, char *ho
 }
 
 
-static int socket_create(id_t *id, struct tcp_pcb *pcb, int connected)
+static int socket_create(id_t *id, struct tcp_pcb *pcb)
 {
 	LOG_INFO("entered");
 
@@ -108,7 +114,6 @@ static int socket_create(id_t *id, struct tcp_pcb *pcb, int connected)
 		return -ENOMEM;
 
 	socket->type = socket_tcp;
-	socket->connected = connected;
 	socket->error = ERR_OK;
 
 	if (pcb == NULL && (pcb = tcp_new()) == NULL) {
@@ -168,7 +173,7 @@ static err_t socket_received(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, er
 		event = POLLHUP;
 		LOG_INFO("received empty pbuf");
 		/* TODO: mark as closed? */
-		socket->connected = 0;
+		socket->state &= ~SOCK_CONNECTED;
 		socket->error = ERR_CONN;
 	}
 
@@ -191,7 +196,7 @@ static void socket_error(void *arg, err_t err)
 	socket_t *socket = arg;
 	LOG_ERROR("socket %llu: %s (%d)", socket->id, lwip_strerr(err), err);
 	socket->error = err;
-	socket->connected = 0;
+	socket->state &= ~SOCK_CONNECTED;
 	socket->tpcb = NULL;
 	portEvent(socket_common.portfd, socket->id, POLLHUP|POLLERR);
 }
@@ -211,10 +216,11 @@ static err_t socket_accepted(void *arg, struct tcp_pcb *new, err_t err)
 
 	for (i = 0; i < socket->backlog; ++i) {
 		if (socket->connections[i] == NULL) {
-			if (socket_create(&newsockid, new, 1) != EOK)
+			if (socket_create(&newsockid, new) != EOK)
 				break;
 
 			newsocket = socket_get(newsockid);
+			newsocket->state |= SOCK_CONNECTED;
 
 			tcp_recv(new, socket_received);
 			tcp_sent(new, socket_transmitted);
@@ -244,10 +250,15 @@ static err_t socket_connected(void *arg, struct tcp_pcb *tpcb, err_t err)
 		LOG_ERROR("error: %d", err);
 	}
 
+	if (!(socket->state & SOCK_CONNECTING)) {
+		LOG_ERROR("socket was not connecting");
+	}
+
 	tcp_recv(tpcb, socket_received);
 	tcp_sent(tpcb, socket_transmitted);
 	tcp_err(tpcb, socket_error);
-	socket->connected = 1;
+	socket->state &= ~SOCK_CONNECTING;
+	socket->state |= SOCK_CONNECTED;
 	portEvent(socket_common.portfd, socket->id, POLLOUT);
 	return ERR_OK;
 }
@@ -352,16 +363,24 @@ static int socket_listen(socket_t *socket, int backlog)
 {
 	LOG_INFO("entered id=%llu", socket->id);
 
+	if (socket->state & SOCK_CONNECTED)
+		return -EINVAL;
+
+	/* TODO: adjust backlog if different? */
+	if (socket->state & SOCK_LISTENING)
+		return EOK;
+
 	if ((socket->tpcb = tcp_listen_with_backlog(socket->tpcb, backlog)) == NULL) {
 		LOG_ERROR("tcp_listen_with_backlog");
-		return -ENOMEM;
+		return -ENOBUFS;
 	}
 
 	if ((socket->connections = calloc(backlog, sizeof(void *))) == NULL) {
 		LOG_ERROR("calloc");
-		return -ENOMEM;
+		return -ENOBUFS;
 	}
 
+	socket->state |= SOCK_LISTENING;
 	socket->backlog = backlog;
 	tcp_accept(socket->tpcb, socket_accepted);
 
@@ -375,6 +394,9 @@ static int socket_accept(socket_t *socket, id_t *newsock, struct sockaddr *addre
 
 	int i, retval = -EAGAIN;
 	socket_t *new;
+
+	if (!(socket->state & SOCK_LISTENING))
+		return -EINVAL;
 
 	if ((new = socket->connections[0]) != NULL) {
 		LOG_INFO("got connection :)");
@@ -401,8 +423,14 @@ static int socket_connect(socket_t *socket, struct sockaddr *address, socklen_t 
 	struct sockaddr_in *ain = address;
 	ip_addr_t ipaddr = IPADDR4_INIT(ain->sin_addr.s_addr);
 
-	if (socket->connected)
+	if (socket->state & SOCK_LISTENING)
+		return -EOPNOTSUPP;
+
+	if (socket->state & SOCK_CONNECTED)
 		return -EALREADY;
+
+	if (socket->state & SOCK_CONNECTING)
+		return -EINPROGRESS;
 
 	/* TODO: check error in common code? clear it after reporting? */
 	if (socket->error != ERR_OK)
@@ -412,6 +440,8 @@ static int socket_connect(socket_t *socket, struct sockaddr *address, socklen_t 
 	result = tcp_connect(socket->tpcb, &ipaddr, ntohs(ain->sin_port), socket_connected);
 	if (result != ERR_OK)
 		LOG_ERROR("%s (%d)\n", lwip_strerr(result), result);
+	else
+		socket->state |= SOCK_CONNECTING;
 
 	return result == ERR_OK ? -EINPROGRESS : -err_to_errno(result);
 }
@@ -429,7 +459,7 @@ static int socket_poll(socket_t *socket, int *events)
 		*events |= POLLIN;
 
 	/* TODO: check if we're connected? */
-	if (socket->connected)
+	if (socket->state & SOCK_CONNECTED)
 		*events |= POLLOUT;
 	return EOK;
 }
@@ -836,7 +866,7 @@ static void socket_thread(void *arg)
 		if (msg.object == (id_t)-1) {
 			switch (msg.type) {
 			case mtOpen:
-				error = socket_create(&msg.o.open, NULL, 0);
+				error = socket_create(&msg.o.open, NULL);
 				break;
 			case mtClose:
 				LOG_ERROR("invalid close", msg.type);
@@ -870,7 +900,7 @@ static void socket_thread(void *arg)
 					error = -err_to_errno(socket->error);
 					msg.o.io = 0;
 				}
-				else if (!socket->connected) {
+				else if (!(socket->state & SOCK_CONNECTED)) {
 					error = -ENOTCONN;
 					msg.o.io = 0;
 				}
@@ -889,7 +919,7 @@ static void socket_thread(void *arg)
 					error = -err_to_errno(socket->error);
 					msg.o.io = 0;
 				}
-				else if (!socket->connected) {
+				else if (!(socket->state & SOCK_CONNECTED)) {
 					error = -ENOTCONN;
 					msg.o.io = 0;
 				}
