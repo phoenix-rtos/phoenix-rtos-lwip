@@ -393,6 +393,7 @@ static int socket_accept(socket_t *socket, id_t *newsock, struct sockaddr *addre
 
 	int i, retval = -EAGAIN;
 	socket_t *new;
+	struct sockaddr_in *sin = address;
 
 	if (!(socket->state & SOCK_LISTENING))
 		return -EINVAL;
@@ -400,6 +401,12 @@ static int socket_accept(socket_t *socket, id_t *newsock, struct sockaddr *addre
 	if ((new = socket->connections[0]) != NULL) {
 		LOG_INFO("got connection :)");
 		retval = EOK;
+
+		if (sin != NULL) {
+			sin->sin_family = AF_INET;
+			sin->sin_port = htons(new->tpcb->remote_port);
+			sin->sin_addr.s_addr = new->tpcb->remote_ip.addr;
+		}
 
 		*newsock = new->id;
 		tcp_backlog_accepted(new->tpcb);
