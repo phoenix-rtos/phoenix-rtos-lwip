@@ -277,12 +277,11 @@ static int socket_read(socket_t *socket, void *data, int size)
 		bytes = pbuf_copy_partial(socket->inbufs, data, size, socket->inoffs);
 		p = pbuf_skip(socket->inbufs, bytes + socket->inoffs, &socket->inoffs);
 
-		LOG_INFO("p after skipping is %p", p);
-
-		while (p != (head = socket->inbufs) && head != NULL) {
-			LOG_INFO("dechaining %p", head);
-			socket->inbufs = pbuf_dechain(socket->inbufs);
-			pbuf_free(head);
+		if (p != socket->inbufs) {
+			if (p != NULL)
+				pbuf_ref(p);
+			pbuf_free(socket->inbufs);
+			socket->inbufs = p;
 		}
 
 		LOG_INFO("got %d data :)", bytes);
