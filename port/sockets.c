@@ -24,7 +24,7 @@
 
 #include "netif.h"
 
-#define LOG_INFO(fmt, ...) // printf("%s:%d  %s(): " fmt "\n", __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__)
+#define LOG_INFO(fmt, ...) //printf("%s:%d  %s(): " fmt "\n", __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__)
 #define LOG_ERROR(fmt, ...) printf("%s:%d  %s(): " fmt "\n", __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__)
 
 
@@ -194,7 +194,7 @@ static err_t socket_transmitted(void *arg, struct tcp_pcb *tpcb, uint16_t len)
 static void socket_error(void *arg, err_t err)
 {
 	socket_t *socket = arg;
-	LOG_ERROR("socket %llu: %s (%d)", socket->id, lwip_strerr(err), err);
+//	LOG_ERROR("socket %llu: %s (%d)", socket->id, lwip_strerr(err), err);
 	socket->error = err;
 	socket->state &= ~SOCK_CONNECTED;
 	socket->tpcb = NULL;
@@ -435,12 +435,12 @@ static int socket_connect(socket_t *socket, struct sockaddr *address, socklen_t 
 	if (socket->state & SOCK_CONNECTED)
 		return -EALREADY;
 
-	if (socket->state & SOCK_CONNECTING)
-		return -EINPROGRESS;
-
 	/* TODO: check error in common code? clear it after reporting? */
 	if (socket->error != ERR_OK)
 		return -err_to_errno(socket->error);
+
+	if (socket->state & SOCK_CONNECTING)
+		return -EINPROGRESS;
 
 	tcp_err(socket->tpcb, socket_error);
 	result = tcp_connect(socket->tpcb, &ipaddr, ntohs(ain->sin_port), socket_connected);
@@ -477,8 +477,10 @@ static int socket_ioctl(socket_t *socket, long request, void *buffer, size_t siz
 
 	switch (request) {
 	case FIONREAD:
-//	case FIONBIO: legacy way to set nonblocking mode: should we support this anyway?
-		error = -ENOSYS;
+		if (socket->inbufs == NULL)
+			error = 0;
+		else
+			error = socket->inbufs->tot_len;
 		break;
 
 	case SIOCGIFNAME: {
@@ -826,7 +828,7 @@ static int socket_ioctl(socket_t *socket, long request, void *buffer, size_t siz
 	case SIOCADDRT:
 	case SIOCDELRT: {
 		struct rtentry *rt = (struct rtentry *)buffer;
-		struct netif *interface = netif_find(rt->rt_dev);
+		struct netif *interface = netif_find(rt->rt_devbuf);
 
 		if (interface == NULL) {
 			error = -ENXIO;
@@ -884,7 +886,7 @@ static void socket_thread(void *arg)
 			}
 		}
 		else if ((socket = socket_get(msg.object)) == NULL) {
-			error = -ENOENT;
+			error = -ENXIO;
 		}
 		else {
 			switch (msg.type) {
@@ -1044,7 +1046,18 @@ extern int deviceCreate(int cwd, const char *, int portfd, id_t id, mode_t mode)
 void init_lwip_sockets(void)
 {
 	memset(socket_common.sockets, 0, sizeof(socket_common.sockets));
-	socket_common.portfd = 3; /* set up in pinit */
+
+	if (portEvent(3, 0, 0) < 0) {
+		if ((socket_common.portfd = portCreate(0)) < 0) {
+			printf("lwip: Could not create port\n");
+			exit(EXIT_FAILURE);
+		}
+	}
+	else {
+		socket_common.portfd = 3; /* set up in pinit */
+	}
+
+//	socket_common.portfd = 3; /* set up in pinit */
 	beginthread(socket_thread, 3, socket_common.stack, sizeof(socket_common.stack), NULL);
 	deviceCreate(AT_FDCWD, "/dev/net", socket_common.portfd, (id_t)-1, S_IFCHR | 0777);
 }

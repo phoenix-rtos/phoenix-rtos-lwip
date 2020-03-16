@@ -50,11 +50,15 @@
 #define IP_REASS_DEBUG             LWIP_DBG_ON
 #define ICMP_DEBUG                 LWIP_DBG_ON
 #endif
+
 #define TCP_MSS 1460
 #define TCP_WND (32 * TCP_MSS)
 #define TCP_SND_BUF TCP_WND
-//#define ETH_PAD_SIZE 2
-#define ETH_PAD_SIZE 0
+
+/* TODO: pick one and stick to it. 2 works for imx6ull, 0 works for ia32... */
+#define ETH_PAD_SIZE 2
+//#define ETH_PAD_SIZE 0
+
 #define ETHARP_TABLE_MATCH_NETIF 1
 #define IP_REASSEMBLY 1
 #define IP_FRAG 1
