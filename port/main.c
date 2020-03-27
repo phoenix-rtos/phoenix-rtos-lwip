@@ -150,6 +150,8 @@ static void mainLoop(void)
 
 		error = EOK;
 
+		LOCK_TCPIP_CORE();
+
 		switch (msg.type) {
 		case mtOpen:
 			msg.o.open = msg.object;
@@ -178,11 +180,20 @@ static void mainLoop(void)
 					error = -EINVAL;
 				}
 			break;
-
+		case mtGetAttr:
+			if (msg.i.attr == atEvents) {
+				if (msg.object == pf_id)
+					*(int *)msg.o.data = POLLOUT;
+				else
+					*(int *)msg.o.data = POLLIN;
+			}
+			break;
 		default:
 			error = -EINVAL;
 			break;
 		}
+
+		UNLOCK_TCPIP_CORE();
 
 		msgRespond(port, error, &msg, rid);
 	}
