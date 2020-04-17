@@ -1,0 +1,10 @@
+#
+# Makefile for Phoenix-RTOS 3 LwIP
+#
+# STM32L4 target
+#
+# Copyright 2020 Phoenix Systems
+#
+
+NET_DRIVERS_SUPPORTED := pppos
+NET_DRIVERS ?= $(NET_DRIVERS_SUPPORTED)
