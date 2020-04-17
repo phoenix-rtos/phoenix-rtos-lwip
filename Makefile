@@ -1,7 +1,7 @@
 #
 # Makefile for phoenix-rtos-lwip
 #
-# Copyright 2019 Phoenix Systems
+# Copyright 2019-2020 Phoenix Systems
 #
 # %LICENSE%
 #
@@ -9,66 +9,15 @@
 SIL ?= @
 MAKEFLAGS += --no-print-directory
 
-#TARGET ?= ia32-qemu
-#TARGET ?= armv7-stm32
-TARGET ?= arm-imx6ull
+TARGET ?= ia32-generic
+#TARGET ?= armv7m4-stm32l4x6
+#TARGET ?= armv7a7-imx6ull
 
-TOPDIR := $(CURDIR)
-PREFIX_BUILD ?= ../_build/$(TARGET)
-PREFIX_BUILD := $(abspath $(PREFIX_BUILD))
-BUILD_DIR ?= $(PREFIX_BUILD)/$(notdir $(TOPDIR))
-BUILD_DIR := $(abspath $(BUILD_DIR))
-
-# Compliation options for various architectures
-TARGET_FAMILY = $(firstword $(subst -, ,$(TARGET)-))
-include Makefile.$(TARGET_FAMILY)
-
-# build artifacts dir
-CURR_SUFFIX := $(patsubst $(TOPDIR)/%,%,$(abspath $(CURDIR))/)
-PREFIX_O := $(BUILD_DIR)/$(CURR_SUFFIX)
-
-# target install paths, can be provided exterally
-PREFIX_A ?= $(PREFIX_BUILD)/lib/
-PREFIX_H ?= $(PREFIX_BUILD)/include/
-PREFIX_PROG ?= $(PREFIX_BUILD)/prog/
-PREFIX_PROG_STRIPPED ?= $(PREFIX_BUILD)/prog.stripped/
+include ../phoenix-rtos-build/Makefile.common
+include ../phoenix-rtos-build/Makefile.$(TARGET_SUFF)
 
 CFLAGS += -I"$(PREFIX_H)" -Iinclude -Ilib-lwip/src/include
 LDFLAGS += -L"$(PREFIX_A)"
-
-# add include path for auto-generated files
-CFLAGS += -I"$(BUILD_DIR)/$(CURR_SUFFIX)"
-
-ARCH =  $(SIL)@mkdir -p $(@D); \
-	(printf "AR  %-24s\n" "$(@F)"); \
-	$(AR) $(ARFLAGS) $@ $^ 2>/dev/null
-
-LINK = $(SIL)mkdir -p $(@D); \
-	(printf "LD  %-24s\n" "$(@F)"); \
-	$(LD) $(LDFLAGS) -o "$@"  $^ $(LDLIBS)
-
-HEADER = $(SIL)mkdir -p $(@D); \
-	(printf "HEADER %-24s\n" "$<"); \
-	cp -pR "$<" "$@"
-
-$(PREFIX_O)%.o: %.c
-	@mkdir -p $(@D)
-	$(SIL)(printf "CC  %-24s\n" "$<")
-	$(SIL)$(CC) -c $(CFLAGS) "$<" -o "$@"
-	$(SIL)$(CC) -M  -MD -MP -MF $(PREFIX_O)$*.c.d -MT "$@" $(CFLAGS) $<
-
-$(PREFIX_O)%.o: %.S
-	@mkdir -p $(@D)
-	$(SIL)(printf "ASM %s/%-24s\n" "$(notdir $(@D))" "$<")
-	$(SIL)$(CC) -c $(CFLAGS) "$<" -o "$@"
-	$(SIL)$(CC) -M  -MD -MP -MF $(PREFIX_O)$*.S.d -MT "$@" $(CFLAGS) $<
-
-$(PREFIX_PROG_STRIPPED)%: $(PREFIX_PROG)%
-	@mkdir -p $(@D)
-	@(printf "STR %-24s\n" "$(@F)")
-	$(SIL)$(STRIP) -o $@ $<
-
-include Makefile.$(TARGET)
 
 all: $(PREFIX_PROG_STRIPPED)lwip
 
@@ -81,11 +30,14 @@ LWIP_OBJS := $(patsubst %.c,$(PREFIX_O)%.o,$(LWIP_SRCS))
 PORT_SRCS := $(wildcard port/*.c)
 PORT_OBJS := $(patsubst %.c,$(PREFIX_O)%.o,$(PORT_SRCS))
 
-DRIVERS_SRCS = netif-driver.c
-DRIVERS_SRCS_UTIL = bdring.c pktmem.c physmmap.c res-create.c
-DRIVERS_SRCS_PPPOS = pppos.c
-DRIVERS_SRCS_TUNTAP = tuntap.c
-include Makefile.$(TARGET)
+DRIVERS_SRCS := netif-driver.c
+DRIVERS_SRCS_UTIL := bdring.c pktmem.c physmmap.c res-create.c
+DRIVERS_SRCS_pppos := pppos.c
+DRIVERS_SRCS_tuntap := tuntap.c
+-include _targets/Makefile.$(TARGET_FAMILY)-$(TARGET_SUBFAMILY)
+DRIVERS_SRCS += $(foreach driver,$(NET_DRIVERS),$(if $(filter $(driver),$(NET_DRIVERS_SUPPORTED)),\
+	$(DRIVERS_SRCS_$(driver)),\
+	$(error Driver '$(driver)' is not supported on target '$(TARGET)')))
 DRIVERS_OBJS := $(patsubst %.c,$(PREFIX_O)%.o,$(addprefix drivers/, $(DRIVERS_SRCS)))
 
 CFLAGS += $(addprefix -DHAVE_DRIVER_,$(sort $(NET_DRIVERS)))
@@ -96,7 +48,6 @@ endif
 
 $(PREFIX_PROG)lwip: $(LWIP_OBJS) $(PORT_OBJS) $(DRIVERS_OBJS)
 	$(LINK)
-
 
 .PHONY: clean
 clean:
