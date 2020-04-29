@@ -40,6 +40,15 @@ DRIVERS_SRCS += $(foreach driver,$(NET_DRIVERS),$(if $(filter $(driver),$(NET_DR
 	$(error Driver '$(driver)' is not supported on target '$(TARGET)')))
 DRIVERS_OBJS := $(patsubst %.c,$(PREFIX_O)%.o,$(addprefix drivers/, $(DRIVERS_SRCS)))
 
+ifneq ($(filter pppos,$(NET_DRIVERS)),)
+PPPOS_MODEMS_SUPPORTED := $(patsubst ./modem/%/,%,$(sort $(dir $(wildcard ./modem/*/))))
+ifneq ($(filter $(PPPOS_MODEM),$(PPPOS_MODEMS_SUPPORTED)),)
+CFLAGS += -I./modem/$(PPPOS_MODEM)
+else
+$(error PPPOS_MODEM must have one of the following values: $(PPPOS_MODEMS_SUPPORTED))
+endif
+endif
+
 CFLAGS += $(addprefix -DHAVE_DRIVER_,$(sort $(NET_DRIVERS)))
 
 ifneq ($(EPHY_KSZ8081RND),)
