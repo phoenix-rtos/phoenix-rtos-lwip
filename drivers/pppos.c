@@ -25,7 +25,10 @@
 #include <sys/msg.h>
 #include <syslog.h>
 
+#include <pppos_modem.h>
+
 enum {
+	CONN_STATE_DISCONNECTING,
 	CONN_STATE_DISCONNECTED,
 	CONN_STATE_CONNECTING,
 	CONN_STATE_CONNECTED,
@@ -38,10 +41,13 @@ typedef struct
 
 	const char *serialdev_fn;
 	const char *serialat_fn;
+#if PPPOS_USE_CONFIG_FILE
 	const char *config_path;
 	char apn[64];
+#endif
 	int fd;
 
+	volatile int want_connected;
 	volatile int conn_state;
 	handle_t lock, cond;
 
@@ -177,7 +183,6 @@ static int at_check_result(const char* buf)
 
 	while (at_result_codes[res]) {
 		if ((result = strstr(buf, at_result_codes[res])) != NULL) {
-			*result = '\0';
 			return res;
 		}
 		res += 1;
@@ -225,7 +230,7 @@ static int at_send_cmd_res(int fd, const char* cmd, int timeout_ms, char *rx_buf
 		} else {
 			rx_buf[off + len + 1] = '\0';
 
-			int res = at_check_result(rx_buf + off);
+			int res = at_check_result(rx_buf);
 			off += len;
 
 			if (res >= 0) {
@@ -279,6 +284,21 @@ static int at_disconnect(int fd) {
 	return res;
 }
 
+
+static int at_is_responding(int fd, int timeout_ms)
+{
+	int res;
+	int retry = 10;
+
+	while ((res = at_send_cmd(fd, "AT\r\n", timeout_ms * 1000)) != AT_RESULT_OK && retry--);
+
+	if (res != AT_RESULT_OK) {
+		log_warn("modem not responding, res=%d", res);
+		return 0;
+	}
+
+	return 1;
+}
 
 
 /****** PPPoS support functions ******/
@@ -399,7 +419,8 @@ static void pppos_do_rx(pppos_priv_t* state)
 	int len;
 	u8_t buffer[1024];
 
-	while (state->conn_state != CONN_STATE_DISCONNECTED) {
+	while (state->conn_state != CONN_STATE_DISCONNECTED
+			&& state->conn_state != CONN_STATE_DISCONNECTING) {
 		len = read(state->fd, buffer, sizeof(buffer));
 		if (len > 0) {
 			/* Pass received raw characters from PPPoS to be decoded through lwIP
@@ -422,16 +443,6 @@ static void pppos_do_rx(pppos_priv_t* state)
 }
 
 
-const char* at_init_cmds[] = {
-	"ATZ\r\n",			// reset MODEM
-	"ATQ0 V1 E0 S0=0 &C1 &D2 +FCLASS=0\r\n",	// setup serial/message exchange
-	"AT+WS46=29\r\n",		// disable LTE
-	"AT+CREG?\r\n", 		// check network registration (just for debug)
-	"AT+COPS?\r\n", 		// check operator registration (just for debug)
-	"AT+CSQ\r\n",       // check signal quality (for debug)
-	NULL,
-};
-
 static void pppos_mainLoop(void* _state)
 {
 	pppos_priv_t* state = (pppos_priv_t*) _state;
@@ -440,6 +451,12 @@ static void pppos_mainLoop(void* _state)
 	int running = 1;
 
 	while (running) {
+		mutexLock(state->lock);
+		while (!state->want_connected) {
+			condWait(state->cond, state->lock, 0);
+		}
+		mutexUnlock(state->lock);
+
 		/* Wait for the serial device */
 		if (state->fd < 0)  {
 			while ((state->fd = open(state->serialdev_fn, O_RDWR | O_NOCTTY | O_NONBLOCK)) < 0)
@@ -449,17 +466,25 @@ static void pppos_mainLoop(void* _state)
 		}
 
 		serial_set_non_blocking(state->fd);
+#if PPPOS_DISCONNECT_ON_INIT
 		if (at_disconnect(state->fd) != AT_RESULT_OK)
 			goto fail;
+#endif
 
+#if PPPOS_USE_CONFIG_FILE
 		mutexLock(state->lock);
 		while (!state->apn[0])
 			condWait(state->cond, state->lock, 0);
 		mutexUnlock(state->lock);
+#endif
+
+		if (!at_is_responding(state->fd, 1000)) {
+			goto fail;
+		}
 
 		const char** at_cmd = at_init_cmds;
 		while (*at_cmd) {
-			if ((res = at_send_cmd(state->fd, *at_cmd, 3000)) != AT_RESULT_OK) {
+			if ((res = at_send_cmd(state->fd, *at_cmd, AT_INIT_CMDS_TIMEOUT_MS)) != AT_RESULT_OK) {
 				log_warn("failed to initialize modem (cmd=%s), res=%d, retrying", *at_cmd, res);
 				goto fail;
 			}
@@ -467,6 +492,7 @@ static void pppos_mainLoop(void* _state)
 			at_cmd += 1;
 		}
 
+#if PPPOS_USE_CONFIG_FILE
 		{ /* Configure APN */
 			char at_set_apn[256];
 			if (snprintf(at_set_apn, sizeof(at_set_apn), "AT+CGDCONT=1,\"IP\",\"%s\"\r\n", state->apn) >= sizeof(at_set_apn)) {
@@ -479,14 +505,12 @@ static void pppos_mainLoop(void* _state)
 				goto fail;
 			}
 		}
+#endif
 
-		if ((res = at_send_cmd(state->fd, "AT+CGDATA=\"PPP\",1\r\n", 3000)) != AT_RESULT_CONNECT) {
-			log_warn("failed to dial PPP, res=%d, retrying", *at_cmd, res);
+		if ((res = at_send_cmd(state->fd, AT_CONNECT_CMD, AT_CONNECT_CMD_TIMEOUT_MS)) != AT_RESULT_CONNECT) {
+			log_warn("failed to dial PPP, res=%d, retrying", res);
 			goto fail;
 		}
-
-		// TODO: provide authentication params externally
-		//ppp_set_auth(state->ppp, PPPAUTHTYPE_PAP, "plusgsm", "plusgsm");
 
 		log_debug("ppp_connect");
 		state->conn_state = CONN_STATE_CONNECTING;
@@ -507,8 +531,12 @@ static void pppos_mainLoop(void* _state)
 		}
 		mutexUnlock(state->lock);
 
+		log_debug("connection closed");
+
 fail:
-		log_error("connection has failed, retrying");
+		serial_close(state->fd);
+		state->fd = -1;
+
 		sleep(PPPOS_CONNECT_RETRY_SEC);
 	}
 
@@ -524,6 +552,7 @@ fail:
 
 static int pppos_netifUp(pppos_priv_t *state)
 {
+#if PPPOS_USE_CONFIG_FILE
 	char lcfg[256] = { 0 };
 	int line = 0;
 	FILE *fcfg = fopen(state->config_path, "r");
@@ -565,9 +594,13 @@ static int pppos_netifUp(pppos_priv_t *state)
 			log_warn("[line %d] unsupported option: %s (val: %s)", line, lcfg, cfgval);
 	}
 
+	fclose(fcfg);
+#else
+	mutexLock(state->lock);
+#endif
+	state->want_connected = 1;
 	condSignal(state->cond);
 	mutexUnlock(state->lock);
-	fclose(fcfg);
 
 	return 0;
 }
@@ -575,10 +608,21 @@ static int pppos_netifUp(pppos_priv_t *state)
 
 static int pppos_netifDown(pppos_priv_t *state)
 {
+	/* Unconditional use of pppapi_close() in the status callback
+	can (and will) cause recursive firing of the callback */
+
+	mutexLock(state->lock);
+#if PPPOS_USE_CONFIG_FILE
 	if (state->apn[0]) {
 		state->apn[0] = 0;
-		pppapi_close(state->ppp, 0);
+		state->conn_state = CONN_STATE_DISCONNECTING;
 	}
+#else
+	state->conn_state = CONN_STATE_DISCONNECTING;
+#endif
+	state->want_connected = 0;
+	mutexUnlock(state->lock);
+
 	return 0;
 }
 
@@ -627,7 +671,9 @@ static int pppos_netifInit(struct netif *netif, char *cfg)
 	*cfg = 0;
 	cfg++;
 
+#if PPPOS_USE_CONFIG_FILE
 	state->config_path = cfg;
+#endif
 
 	while (*cfg && *cfg != ':')
 		++cfg;
@@ -688,7 +734,7 @@ const char *pppos_media(struct netif *netif)
 		return "2G";
 	else if (strstr(buffer, "\",2") != NULL)
 		return "3G";
-	else if (strstr(buffer, "\",7") != NULL)
+	else if (strstr(buffer, "\",7") != NULL || strstr(buffer, "\",9") != NULL)
 		return "4G";
 	else
 		return "unrecognized";
