@@ -87,7 +87,9 @@ static int writeStatus(char *buffer, size_t bufSize, size_t offset)
 		SNPRINTF_APPEND("%2s%d_link=%u\n", netif->name, netif->num, netif_is_link_up(netif));
 		SNPRINTF_APPEND("%2s%d_ip=%s\n", netif->name, netif->num, inet_ntoa(netif->ip_addr));
 		if (!netif_is_ppp(netif) && !netif_is_tun(netif)) {
+#if LWIP_DHCP
 			SNPRINTF_APPEND("%2s%d_dhcp=%u\n", netif->name, netif->num, netif_is_dhcp(netif));
+#endif
 			SNPRINTF_APPEND("%2s%d_netmask=%s\n", netif->name, netif->num, inet_ntoa(netif->netmask));
 			if (netif == netif_default)
 				SNPRINTF_APPEND("%2s%d_gateway=%s\n", netif->name, netif->num, inet_ntoa(netif->gw));

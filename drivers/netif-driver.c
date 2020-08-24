@@ -10,6 +10,7 @@
  */
 #include "netif-driver.h"
 
+#include "lwip/etharp.h"
 #include "lwip/netifapi.h"
 #include "lwip/stats.h"
 #include "lwip/snmp.h"
