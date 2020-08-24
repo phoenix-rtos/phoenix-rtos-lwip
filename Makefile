@@ -16,7 +16,7 @@ TARGET ?= ia32-generic
 include ../phoenix-rtos-build/Makefile.common
 include ../phoenix-rtos-build/Makefile.$(TARGET_SUFF)
 
-CFLAGS += -I"$(PREFIX_H)" -Iinclude -Ilib-lwip/src/include
+CFLAGS += -Wundef -I"$(PREFIX_H)" -Iinclude -Ilib-lwip/src/include
 LDFLAGS += -L"$(PREFIX_A)"
 
 all: $(PREFIX_PROG_STRIPPED)lwip

@@ -190,7 +190,7 @@ static int socket_ioctl(int sock, unsigned long request, const void* in_data, vo
 			ifreq->ifr_flags |= IFF_BROADCAST;
 		}
 
-#ifdef LWIP_DHCP
+#if LWIP_DHCP
 		if (netif_is_dhcp(interface))
 			ifreq->ifr_flags |= IFF_DYNAMIC;
 #endif
@@ -205,20 +205,20 @@ static int socket_ioctl(int sock, unsigned long request, const void* in_data, vo
 		// only IFF_UP flag supported
 		if ((ifreq->ifr_flags & IFF_UP) && !netif_is_up(interface)) {
 			netif_set_up(interface);
-#ifdef LWIP_DHCP
+#if LWIP_DHCP
 			if (netif_is_dhcp(interface))
 				netifapi_dhcp_start(interface);
 #endif
 		}
 		if (!(ifreq->ifr_flags & IFF_UP) && netif_is_up(interface)) {
-#ifdef LWIP_DHCP
+#if LWIP_DHCP
 			if (netif_is_dhcp(interface))
 				netifapi_dhcp_release(interface);
 #endif
 			netif_set_down(interface);
 		}
 
-#ifdef LWIP_DHCP
+#if LWIP_DHCP
 		if (!netif_is_ppp(interface) && !netif_is_tun(interface)) {
 			/* can't start dhcp when interface is down and since we do not keep
 			 * any information about dynamic flag it is not possible to 'set' interface
@@ -309,7 +309,7 @@ static int socket_ioctl(int sock, unsigned long request, const void* in_data, vo
 			return -EOPNOTSUPP;
 		}
 
-#ifdef LWIP_DHCP
+#if LWIP_DHCP
 		netifapi_dhcp_inform(interface);
 #endif
 		return EOK;
@@ -672,6 +672,7 @@ static int do_getnameinfo(const struct sockaddr *sa, socklen_t addrlen, char *ho
 }
 
 
+#if LWIP_DNS
 static int do_getaddrinfo(const char *name, const char *serv, const struct addrinfo *hints, void *buf, size_t *buflen)
 {
 	struct addrinfo *res, *ai, *dest;
@@ -734,6 +735,7 @@ static int do_getaddrinfo(const char *name, const char *serv, const struct addri
 
 	return 0;
 }
+#endif
 
 
 static void socketsrv_thread(void *arg)
@@ -776,6 +778,7 @@ static void socketsrv_thread(void *arg)
 			smo->nameinfo.servlen = msg.o.size - sz > 0 ? strlen(msg.o.data + sz) + 1 : 0;
 			break;
 
+#if LWIP_DNS
 		case sockmGetAddrInfo:
 			node = smi->socket.ai_node_sz ? msg.i.data : NULL;
 			serv = msg.i.size > smi->socket.ai_node_sz ? msg.i.data + smi->socket.ai_node_sz : NULL;
@@ -794,6 +797,7 @@ static void socketsrv_thread(void *arg)
 			smo->ret = do_getaddrinfo(node, serv, &hint, msg.o.data, &smo->sys.buflen);
 			smo->sys.err = smo->ret == EAI_SYSTEM ? errno : 0;
 			break;
+#endif
 
 		default:
 			msg.o.io.err = -EINVAL;

@@ -20,7 +20,7 @@
 #define netif_is_tun(_netif) (((_netif)->name[0] == 't') && ((_netif)->name[1] == 'u'))
 #define netif_is_eth(_netif) (((_netif)->name[0] == 'e') && ((_netif)->name[1] == 'n'))
 
-#ifdef LWIP_DHCP
+#if LWIP_DHCP
 static inline int netif_is_dhcp(struct netif *netif)
 {
 		struct dhcp *dhcp;
