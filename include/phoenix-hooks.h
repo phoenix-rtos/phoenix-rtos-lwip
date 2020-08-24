@@ -13,7 +13,7 @@
 #define PHOENIX_HOOKS_H_
 
 #include <lwip/sockets.h>
-#include "lwipopts.h"
+#include <lwipopts.h>
 #include "route.h"
 #include "filter.h"
 
