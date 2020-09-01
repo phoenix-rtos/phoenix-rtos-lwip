@@ -24,6 +24,7 @@ static const char* at_init_cmds[] = {
 	"ATZ\r\n",        // reset MODEM
 	"ATE0\r\n",        // disable command echo
 	"AT+QSCLK=0\r\n",        // disable automatic deep sleep
+	"AT+CGATT=0\r\n",        // detach from PDN
 	"AT+QCFG=\"autopdn\",0\r\n",        // disable automatic PDN attach (to allow PPP)
 	"AT+CREG?\r\n",        // check network registration (just for debug)
 	"AT+COPS?\r\n",        // check operator registration (just for debug)
