@@ -288,9 +288,9 @@ static int at_disconnect(int fd) {
 static int at_is_responding(int fd, int timeout_ms)
 {
 	int res;
-	int retry = 10;
+	int retry = 5;
 
-	while ((res = at_send_cmd(fd, "AT\r\n", timeout_ms * 1000)) != AT_RESULT_OK && retry--);
+	while ((res = at_send_cmd(fd, "AT\r\n", timeout_ms)) != AT_RESULT_OK && retry--);
 
 	if (res != AT_RESULT_OK) {
 		log_warn("modem not responding, res=%d", res);
