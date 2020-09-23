@@ -119,7 +119,7 @@ static int readPf(void *buffer, size_t size, size_t offset)
 static void mainLoop(void)
 {
 	msg_t msg = {0};
-	unsigned int rid;
+	unsigned long int rid;
 	unsigned port;
 	oid_t route_oid = {0, 0};
 	oid_t status_oid = {0, 1};
