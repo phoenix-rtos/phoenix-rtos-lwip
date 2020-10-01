@@ -300,7 +300,7 @@ int pf_rulesUpdate(pfrule_array_t *array)
 
 void init_filters(void)
 {
-#ifdef HAVE_PF
+#if LWIP_EXT_PF
 	mutexCreate(&filter_common.pf_lock);
 	filter_common.rules = NULL;
 #endif

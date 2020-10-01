@@ -20,7 +20,7 @@
 #define LWIP_HOOK_ETHARP_GET_GW(netif, dest) route_get_gw(netif, dest)
 #define LWIP_HOOK_IP4_ROUTE(dest) route_find(dest)
 
-#ifdef HAVE_PF
+#if LWIP_EXT_PF
 #define LWIP_HOOK_ETH_INPUT(pbuf, input_netif) pf_filterIn(pbuf, input_netif)
 #endif
 

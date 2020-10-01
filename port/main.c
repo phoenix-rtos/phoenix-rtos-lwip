@@ -13,6 +13,8 @@
 #include "filter.h"
 #include "netif-driver.h"
 
+#include <lwipopts.h>
+
 #include <sys/msg.h>
 #include <posix/utils.h>
 
@@ -105,6 +107,7 @@ static int writeStatus(char *buffer, size_t bufSize, size_t offset)
 }
 
 
+#if LWIP_EXT_PF
 static int readPf(void *buffer, size_t size, size_t offset)
 {
 	pfrule_array_t *input = (pfrule_array_t *)buffer;
@@ -114,6 +117,7 @@ static int readPf(void *buffer, size_t size, size_t offset)
 
 	return pf_rulesUpdate(input);
 }
+#endif
 
 
 static void mainLoop(void)
@@ -123,7 +127,9 @@ static void mainLoop(void)
 	unsigned port;
 	oid_t route_oid = {0, 0};
 	oid_t status_oid = {0, 1};
+#if LWIP_EXT_PF
 	oid_t pf_oid = {0, 2};
+#endif
 
 	if (portCreate(&port) < 0) {
 		printf("phoenix-rtos-lwip: can't create port\n");
@@ -132,7 +138,9 @@ static void mainLoop(void)
 
 	route_oid.port = port;
 	status_oid.port = port;
+#if LWIP_EXT_PF
 	pf_oid.port = port;
+#endif
 
 	if (create_dev(&route_oid, "/dev/route") < 0) {
 		printf("phoenix-rtos-lwip: can't create /dev/route\n");
@@ -144,10 +152,12 @@ static void mainLoop(void)
 		return;
 	}
 
+#if LWIP_EXT_PF
 	if (create_dev(&pf_oid, "/dev/pf") < 0) {
 		printf("phoenix-rtos-lwip: can't create /dev/pf\n");
 		return;
 	}
+#endif
 
 	for (;;) {
 		if (msgRecv(port, &msg, &rid) < 0)
@@ -167,11 +177,15 @@ static void mainLoop(void)
 			break;
 
 		case mtWrite:
-				if (msg.i.io.oid.id == pf_oid.id)
+#if LWIP_EXT_PF
+				if (msg.i.io.oid.id == pf_oid.id) {
 					msg.o.io.err = readPf(msg.i.data, msg.i.size, msg.i.io.offs);
+				}
 				else
+#endif
+				{
 					msg.o.io.err = -EINVAL;
-				msg.o.io.err = EOK;
+				}
 			break;
 
 		default:
@@ -215,7 +229,7 @@ int main(int argc, char **argv)
 
 	mutexCreate(&rt_table.lock);
 
-#ifdef HAVE_PF
+#if LWIP_EXT_PF
 	init_filters();
 #endif
 
