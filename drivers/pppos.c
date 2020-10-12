@@ -92,6 +92,7 @@ static void pppos_printf(pppos_priv_t *state, const char *format, ...)
 
 #define PPPOS_TRYOPEN_SERIALDEV_SEC 		3
 #define PPPOS_CONNECT_RETRY_SEC 		5
+#define PPPOS_CONNECT_CMD_RETRY_MS		500
 
 /****** serial handling ******/
 
@@ -451,6 +452,7 @@ static void pppos_mainLoop(void* _state)
 {
 	pppos_priv_t* state = (pppos_priv_t*) _state;
 	int res;
+	int retries;
 
 	int running = 1;
 
@@ -511,9 +513,16 @@ static void pppos_mainLoop(void* _state)
 		}
 #endif
 
-		if ((res = at_send_cmd(state->fd, AT_CONNECT_CMD, AT_CONNECT_CMD_TIMEOUT_MS)) != AT_RESULT_CONNECT) {
-			log_warn("failed to dial PPP, res=%d, retrying", res);
-			goto fail;
+		/* Some modems hanging on AT_CONNECT_CMD, some returning error when not ready yet.
+		 * Retrying until receive AT_RESULT_CONNECT or standard timeout is reached (res < 0)
+		 */
+		retries = AT_CONNECT_CMD_TIMEOUT_MS / PPPOS_CONNECT_CMD_RETRY_MS;
+		while ((res = at_send_cmd(state->fd, AT_CONNECT_CMD, AT_CONNECT_CMD_TIMEOUT_MS)) != AT_RESULT_CONNECT) {
+			if (retries-- <= 0 || res < 0) {
+				log_warn("failed to dial PPP, res=%d, retrying", res);
+				goto fail;
+			}
+			usleep(PPPOS_CONNECT_CMD_RETRY_MS * 1000);
 		}
 
 		log_debug("ppp_connect");
