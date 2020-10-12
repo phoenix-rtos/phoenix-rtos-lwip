@@ -37,7 +37,7 @@
 #include "route.h"
 
 #define SOCKTHREAD_PRIO 4
-#define SOCKTHREAD_STACKSZ (4 * SIZE_PAGE)
+#define SOCKTHREAD_STACKSZ (4 * _PAGE_SIZE)
 
 
 struct sock_start {
@@ -588,7 +588,7 @@ static int socket_op(msg_t *msg, int sock)
 static void socket_thread(void *arg)
 {
 	struct sock_start *ss = arg;
-	unsigned respid;
+	unsigned long respid;
 	uint32_t port = ss->port;
 	int sock = ss->sock, err;
 	msg_t msg;
@@ -740,13 +740,15 @@ static int do_getaddrinfo(const char *name, const char *serv, const struct addri
 
 static void socketsrv_thread(void *arg)
 {
-	struct addrinfo hint = { 0 };
-	unsigned respid;
-	char *node, *serv;
+	unsigned long respid;
 	size_t sz;
 	msg_t msg;
 	uint32_t port;
 	int err, sock;
+#if LWIP_DNS
+	struct addrinfo hint = { 0 };
+	char *node, *serv;
+#endif
 
 	port = (unsigned)arg;
 

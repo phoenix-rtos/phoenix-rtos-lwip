@@ -114,12 +114,14 @@ static void serial_set_non_blocking(int fd)
 		log_error("%s() : fcntl(%d, O_NONBLOCK) = (%d -> %s)", __func__, fd, errno, strerror(errno));
 }
 
+#if 0
 static void serial_set_blocking(int fd)
 {
 	int flags = fcntl(fd, F_GETFL, 0);
 	if (fcntl(fd, F_SETFL, flags & ~O_NONBLOCK) < 0)
 		log_error("%s() : fcntl(%d, ~O_NONBLOCK) = (%d -> %s)", __func__, fd, errno, strerror(errno));
 }
+#endif
 
 #define WRITE_MAX_RETRIES 2
 static int serial_write(int fd, const u8_t* data, u32_t len)
@@ -271,6 +273,8 @@ static int at_send_cmd(int fd, const char* cmd, int timeout_ms)
 
 
 // NOTE: this only disconnects the AT modem from the data connection
+// Currently only used in initialisation
+#if PPPOS_DISCONNECT_ON_INIT
 static int at_disconnect(int fd) {
 	// TODO: do it better (finite retries? broken?)
 	int res;
@@ -283,7 +287,7 @@ static int at_disconnect(int fd) {
 
 	return res;
 }
-
+#endif
 
 static int at_is_responding(int fd, int timeout_ms)
 {
