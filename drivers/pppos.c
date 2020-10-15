@@ -92,6 +92,7 @@ static void pppos_printf(pppos_priv_t *state, const char *format, ...)
 
 #define PPPOS_TRYOPEN_SERIALDEV_SEC 		3
 #define PPPOS_CONNECT_RETRY_SEC 		5
+#define PPPOS_CONNECT_CMD_RETRY_MS		500
 
 /****** serial handling ******/
 
@@ -114,12 +115,14 @@ static void serial_set_non_blocking(int fd)
 		log_error("%s() : fcntl(%d, O_NONBLOCK) = (%d -> %s)", __func__, fd, errno, strerror(errno));
 }
 
+#if 0
 static void serial_set_blocking(int fd)
 {
 	int flags = fcntl(fd, F_GETFL, 0);
 	if (fcntl(fd, F_SETFL, flags & ~O_NONBLOCK) < 0)
 		log_error("%s() : fcntl(%d, ~O_NONBLOCK) = (%d -> %s)", __func__, fd, errno, strerror(errno));
 }
+#endif
 
 #define WRITE_MAX_RETRIES 2
 static int serial_write(int fd, const u8_t* data, u32_t len)
@@ -271,6 +274,8 @@ static int at_send_cmd(int fd, const char* cmd, int timeout_ms)
 
 
 // NOTE: this only disconnects the AT modem from the data connection
+// Currently only used in initialisation
+#if PPPOS_DISCONNECT_ON_INIT
 static int at_disconnect(int fd) {
 	// TODO: do it better (finite retries? broken?)
 	int res;
@@ -283,7 +288,7 @@ static int at_disconnect(int fd) {
 
 	return res;
 }
-
+#endif
 
 static int at_is_responding(int fd, int timeout_ms)
 {
@@ -447,6 +452,7 @@ static void pppos_mainLoop(void* _state)
 {
 	pppos_priv_t* state = (pppos_priv_t*) _state;
 	int res;
+	int retries;
 
 	int running = 1;
 
@@ -507,9 +513,16 @@ static void pppos_mainLoop(void* _state)
 		}
 #endif
 
-		if ((res = at_send_cmd(state->fd, AT_CONNECT_CMD, AT_CONNECT_CMD_TIMEOUT_MS)) != AT_RESULT_CONNECT) {
-			log_warn("failed to dial PPP, res=%d, retrying", res);
-			goto fail;
+		/* Some modems hanging on AT_CONNECT_CMD, some returning error when not ready yet.
+		 * Retrying until receive AT_RESULT_CONNECT or standard timeout is reached (res < 0)
+		 */
+		retries = AT_CONNECT_CMD_TIMEOUT_MS / PPPOS_CONNECT_CMD_RETRY_MS;
+		while ((res = at_send_cmd(state->fd, AT_CONNECT_CMD, AT_CONNECT_CMD_TIMEOUT_MS)) != AT_RESULT_CONNECT) {
+			if (retries-- <= 0 || res < 0) {
+				log_warn("failed to dial PPP, res=%d, retrying", res);
+				goto fail;
+			}
+			usleep(PPPOS_CONNECT_CMD_RETRY_MS * 1000);
 		}
 
 		log_debug("ppp_connect");
