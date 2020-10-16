@@ -173,10 +173,12 @@ enum {
 	AT_RESULT_RING,
 	AT_RESULT_NO_CARRIER,
 	AT_RESULT_ERROR,
-	AT_RESULT_NO_ANSWER
+	AT_RESULT_NO_ANSWER,
+	AT_RESULT_SIM_PIN,
+	AT_RESULT_READY
 };
 
-static const char* at_result_codes[] = { "OK", "CONNECT", "RING", "NO CARRIER", "ERROR", "NO ANSWER", NULL };
+static const char* at_result_codes[] = { "OK", "CONNECT", "RING", "NO CARRIER", "ERROR", "NO ANSWER", "SIM PIN", "READY", NULL };
 static int at_result_codes_len = sizeof(at_result_codes) / sizeof(at_result_codes[0]);
 
 static int at_check_result(const char* buf)
@@ -496,6 +498,24 @@ static void pppos_mainLoop(void* _state)
 			}
 
 			at_cmd += 1;
+		}
+		usleep(1000 * 1000);
+		res = at_send_cmd(state->fd, AT_CHECK_FOR_PIN, AT_INIT_CMDS_TIMEOUT_MS);
+		if (res == AT_RESULT_READY) {
+			log_at("PIN not required.\n");
+		} else if (res == AT_RESULT_SIM_PIN) {
+			log_at("PIN required.\n");
+			usleep(1000 * 1000);
+			res = at_send_cmd(state->fd, AT_ENTER_PIN, AT_INIT_CMDS_TIMEOUT_MS);
+			if (res != AT_RESULT_OK) {
+				log_error("PIN denied.\n");
+				// What to do here?
+				while(1){}
+			}
+			log_at("PIN accepted.\n");
+		} else {
+			log_warn("failed to initialize modem (cmd=%s), res=%d, retrying", AT_CHECK_FOR_PIN, res);
+			goto fail;
 		}
 
 #if PPPOS_USE_CONFIG_FILE
