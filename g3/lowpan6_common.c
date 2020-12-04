@@ -183,29 +183,31 @@ lowpan6_get_address_mode_mc(const ip6_addr_t *ip6addr)
 #if LWIP_6LOWPAN_NUM_CONTEXTS > 0
 /*
  * This function is used to set IPv6 addr bits
- * covered by the context.
+ * covered by the context. For stateful multicast address
+ * compression we may only fill Network Prefix, e.t.
+ * bits from 32th to 96th.
  */
 static void
-lowpan6_context_fill_addr(const struct lowpan6_context *context, ip6_addr_p_t *addr)
+lowpan6_context_fill_addr(const struct lowpan6_context *context, ip6_addr_p_t *addr, u8_t multicast)
 {
   unsigned i = 0;
   u8_t bits = context->context_length;
 
-  if (bits > 128)
+  if (bits > 128 || (multicast && bits > 64))
     return;
 
-  memset(addr, 0, 16);
+  memset(addr, 0, sizeof(*addr));
   while (bits > 32) {
-    addr->addr[i] = context->context[i];
+    addr->addr[i + multicast] = context->context[i];
     i++;
     bits -= 32;
   }
 
   /* Set rest of bits covered by context */
   if (bits > 0) {
-    addr->addr[i] = context->context[i];
+    addr->addr[i + multicast] = context->context[i];
     /* Clear bits not covered by context */
-    addr->addr[i] &= PP_HTONL(0xffffffff << (32 - bits));
+    addr->addr[i + multicast] &= PP_HTONL(0xffffffff << (32 - bits));
   }
 }
 
@@ -429,25 +431,34 @@ lowpan6_compress_headers(struct netif *netif, u8_t *inbuf, size_t inbuf_size, u8
 
   /* Compress destination address */
   if (ip6_addr_ismulticast(ip_2_ip6(&ip6dst))) {
-    /* @todo support stateful multicast address compression */
-
     buffer[1] |= 0x08;
 
-    i = lowpan6_get_address_mode_mc(ip_2_ip6(&ip6dst));
-    buffer[1] |= i & 0x03;
-    if (i == 0) {
-      MEMCPY(buffer + lowpan6_header_len, inptr + 24, 16);
-      lowpan6_header_len += 16;
-    } else if (i == 1) {
+    if ((buffer[1] & 0x04) == 0) {
+      /* Stateless compression */
+      i = lowpan6_get_address_mode_mc(ip_2_ip6(&ip6dst));
+      buffer[1] |= i & 0x03;
+      if (i == 0) {
+        MEMCPY(buffer + lowpan6_header_len, inptr + 24, 16);
+        lowpan6_header_len += 16;
+      } else if (i == 1) {
+        buffer[lowpan6_header_len++] = inptr[25];
+        MEMCPY(buffer + lowpan6_header_len, inptr + 35, 5);
+        lowpan6_header_len += 5;
+      } else if (i == 2) {
+        buffer[lowpan6_header_len++] = inptr[25];
+        MEMCPY(buffer + lowpan6_header_len, inptr + 37, 3);
+        lowpan6_header_len += 3;
+      } else if (i == 3) {
+        buffer[lowpan6_header_len++] = inptr[39];
+      }
+    } else {
+      /* Stateful compression, first set flags and scope */
       buffer[lowpan6_header_len++] = inptr[25];
-      MEMCPY(buffer + lowpan6_header_len, inptr + 35, 5);
-      lowpan6_header_len += 5;
-    } else if (i == 2) {
-      buffer[lowpan6_header_len++] = inptr[25];
-      MEMCPY(buffer + lowpan6_header_len, inptr + 37, 3);
-      lowpan6_header_len += 3;
-    } else if (i == 3) {
-      buffer[lowpan6_header_len++] = (inptr)[39];
+      /* Reserved */
+      buffer[lowpan6_header_len++] = inptr[26];
+      /* Group identifier */
+      MEMCPY(buffer + lowpan6_header_len, inptr + 36, 4);
+      lowpan6_header_len += 4;
     }
   } else if (((buffer[1] & 0x04) != 0) ||
               (ip6_addr_islinklocal(ip_2_ip6(&ip6dst)))) {
@@ -846,7 +857,7 @@ lowpan6_decompress_hdr(u8_t *lowpan6_buffer, size_t lowpan6_bufsize,
         return ERR_VAL;
       }
 #if LWIP_6LOWPAN_NUM_CONTEXTS > 0
-      lowpan6_context_fill_addr(&lowpan6_contexts[i], &ip6hdr->src);
+      lowpan6_context_fill_addr(&lowpan6_contexts[i], &ip6hdr->src, 0);
       LWIP_DEBUGF(LWIP_LOWPAN6_DECOMPRESSION_DEBUG, ("SAM == xx, context compression found @%d: %8X, %8X\n", (int)i, ip6hdr->src.addr[0], ip6hdr->src.addr[1]));
 #else
       LWIP_UNUSED_ARG(lowpan6_contexts);
@@ -894,12 +905,33 @@ lowpan6_decompress_hdr(u8_t *lowpan6_buffer, size_t lowpan6_bufsize,
     LWIP_DEBUGF(LWIP_LOWPAN6_DECOMPRESSION_DEBUG, ("M=1: multicast\n"));
     /* Multicast destination */
     if (lowpan6_buffer[1] & 0x04) {
-      LWIP_DEBUGF(LWIP_DBG_ON,("DAC == 1, context multicast: unsupported!!!\n"));
-      /* @todo support stateful multicast addressing */
-      return ERR_VAL;
-    }
+      /* Multicast stateful compression */
+      LWIP_DEBUGF(LWIP_LOWPAN6_DECOMPRESSION_DEBUG,("DAC == 1, context multicast\n"));
 
-    if ((lowpan6_buffer[1] & 0x03) == 0x00) {
+      if (lowpan6_buffer[1] & 0x80) {
+        i = lowpan6_buffer[2] & 0x0f;
+      } else {
+        i = 0;
+      }
+
+      if (i >= LWIP_6LOWPAN_NUM_CONTEXTS || lowpan6_contexts[i].context_length > 64)
+        return ERR_VAL;
+
+      /* First 4 bytes: 11111111|flgs|scop|reserved|plen */
+      ip6hdr->dest.addr[0] = lwip_htonl(0xFF000000 | lowpan6_buffer[lowpan6_offset] << 16 |
+                                        lowpan6_buffer[lowpan6_offset + 1] << 8 | lowpan6_contexts[i].context_length);
+      lowpan6_offset += 2;
+      /* 64 bits network prefix */
+      lowpan6_context_fill_addr(&lowpan6_contexts[i], &ip6hdr->dest, 1);
+      /* 32 bits group id */
+      MEMCPY(ip6hdr->dest.addr + 3, lowpan6_buffer + lowpan6_offset, 4);
+      lowpan6_offset += 4;
+      if ((lowpan6_buffer[1] & 0x03) != 0x00) {
+        LWIP_DEBUGF(LWIP_DBG_ON, ("DAM != 00, for multicast stateful compression only unicast-prefix based compression is supported\n"));
+        return ERR_VAL;
+      }
+
+    } else if ((lowpan6_buffer[1] & 0x03) == 0x00) {
       /* DAM = 00, copy full address (128bits) */
       LWIP_DEBUGF(LWIP_LOWPAN6_DECOMPRESSION_DEBUG, ("DAM == 00, no dst compression, fetching 128bits inline\n"));
       MEMCPY(&ip6hdr->dest.addr[0], lowpan6_buffer + lowpan6_offset, 16);
@@ -945,7 +977,7 @@ lowpan6_decompress_hdr(u8_t *lowpan6_buffer, size_t lowpan6_bufsize,
         return ERR_VAL;
       }
 #if LWIP_6LOWPAN_NUM_CONTEXTS > 0
-      lowpan6_context_fill_addr(&lowpan6_contexts[i], &ip6hdr->dest);
+      lowpan6_context_fill_addr(&lowpan6_contexts[i], &ip6hdr->dest, 0);
 #endif
     } else {
       LWIP_DEBUGF(LWIP_LOWPAN6_DECOMPRESSION_DEBUG, ("DAC == 0, stateless compression, setting link local prefix\n"));
