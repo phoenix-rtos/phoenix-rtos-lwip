@@ -57,6 +57,7 @@
 #include "lwip/ip_addr.h"
 #include "lwip/netif.h"
 #include "lwip/udp.h"
+#include "lwip/inet_chksum.h"
 
 #include <string.h>
 
@@ -545,6 +546,29 @@ lowpan6_compress_headers(struct netif *netif, u8_t *inbuf, size_t inbuf_size, u8
   return ERR_OK;
 }
 
+/** Calculate UDP checksum, which have been elided by a compressor
+ *
+ * @param p IPv6 packet to calculate checksum
+ * @param payload_offset indicates where UDP payload begins
+ */
+static void
+lowpan6_decompress_udp_chksum(struct pbuf *p, u16_t payload_offset)
+{
+  struct ip6_hdr *ip6hdr;
+  struct udp_hdr *udphdr;
+  ip6_addr_t src, dest;
+  unsigned i;
+
+  ip6hdr = (struct ip6_hdr *) p->payload;
+  udphdr = (struct udp_hdr *) (p->payload + payload_offset - UDP_HLEN);
+  memcpy(src.addr, ip6hdr->src.addr, 16);
+  memcpy(dest.addr, ip6hdr->dest.addr, 16);
+
+  pbuf_remove_header(p, payload_offset - UDP_HLEN);
+  udphdr->chksum = ip6_chksum_pseudo(p, IP_PROTO_UDP, lwip_ntohs(udphdr->len), &src, &dest);
+  pbuf_add_header(p, payload_offset - UDP_HLEN);
+}
+
 /** Decompress IPv6 and UDP headers compressed according to RFC 6282
  *
  * @param lowpan6_buffer compressed headers, first byte is the dispatch byte
@@ -556,6 +580,7 @@ lowpan6_compress_headers(struct netif *netif, u8_t *inbuf, size_t inbuf_size, u8
  * @param datagram_size datagram size from fragments or 0 if unfragmented
  * @param compressed_size compressed datagram size (for unfragmented rx)
  * @param lowpan6_contexts context addresses
+ * @param udp_chksum_compressed is set to 1, if UDP chksum has been compressed
  * @param src source address of the outer layer, used for address compression
  * @param dest destination address of the outer layer, used for address compression
  * @return ERR_OK if decompression succeeded, an error otherwise
@@ -566,6 +591,7 @@ lowpan6_decompress_hdr(u8_t *lowpan6_buffer, size_t lowpan6_bufsize,
                        u16_t *hdr_size_comp, u16_t *hdr_size_decomp,
                        u16_t datagram_size, u16_t compressed_size,
                        ip6_addr_t *lowpan6_contexts,
+                       u8_t *udp_chksum_compressed,
                        struct lowpan6_link_addr *src, struct lowpan6_link_addr *dest)
 {
   u16_t lowpan6_offset;
@@ -581,6 +607,7 @@ lowpan6_decompress_hdr(u8_t *lowpan6_buffer, size_t lowpan6_bufsize,
   LWIP_ASSERT("dest != NULL", dest != NULL);
   LWIP_ASSERT("hdr_size_comp != NULL", hdr_size_comp != NULL);
   LWIP_ASSERT("dehdr_size_decompst != NULL", hdr_size_decomp != NULL);
+  LWIP_ASSERT("udp_chksum_compressed != NULL", udp_chksum_compressed != NULL);
 
   ip6hdr = (struct ip6_hdr *)decomp_buffer;
   if (decomp_bufsize < IP6_HLEN) {
@@ -900,9 +927,9 @@ lowpan6_decompress_hdr(u8_t *lowpan6_buffer, size_t lowpan6_bufsize,
 
       /* Checksum decompression */
       if (lowpan6_buffer[lowpan6_offset] & 0x04) {
-        /* @todo support checksum decompress */
-        LWIP_DEBUGF(LWIP_DBG_ON, ("NHC: UDP chechsum decompression UNSUPPORTED\n"));
-        return ERR_VAL;
+        /* We shall calculate the checksum once the whole datagram is reconstructed */
+        *udp_chksum_compressed = 1;
+        udphdr->chksum = 0xFFFF;
       }
 
       /* Decompress ports, according to RFC4944 */
@@ -925,15 +952,18 @@ lowpan6_decompress_hdr(u8_t *lowpan6_buffer, size_t lowpan6_bufsize,
         lowpan6_offset += 1;
       }
 
-      udphdr->chksum = lwip_htons(lowpan6_buffer[lowpan6_offset] << 8 | lowpan6_buffer[lowpan6_offset + 1]);
-      lowpan6_offset += 2;
+      if (!*udp_chksum_compressed) {
+        udphdr->chksum = lwip_htons(lowpan6_buffer[lowpan6_offset] << 8 | lowpan6_buffer[lowpan6_offset + 1]);
+        lowpan6_offset += 2;
+      }
+
       ip6_offset += UDP_HLEN;
       if (datagram_size == 0) {
         datagram_size = compressed_size - lowpan6_offset + ip6_offset;
       }
+      udphdr->len = lwip_htons(datagram_size - ip6_offset + UDP_HLEN);
       /* UDP header is always the last one */
       nh = 0;
-      udphdr->len = lwip_htons(datagram_size - IP6_HLEN);
     } else
 #endif /* LWIP_UDP */
     {
@@ -1025,6 +1055,7 @@ lowpan6_decompress(struct pbuf *p, u16_t datagram_size, ip6_addr_t *lowpan6_cont
   struct pbuf *q;
   u16_t lowpan6_offset, ip6_offset;
   err_t err;
+  u8_t udp_chksum_compressed = 0;
 
 #if LWIP_UDP
 #define UDP_HLEN_ALLOC UDP_HLEN
@@ -1049,7 +1080,7 @@ lowpan6_decompress(struct pbuf *p, u16_t datagram_size, ip6_addr_t *lowpan6_cont
 
   /* Decompress the IPv6 (and possibly UDP) header(s) into the new pbuf */
   err = lowpan6_decompress_hdr((u8_t *)p->payload, p->len, (u8_t *)q->payload, q->len,
-    &lowpan6_offset, &ip6_offset, datagram_size, p->tot_len, lowpan6_contexts, src, dest);
+    &lowpan6_offset, &ip6_offset, datagram_size, p->tot_len, lowpan6_contexts, &udp_chksum_compressed, src, dest);
   if (err != ERR_OK) {
     pbuf_free(p);
     pbuf_free(q);
@@ -1076,6 +1107,12 @@ lowpan6_decompress(struct pbuf *p, u16_t datagram_size, ip6_addr_t *lowpan6_cont
   /* the original (first) pbuf can now be freed */
   p->next = NULL;
   pbuf_free(p);
+
+  /* Calculate UDP checksum if needed
+     @todo: update checksum if a datagram is fragmented */
+  if (udp_chksum_compressed) {
+    lowpan6_decompress_udp_chksum(q, ip6_offset);
+  }
 
   /* all done */
   return q;
