@@ -106,6 +106,29 @@ lowpan6_ip6_nh_to_eid(u8_t nh)
   }
 }
 
+static u8_t
+lowpan6_ip6_nhc_to_nh(u8_t nhc)
+{
+  if ((nhc & 0xf8) == 0xf0) {
+    return IP6_NEXTH_UDP;
+  }
+
+  switch ((nhc & 0x0e) >> 1) {
+    case LOWPAN6_EID_HOPBYHOP:
+      return IP6_NEXTH_HOPBYHOP;
+    case LOWPAN6_EID_ROUTING:
+      return IP6_NEXTH_ROUTING;
+    case LOWPAN6_EID_FRAGMENT:
+      return IP6_NEXTH_FRAGMENT;
+    case LOWPAN6_EID_DESTOPTS:
+      return IP6_NEXTH_DESTOPTS;
+    case LOWPAN6_EID_MOBILITY:
+      return IP6_NEXTH_MOBILITY;
+    default:
+      return 255;
+  }
+}
+
 /* Determine compression mode for unicast address. */
 s8_t
 lowpan6_get_address_mode(const ip6_addr_t *ip6addr, const struct lowpan6_link_addr *mac_addr)
@@ -547,7 +570,8 @@ lowpan6_decompress_hdr(u8_t *lowpan6_buffer, size_t lowpan6_bufsize,
 {
   u16_t lowpan6_offset;
   struct ip6_hdr *ip6hdr;
-  s8_t i;
+  u8_t i, nh;
+  u8_t current_header;
   u32_t header_temp;
   u16_t ip6_offset = IP6_HLEN;
 
@@ -849,18 +873,26 @@ lowpan6_decompress_hdr(u8_t *lowpan6_buffer, size_t lowpan6_bufsize,
     }
   }
 
-
+  nh = lowpan6_buffer[0] & 0x04;
+  /* Set IPv6 Next Header field */
+  if (nh) {
+    current_header = lowpan6_ip6_nhc_to_nh(lowpan6_buffer[lowpan6_offset]);
+    if (current_header == 255) {
+      LWIP_DEBUGF(LWIP_DBG_ON,("NHC: unsupported protocol!\n"));
+      return ERR_VAL;
+    }
+    IP6H_NEXTH_SET(ip6hdr, current_header);
+  }
   /* Next Header Compression (NHC) decoding? */
-  if (lowpan6_buffer[0] & 0x04) {
+  while (nh != 0) {
     LWIP_DEBUGF(LWIP_LOWPAN6_DECOMPRESSION_DEBUG, ("NHC decoding\n"));
 #if LWIP_UDP
-    if ((lowpan6_buffer[lowpan6_offset] & 0xf8) == 0xf0) {
+    if (current_header == IP6_NEXTH_UDP) {
       /* NHC: UDP */
       struct udp_hdr *udphdr;
       LWIP_DEBUGF(LWIP_LOWPAN6_DECOMPRESSION_DEBUG, ("NHC: UDP\n"));
 
       /* UDP compression */
-      IP6H_NEXTH_SET(ip6hdr, IP6_NEXTH_UDP);
       udphdr = (struct udp_hdr *)((u8_t *)decomp_buffer + ip6_offset);
       if (decomp_bufsize < IP6_HLEN + UDP_HLEN) {
         return ERR_MEM;
@@ -899,14 +931,75 @@ lowpan6_decompress_hdr(u8_t *lowpan6_buffer, size_t lowpan6_bufsize,
       if (datagram_size == 0) {
         datagram_size = compressed_size - lowpan6_offset + ip6_offset;
       }
+      /* UDP header is always the last one */
+      nh = 0;
       udphdr->len = lwip_htons(datagram_size - IP6_HLEN);
-
     } else
 #endif /* LWIP_UDP */
     {
-      LWIP_DEBUGF(LWIP_DBG_ON,("NHC: unsupported protocol!\n"));
-      /* @todo support NHC other than UDP */
-      return ERR_VAL;
+      u16_t hlen, decomp_hlen;
+      u8_t next_header;
+
+      if (!NH_IS_COMPRESSIBLE(current_header)) {
+        LWIP_DEBUGF(LWIP_DBG_ON, ("NHC: unsupported protocol!\n"));
+        return ERR_VAL;
+      }
+
+      nh = lowpan6_buffer[lowpan6_offset++] & 0x01;
+      /* Is Next Header elided? */
+      if (!nh) {
+        next_header = lowpan6_buffer[lowpan6_offset++];
+      }
+
+      if (current_header == IP6_NEXTH_FRAGMENT) {
+        hlen = IP6_FRAG_HLEN - 1;
+      } else {
+        hlen = lowpan6_buffer[lowpan6_offset++];
+      }
+
+      /* If there is a next NHC, we'll take next_header value from it */
+      if (hlen + lowpan6_offset + ((nh) ? 1 : 0) > lowpan6_bufsize) {
+          LWIP_DEBUGF(LWIP_DBG_ON,("NHC: Next Header len too long!\n"));
+          return ERR_VAL;
+      }
+      if (nh) {
+        next_header = lowpan6_ip6_nhc_to_nh(lowpan6_buffer[lowpan6_offset + hlen]);
+        if (next_header == 255) {
+          LWIP_DEBUGF(LWIP_DBG_ON,("NHC: unsupported protocol!\n"));
+          return ERR_VAL;
+        }
+      }
+
+      /* Compute hlen decompressed, padded to 8 */
+      decomp_hlen = (hlen / 8 + 1) * 8;
+
+      decomp_buffer[ip6_offset++] = next_header;
+
+      if (current_header != IP6_NEXTH_FRAGMENT) {
+        decomp_buffer[ip6_offset++] = (decomp_hlen / 8) - 1;
+      }
+
+      /* Copy uncompressed fields */
+      MEMCPY(decomp_buffer + ip6_offset, lowpan6_buffer + lowpan6_offset, hlen);
+      lowpan6_offset += hlen;
+      ip6_offset += hlen;
+
+      /* Add padding if this header type contains opts and if it is necesseary */
+      if (NH_HAS_OPTS(current_header)) {
+        if (hlen + 2 < decomp_hlen) {
+          /* Pad1? */
+          if (decomp_hlen - hlen - 2 == 1) {
+            decomp_buffer[ip6_offset++] = IP6_PAD1_OPTION;
+          } else {
+            /* PadN */
+            decomp_buffer[ip6_offset++] = IP6_PADN_OPTION;
+            decomp_buffer[ip6_offset++] = decomp_hlen - hlen - 4;
+            memset(decomp_buffer + ip6_offset, 0, decomp_hlen - hlen - 4);
+            ip6_offset += decomp_hlen - hlen - 4;
+          }
+        }
+      }
+      current_header = next_header;
     }
   }
   if (datagram_size == 0) {
