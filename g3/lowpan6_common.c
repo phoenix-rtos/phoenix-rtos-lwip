@@ -65,7 +65,7 @@ s8_t
 lowpan6_get_address_mode(const ip6_addr_t *ip6addr, const struct lowpan6_link_addr *mac_addr)
 {
   if (mac_addr->addr_len == 2) {
-    if ((ip6addr->addr[2] == (u32_t)PP_HTONL(0x000000ff)) &&
+    if (((ip6addr->addr[2] & PP_HTONL(0x0000ffff)) == PP_HTONL(0x000000ffUL)) &&
         ((ip6addr->addr[3]  & PP_HTONL(0xffff0000)) == PP_NTOHL(0xfe000000))) {
       if ((ip6addr->addr[3]  & PP_HTONL(0x0000ffff)) == lwip_ntohl((mac_addr->addr[0] << 8) | mac_addr->addr[1])) {
         return 3;
@@ -78,7 +78,7 @@ lowpan6_get_address_mode(const ip6_addr_t *ip6addr, const struct lowpan6_link_ad
     }
   }
 
-  if ((ip6addr->addr[2] == PP_HTONL(0x000000ffUL)) &&
+  if ((ip6addr->addr[2] & PP_HTONL(0x0000ffff)) == PP_HTONL(0x000000ffUL) &&
       ((ip6addr->addr[3]  & PP_HTONL(0xffff0000)) == PP_NTOHL(0xfe000000UL))) {
     return 2;
   }
