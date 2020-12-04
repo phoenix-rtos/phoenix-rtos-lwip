@@ -80,7 +80,7 @@ err_t lowpan6_compress_headers(struct netif *netif, u8_t *inbuf, size_t inbuf_si
                                u8_t *lowpan6_header_len_out, u8_t *hidden_header_len_out, struct lowpan6_context *lowpan6_contexts,
                                const struct lowpan6_link_addr *src, const struct lowpan6_link_addr *dst);
 struct pbuf *lowpan6_decompress(struct pbuf *p, u16_t datagram_size, struct lowpan6_context *lowpan6_contexts,
-                                struct lowpan6_link_addr *src, struct lowpan6_link_addr *dest);
+                                u16_t pan_id, struct lowpan6_link_addr *src, struct lowpan6_link_addr *dest);
 #endif /* LWIP_6LOWPAN_IPHC */
 
 #ifdef __cplusplus

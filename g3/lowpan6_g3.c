@@ -724,7 +724,7 @@ lowpan6_input(struct pbuf *p, struct netif *netif)
       pbuf_remove_header(p, 1); /* hide dispatch byte. */
       lrh->reass = p;
     } else if ((*(u8_t *)p->payload & 0xe0 ) == 0x60) {
-      lrh->reass = lowpan6_decompress(p, datagram_size, LWIP_6LOWPAN_CONTEXTS(netif), &src, &dest);
+      lrh->reass = lowpan6_decompress(p, datagram_size, LWIP_6LOWPAN_CONTEXTS(netif), 0, &src, &dest);
       if (lrh->reass == NULL) {
         /* decompression failed */
         mem_free(lrh);
@@ -850,7 +850,7 @@ lowpan6_input(struct pbuf *p, struct netif *netif)
       pbuf_remove_header(p, 1); /* hide dispatch byte. */
     } else if ((b & 0xe0 ) == 0x60) {
       /* IPv6 headers are compressed using IPHC. */
-      p = lowpan6_decompress(p, datagram_size, LWIP_6LOWPAN_CONTEXTS(netif), &src, &dest);
+      p = lowpan6_decompress(p, datagram_size, LWIP_6LOWPAN_CONTEXTS(netif), 0, &src, &dest);
       if (p == NULL) {
         MIB2_STATS_NETIF_INC(netif, ifindiscards);
         return ERR_OK;
