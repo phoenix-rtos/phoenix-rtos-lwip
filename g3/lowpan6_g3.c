@@ -48,7 +48,7 @@
  * 6LowPAN netif implementation
  */
 
-#include "netif/lowpan6.h"
+#include "lowpan6_g3.h"
 
 #if LWIP_IPV6
 
@@ -90,7 +90,7 @@ struct lowpan6_ieee802154_data {
   struct lowpan6_reass_helper *reass_list;
 #if LWIP_6LOWPAN_NUM_CONTEXTS > 0
   /** address context for compression */
-  ip6_addr_t lowpan6_context[LWIP_6LOWPAN_NUM_CONTEXTS];
+  struct lowpan6_context lowpan6_context[LWIP_6LOWPAN_NUM_CONTEXTS];
 #endif
   /** Datagram Tag for fragmentation */
   u16_t tx_datagram_tag;
@@ -496,21 +496,24 @@ lowpan6_frag(struct netif *netif, struct pbuf *p, const struct lowpan6_link_addr
  * Set context
  */
 err_t
-lowpan6_set_context(u8_t idx, const ip6_addr_t *context)
+lowpan6_set_context(u8_t idx, const u32_t *context, u16_t context_length)
 {
 #if LWIP_6LOWPAN_NUM_CONTEXTS > 0
   if (idx >= LWIP_6LOWPAN_NUM_CONTEXTS) {
     return ERR_ARG;
   }
 
-  IP6_ADDR_ZONECHECK(context);
-
-  ip6_addr_set(&lowpan6_data.lowpan6_context[idx], context);
+  lowpan6_data.lowpan6_context[idx].cid = idx;
+  lowpan6_data.lowpan6_context[idx].context_length = context_length;
+  lowpan6_data.lowpan6_context[idx].c = 1;
+  lowpan6_data.lowpan6_context[idx].valid_lifetime = -1; /* @todo: calculate valid lifetime */
+  MEMCPY(lowpan6_data.lowpan6_context[idx].context, context, 16);
 
   return ERR_OK;
 #else
   LWIP_UNUSED_ARG(idx);
   LWIP_UNUSED_ARG(context);
+  LWIP_UNUSED_ARG(context_length);
   return ERR_ARG;
 #endif
 }

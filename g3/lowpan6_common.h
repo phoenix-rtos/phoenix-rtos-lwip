@@ -63,13 +63,23 @@ struct lowpan6_link_addr {
   u8_t addr[8];
 };
 
+/* Structure compliant with RFC 6775 used to create context table storing
+ * information used for stateful IPv6 address compression */
+struct lowpan6_context {
+  u8_t cid;
+  u8_t context_length;
+  u32_t context[4];
+  u8_t c; /* Indicates if an entry may be used for compression */
+  u16_t valid_lifetime;
+};
+
 s8_t lowpan6_get_address_mode(const ip6_addr_t *ip6addr, const struct lowpan6_link_addr *mac_addr);
 
 #if LWIP_6LOWPAN_IPHC
 err_t lowpan6_compress_headers(struct netif *netif, u8_t *inbuf, size_t inbuf_size, u8_t *outbuf, size_t outbuf_size,
-                               u8_t *lowpan6_header_len_out, u8_t *hidden_header_len_out, ip6_addr_t *lowpan6_contexts,
+                               u8_t *lowpan6_header_len_out, u8_t *hidden_header_len_out, struct lowpan6_context *lowpan6_contexts,
                                const struct lowpan6_link_addr *src, const struct lowpan6_link_addr *dst);
-struct pbuf *lowpan6_decompress(struct pbuf *p, u16_t datagram_size, ip6_addr_t *lowpan6_contexts,
+struct pbuf *lowpan6_decompress(struct pbuf *p, u16_t datagram_size, struct lowpan6_context *lowpan6_contexts,
                                 struct lowpan6_link_addr *src, struct lowpan6_link_addr *dest);
 #endif /* LWIP_6LOWPAN_IPHC */
 
