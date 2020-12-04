@@ -48,7 +48,7 @@
  * 6LowPAN netif implementation
  */
 
-#include "netif/lowpan6_common.h"
+#include "lowpan6_common.h"
 
 #if LWIP_IPV6
 
@@ -181,15 +181,97 @@ lowpan6_get_address_mode_mc(const ip6_addr_t *ip6addr)
 }
 
 #if LWIP_6LOWPAN_NUM_CONTEXTS > 0
+/*
+ * This function is used to set IPv6 addr bits
+ * covered by the context.
+ */
+static void
+lowpan6_context_fill_addr(const struct lowpan6_context *context, ip6_addr_p_t *addr)
+{
+  unsigned i = 0;
+  u8_t bits = context->context_length;
+
+  if (bits > 128)
+    return;
+
+  memset(addr, 0, 16);
+  while (bits > 32) {
+    addr->addr[i] = context->context[i];
+    i++;
+    bits -= 32;
+  }
+
+  /* Set rest of bits covered by context */
+  if (bits > 0) {
+    addr->addr[i] = context->context[i];
+    /* Clear bits not covered by context */
+    addr->addr[i] &= PP_HTONL(0xffffffff << (32 - bits));
+  }
+}
+
+/*
+ * This helper function is used to set iid bits not covered by context,
+ * either inlined or derived from encapsulating headers.
+ */
+static void
+lowpan6_context_set_iid(ip6_addr_p_t *addr_iid, const u32_t *iid, u8_t ctx_len)
+{
+  if (ctx_len == 0) {
+    addr_iid->addr[2] = lwip_htonl(iid[0]);
+    addr_iid->addr[3] = lwip_htonl(iid[1]);
+  }
+
+  if (ctx_len < 96) {
+    addr_iid->addr[2] |= lwip_htonl(iid[0] & (0xffffffffUL >> (ctx_len - 64)));
+    addr_iid->addr[3] = lwip_htonl(iid[1]);
+  } else {
+    /* Assuming it can't be greater than 128 */
+    addr_iid->addr[2] = iid[0];
+    addr_iid->addr[3] |= lwip_htonl(iid[1] & (0xffffffffUL >> (ctx_len - 96)));
+  }
+}
+
+static u8_t
+lowpan6_context_cmp(const struct lowpan6_context *context, const u32_t *addr)
+{
+  unsigned i = 0;
+  u8_t bits = context->context_length;
+
+  if (bits > 128 || bits == 0)
+    return 0;
+
+  while (bits > 32) {
+    if (addr[i] != context->context[i]) {
+      return 0;
+    }
+    i++;
+    bits -= 32;
+  }
+
+  /* Compare bits left */
+  if (bits > 0) {
+    return (lwip_ntohl(context->context[i]) >> (32 - bits)) == (lwip_ntohl(addr[i]) >> (32 - bits));
+  }
+
+  return 1;
+}
+
 static s8_t
-lowpan6_context_lookup(const ip6_addr_t *lowpan6_contexts, const ip6_addr_t *ip6addr)
+lowpan6_context_lookup(const struct lowpan6_context *lowpan6_contexts, const ip6_addr_t *ip6addr)
 {
   s8_t i;
 
   for (i = 0; i < LWIP_6LOWPAN_NUM_CONTEXTS; i++) {
-    if (ip6_addr_netcmp(&lowpan6_contexts[i], ip6addr)) {
-      return i;
-    }
+    if (!ip6_addr_ismulticast(ip6addr)) {
+      if (lowpan6_context_cmp(&lowpan6_contexts[i], ip6addr->addr)) {
+        return i;
+      }
+    } else if (lowpan6_contexts[i].context_length <= 64 &&
+               lowpan6_contexts[i].context_length == (lwip_ntohl(ip6addr->addr[0]) & 0xff) &&
+               lowpan6_context_cmp(&lowpan6_contexts[i], ip6addr->addr + 1)) {
+        /* Unicast-Prefix-based IPv6 address: plen and network prefix are equal */
+        return i;
+      }
   }
   return -1;
 }
@@ -197,10 +279,10 @@ lowpan6_context_lookup(const ip6_addr_t *lowpan6_contexts, const ip6_addr_t *ip6
 
 /*
  * Compress IPv6 and/or UDP headers.
- * */
+ */
 err_t
 lowpan6_compress_headers(struct netif *netif, u8_t *inbuf, size_t inbuf_size, u8_t *outbuf, size_t outbuf_size,
-                         u8_t *lowpan6_header_len_out, u8_t *hidden_header_len_out, ip6_addr_t *lowpan6_contexts,
+                         u8_t *lowpan6_header_len_out, u8_t *hidden_header_len_out, struct lowpan6_context *lowpan6_contexts,
                          const struct lowpan6_link_addr *src, const struct lowpan6_link_addr *dst)
 {
   u8_t *buffer, *inptr;
@@ -557,12 +639,11 @@ lowpan6_decompress_udp_chksum(struct pbuf *p, u16_t payload_offset)
   struct ip6_hdr *ip6hdr;
   struct udp_hdr *udphdr;
   ip6_addr_t src, dest;
-  unsigned i;
 
   ip6hdr = (struct ip6_hdr *) p->payload;
   udphdr = (struct udp_hdr *) (p->payload + payload_offset - UDP_HLEN);
-  memcpy(src.addr, ip6hdr->src.addr, 16);
-  memcpy(dest.addr, ip6hdr->dest.addr, 16);
+  ip6_addr_copy_from_packed(src, ip6hdr->src);
+  ip6_addr_copy_from_packed(dest, ip6hdr->dest);
 
   pbuf_remove_header(p, payload_offset - UDP_HLEN);
   udphdr->chksum = ip6_chksum_pseudo(p, IP_PROTO_UDP, lwip_ntohs(udphdr->len), &src, &dest);
@@ -590,15 +671,16 @@ lowpan6_decompress_hdr(u8_t *lowpan6_buffer, size_t lowpan6_bufsize,
                        u8_t *decomp_buffer, size_t decomp_bufsize,
                        u16_t *hdr_size_comp, u16_t *hdr_size_decomp,
                        u16_t datagram_size, u16_t compressed_size,
-                       ip6_addr_t *lowpan6_contexts,
+                       struct lowpan6_context *lowpan6_contexts,
                        u8_t *udp_chksum_compressed,
                        struct lowpan6_link_addr *src, struct lowpan6_link_addr *dest)
 {
   u16_t lowpan6_offset;
   struct ip6_hdr *ip6hdr;
-  u8_t i, nh;
+  u8_t i = 0, nh;
   u8_t current_header;
   u32_t header_temp;
+  u32_t iid[2];
   u16_t ip6_offset = IP6_HLEN;
 
   LWIP_ASSERT("lowpan6_buffer != NULL", lowpan6_buffer != NULL);
@@ -607,6 +689,7 @@ lowpan6_decompress_hdr(u8_t *lowpan6_buffer, size_t lowpan6_bufsize,
   LWIP_ASSERT("dest != NULL", dest != NULL);
   LWIP_ASSERT("hdr_size_comp != NULL", hdr_size_comp != NULL);
   LWIP_ASSERT("dehdr_size_decompst != NULL", hdr_size_decomp != NULL);
+  LWIP_ASSERT("lowpan6_contexts != NULL", lowpan6_contexts != NULL);
   LWIP_ASSERT("udp_chksum_compressed != NULL", udp_chksum_compressed != NULL);
 
   ip6hdr = (struct ip6_hdr *)decomp_buffer;
@@ -763,8 +846,7 @@ lowpan6_decompress_hdr(u8_t *lowpan6_buffer, size_t lowpan6_bufsize,
         return ERR_VAL;
       }
 #if LWIP_6LOWPAN_NUM_CONTEXTS > 0
-      ip6hdr->src.addr[0] = lowpan6_contexts[i].addr[0];
-      ip6hdr->src.addr[1] = lowpan6_contexts[i].addr[1];
+      lowpan6_context_fill_addr(&lowpan6_contexts[i], &ip6hdr->src);
       LWIP_DEBUGF(LWIP_LOWPAN6_DECOMPRESSION_DEBUG, ("SAM == xx, context compression found @%d: %8X, %8X\n", (int)i, ip6hdr->src.addr[0], ip6hdr->src.addr[1]));
 #else
       LWIP_UNUSED_ARG(lowpan6_contexts);
@@ -774,29 +856,36 @@ lowpan6_decompress_hdr(u8_t *lowpan6_buffer, size_t lowpan6_bufsize,
     /* determine further address bits */
     if ((lowpan6_buffer[1] & 0x30) == 0x10) {
       /* SAM=01, load additional 64bits */
-      MEMCPY(&ip6hdr->src.addr[2], lowpan6_buffer + lowpan6_offset, 8);
+      MEMCPY(iid, lowpan6_buffer + lowpan6_offset, sizeof(iid));
+      lowpan6_offset += sizeof(iid);
+      iid[0] = lwip_ntohl(iid[0]);
+      iid[1] = lwip_ntohl(iid[1]);
+      lowpan6_context_set_iid(&ip6hdr->src, iid, lowpan6_contexts[i].context_length);
+
       LWIP_DEBUGF(LWIP_LOWPAN6_DECOMPRESSION_DEBUG, ("SAM == 01, context compression, 64bits inline\n"));
-      lowpan6_offset += 8;
     } else if ((lowpan6_buffer[1] & 0x30) == 0x20) {
       /* SAM=01, load additional 16bits */
-      ip6hdr->src.addr[2] = PP_HTONL(0x000000ffUL);
-      ip6hdr->src.addr[3] = lwip_htonl(0xfe000000UL | (lowpan6_buffer[lowpan6_offset] << 8) | lowpan6_buffer[lowpan6_offset + 1]);
+      iid[0] = 0x000000ffUL;
+      iid[1] = 0xfe000000UL | (lowpan6_buffer[lowpan6_offset] << 8) | lowpan6_buffer[lowpan6_offset + 1];
+
+      lowpan6_context_set_iid(&ip6hdr->src, iid, lowpan6_contexts[i].context_length);
       LWIP_DEBUGF(LWIP_LOWPAN6_DECOMPRESSION_DEBUG, ("SAM == 10, context compression, 16bits inline\n"));
       lowpan6_offset += 2;
     } else if ((lowpan6_buffer[1] & 0x30) == 0x30) {
       /* SAM=11, address is fully elided, load from other layers */
       LWIP_DEBUGF(LWIP_LOWPAN6_DECOMPRESSION_DEBUG, ("SAM == 11, context compression, 0bits inline, using other headers\n"));
       if (src->addr_len == 2) {
-        ip6hdr->src.addr[2] = PP_HTONL(0x000000ffUL);
-        ip6hdr->src.addr[3] = lwip_htonl(0xfe000000UL | (src->addr[0] << 8) | src->addr[1]);
+        iid[0] = 0x000000ffUL;
+        iid[1] = 0xfe000000UL | (src->addr[0] << 8) | src->addr[1];
       } else if (src->addr_len == 8) {
-        ip6hdr->src.addr[2] = lwip_htonl(((src->addr[0] ^ 2) << 24) | (src->addr[1] << 16) | (src->addr[2] << 8) | src->addr[3]);
-        ip6hdr->src.addr[3] = lwip_htonl((src->addr[4] << 24) | (src->addr[5] << 16) | (src->addr[6] << 8) | src->addr[7]);
+        iid[0] = ((src->addr[0] ^ 2) << 24) | (src->addr[1] << 16) | (src->addr[2] << 8) | src->addr[3];
+        iid[1] = (src->addr[4] << 24) | (src->addr[5] << 16) | (src->addr[6] << 8) | src->addr[7];
       } else {
         /* invalid source address length */
         LWIP_DEBUGF(LWIP_LOWPAN6_DECOMPRESSION_DEBUG, ("Invalid source address length\n"));
         return ERR_VAL;
       }
+      lowpan6_context_set_iid(&ip6hdr->src, iid, lowpan6_contexts[i].context_length);
     }
   }
 
@@ -856,8 +945,7 @@ lowpan6_decompress_hdr(u8_t *lowpan6_buffer, size_t lowpan6_bufsize,
         return ERR_VAL;
       }
 #if LWIP_6LOWPAN_NUM_CONTEXTS > 0
-      ip6hdr->dest.addr[0] = lowpan6_contexts[i].addr[0];
-      ip6hdr->dest.addr[1] = lowpan6_contexts[i].addr[1];
+      lowpan6_context_fill_addr(&lowpan6_contexts[i], &ip6hdr->dest);
 #endif
     } else {
       LWIP_DEBUGF(LWIP_LOWPAN6_DECOMPRESSION_DEBUG, ("DAC == 0, stateless compression, setting link local prefix\n"));
@@ -875,20 +963,25 @@ lowpan6_decompress_hdr(u8_t *lowpan6_buffer, size_t lowpan6_bufsize,
     } else if ((lowpan6_buffer[1] & 0x03) == 0x01) {
       LWIP_DEBUGF(LWIP_LOWPAN6_DECOMPRESSION_DEBUG, ("DAM == 01, dst compression, 64bits inline\n"));
       /* DAM=01, copy 64 inline bits, increase offset */
-      MEMCPY(&ip6hdr->dest.addr[2], lowpan6_buffer + lowpan6_offset, 8);
-      lowpan6_offset += 8;
+      MEMCPY(iid, lowpan6_buffer + lowpan6_offset, sizeof(iid));
+      lowpan6_offset += sizeof(iid);
+      iid[0] = lwip_ntohl(iid[0]);
+      iid[1] = lwip_ntohl(iid[1]);
+      lowpan6_context_set_iid(&ip6hdr->dest, iid, (lowpan6_buffer[1] & 0x80) ? lowpan6_contexts[i].context_length : 0);
     } else if ((lowpan6_buffer[1] & 0x03) == 0x02) {
       LWIP_DEBUGF(LWIP_LOWPAN6_DECOMPRESSION_DEBUG, ("DAM == 01, dst compression, 16bits inline\n"));
       /* DAM=10, copy 16 inline bits, increase offset */
-      ip6hdr->dest.addr[2] = PP_HTONL(0x000000ffUL);
-      ip6hdr->dest.addr[3] = lwip_htonl(0xfe000000UL | (lowpan6_buffer[lowpan6_offset] << 8) | lowpan6_buffer[lowpan6_offset + 1]);
+      iid[0] = 0x000000ffUL;
+      iid[1] = 0xfe000000UL | (lowpan6_buffer[lowpan6_offset] << 8) | lowpan6_buffer[lowpan6_offset + 1];
+
+      lowpan6_context_set_iid(&ip6hdr->dest, iid, (lowpan6_buffer[1] & 0x80) ? lowpan6_contexts[i].context_length : 0);
       lowpan6_offset += 2;
     } else if ((lowpan6_buffer[1] & 0x03) == 0x03) {
       /* DAM=11, no bits available, use other headers (not done here) */
       LWIP_DEBUGF(LWIP_LOWPAN6_DECOMPRESSION_DEBUG,("DAM == 01, dst compression, 0bits inline, using other headers\n"));
       if (dest->addr_len == 2) {
-        ip6hdr->dest.addr[2] = PP_HTONL(0x000000ffUL);
-        ip6hdr->dest.addr[3] = lwip_htonl(0xfe000000UL | (dest->addr[0] << 8) | dest->addr[1]);
+        iid[0] = 0x000000ffUL;
+        iid[1] = 0xfe000000UL | dest->addr[0] << 8 | dest->addr[1];
       } else if (dest->addr_len == 8) {
         ip6hdr->dest.addr[2] = lwip_htonl(((dest->addr[0] ^ 2) << 24) | (dest->addr[1] << 16) | dest->addr[2] << 8 | dest->addr[3]);
         ip6hdr->dest.addr[3] = lwip_htonl((dest->addr[4] << 24) | (dest->addr[5] << 16) | dest->addr[6] << 8 | dest->addr[7]);
@@ -897,6 +990,7 @@ lowpan6_decompress_hdr(u8_t *lowpan6_buffer, size_t lowpan6_bufsize,
         LWIP_DEBUGF(LWIP_LOWPAN6_DECOMPRESSION_DEBUG, ("Invalid destination address length\n"));
         return ERR_VAL;
       }
+      lowpan6_context_set_iid(&ip6hdr->dest, iid, (lowpan6_buffer[1] & 0x80) ? lowpan6_contexts[i].context_length : 0);
     }
   }
 
@@ -1049,7 +1143,7 @@ lowpan6_decompress_hdr(u8_t *lowpan6_buffer, size_t lowpan6_bufsize,
 }
 
 struct pbuf *
-lowpan6_decompress(struct pbuf *p, u16_t datagram_size, ip6_addr_t *lowpan6_contexts,
+lowpan6_decompress(struct pbuf *p, u16_t datagram_size, struct lowpan6_context *lowpan6_contexts,
                    struct lowpan6_link_addr *src, struct lowpan6_link_addr *dest)
 {
   struct pbuf *q;
