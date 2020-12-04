@@ -70,7 +70,11 @@
                                  (nh) == IP6_NEXTH_DESTOPTS || (nh) == IP6_NEXTH_MOBILITY)
 /* @todo: compress IPv6 enscapsulated header */
 
+#if LWIP_G3_PLC
+#define NH_HAS_OPTS(nh) ((nh) == IP6_NEXTH_HOPBYHOP || (nh) == IP6_NEXTH_DESTOPTS || (nh) == IP6_NEXTH_MOBILITY)
+#else
 #define NH_HAS_OPTS(nh) ((nh) == IP6_NEXTH_HOPBYHOP || (nh) == IP6_NEXTH_DESTOPTS)
+#endif
 
 #define LOWPAN6_NHC 0xE0
 
@@ -81,6 +85,7 @@
 #define LOWPAN6_EID_DESTOPTS  3
 #define LOWPAN6_EID_MOBILITY  4
 #define LOWPAN6_EID_IP6       7
+
 
 static u8_t
 lowpan6_ip6_nh_to_eid(u8_t nh)
@@ -378,6 +383,10 @@ lowpan6_compress_headers(struct netif *netif, u8_t *inbuf, size_t inbuf_size, u8
 
       buffer[lowpan6_header_len] = 0xf0;
 
+#if LWIP_G3_PLC
+      /* Always compress UDP chekcsum */
+      buffer[lowpan6_header_len] |= 0x04;
+#endif
       /* determine port compression mode. */
       if ((inptr[0] == 0xf0) && ((inptr[1] & 0xf0) == 0xb0) &&
           (inptr[2] == 0xf0) && ((inptr[3] & 0xf0) == 0xb0)) {
@@ -405,6 +414,11 @@ lowpan6_compress_headers(struct netif *netif, u8_t *inbuf, size_t inbuf_size, u8
         buffer[lowpan6_header_len++] = inptr[3];
       }
 
+#if !LWIP_G3_PLC
+      /* elide length and copy checksum */
+      buffer[lowpan6_header_len++] = inptr[6];
+      buffer[lowpan6_header_len++] = inptr[7];
+#endif
       hidden_header_len += UDP_HLEN;
 
       /* There is no next header after UDP header */
@@ -415,10 +429,13 @@ lowpan6_compress_headers(struct netif *netif, u8_t *inbuf, size_t inbuf_size, u8
       bytes_elided = 0;
       /* All extension headers begin with the Next Header field */
       next_hdr = inptr[bytes_elided++];
+#if !LWIP_G3_PLC
       /* For all headers except fragment byte1 contains len in 8 * octets */
       if (current_hdr == IP6_NEXTH_FRAGMENT) {
         hlen = IP6_FRAG_HLEN;
-      } else {
+      } else
+#endif
+      {
         hlen = 8 * (inptr[bytes_elided++] + 1);
       }
 
@@ -429,6 +446,10 @@ lowpan6_compress_headers(struct netif *netif, u8_t *inbuf, size_t inbuf_size, u8
       /* Check if a header might contain compressible padding options */
       if (NH_HAS_OPTS(current_hdr)) {
         ext_hdr_offset = bytes_elided;
+#if LWIP_G3_PLC
+        if (current_hdr == IP6_NEXTH_MOBILITY)
+          ext_hdr_offset += 4;
+#endif
         while (ext_hdr_offset < hlen) {
           opt_hdr = (struct ip6_opt_hdr *)(inptr + ext_hdr_offset);
           if (IP6_OPT_TYPE(opt_hdr) == IP6_PAD1_OPTION) {
@@ -464,6 +485,12 @@ lowpan6_compress_headers(struct netif *netif, u8_t *inbuf, size_t inbuf_size, u8
       buffer[lowpan6_header_len] = LOWPAN6_NHC | (lowpan6_ip6_nh_to_eid(current_hdr) << 1);
 
       /* Check if a next header field can be elided */
+#if LWIP_G3_PLC
+      if (current_hdr == IP6_NEXTH_FRAGMENT) {
+        buffer[lowpan6_header_len + 1] = next_hdr;
+        lowpan6_header_len += 2;
+      } else
+#endif
       if (NH_IS_COMPRESSIBLE(next_hdr)) {
         buffer[lowpan6_header_len++] |= 1;
       } else {
@@ -480,6 +507,11 @@ lowpan6_compress_headers(struct netif *netif, u8_t *inbuf, size_t inbuf_size, u8
       inptr += hlen;
       hidden_header_len += hlen;
 
+#if LWIP_G3_PLC
+      if (current_hdr == IP6_NEXTH_FRAGMENT) {
+        break;
+      }
+#endif
       current_hdr = next_hdr;
     }
   }
