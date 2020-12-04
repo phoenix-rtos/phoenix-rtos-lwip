@@ -208,20 +208,21 @@ lowpan6_compress_headers(struct netif *netif, u8_t *inbuf, size_t inbuf_size, u8
       buffer[0] |= 0x08;
     } else {
       /* Traffic class (ECN+DSCP) appended. */
-      buffer[lowpan6_header_len++] = IP6H_TC(ip6hdr);
+      /* Rotate right by 2 bits */
+      buffer[lowpan6_header_len++] = IP6H_TC(ip6hdr) >> 2 | IP6H_TC(ip6hdr) << 6;
     }
   } else {
-    if (((IP6H_TC(ip6hdr) & 0x3f) == 0)) {
+    if (((IP6H_TC(ip6hdr) & 0xfc) == 0)) {
       /* DSCP portion of Traffic Class is elided, ECN and FL are appended (3 bytes) */
       buffer[0] |= 0x08;
 
-      buffer[lowpan6_header_len] = IP6H_TC(ip6hdr) & 0xc0;
+      buffer[lowpan6_header_len] = (IP6H_TC(ip6hdr) & 0x03) << 6;
       buffer[lowpan6_header_len++] |= (IP6H_FL(ip6hdr) >> 16) & 0x0f;
       buffer[lowpan6_header_len++] = (IP6H_FL(ip6hdr) >> 8) & 0xff;
       buffer[lowpan6_header_len++] = IP6H_FL(ip6hdr) & 0xff;
     } else {
       /* Traffic class and flow label are appended (4 bytes) */
-      buffer[lowpan6_header_len++] = IP6H_TC(ip6hdr);
+      buffer[lowpan6_header_len++] = IP6H_TC(ip6hdr) >> 2 | IP6H_TC(ip6hdr) << 6;
       buffer[lowpan6_header_len++] = (IP6H_FL(ip6hdr) >> 16) & 0x0f;
       buffer[lowpan6_header_len++] = (IP6H_FL(ip6hdr) >> 8) & 0xff;
       buffer[lowpan6_header_len++] = IP6H_FL(ip6hdr) & 0xff;
@@ -442,7 +443,7 @@ lowpan6_decompress_hdr(u8_t *lowpan6_buffer, size_t lowpan6_bufsize,
       (lowpan6_buffer[lowpan6_offset + 2] << 8) | lowpan6_buffer[lowpan6_offset+3];
     LWIP_DEBUGF(LWIP_LOWPAN6_DECOMPRESSION_DEBUG, ("TF: 00, ECN: 0x%2x, Flowlabel+DSCP: 0x%8X\n", \
       lowpan6_buffer[lowpan6_offset],header_temp));
-    IP6H_VTCFL_SET(ip6hdr, 6, lowpan6_buffer[lowpan6_offset], header_temp);
+    IP6H_VTCFL_SET(ip6hdr, 6, lowpan6_buffer[lowpan6_offset] >> 6 | lowpan6_buffer[lowpan6_offset] << 2, header_temp);
     /* increase offset, processed 4 bytes here:
      * TF=00:  ECN + DSCP + 4-bit Pad + Flow Label (4 bytes)*/
     lowpan6_offset += 4;
@@ -450,13 +451,13 @@ lowpan6_decompress_hdr(u8_t *lowpan6_buffer, size_t lowpan6_bufsize,
     header_temp = ((lowpan6_buffer[lowpan6_offset] & 0x0f) << 16) | (lowpan6_buffer[lowpan6_offset + 1] << 8) | lowpan6_buffer[lowpan6_offset+2];
     LWIP_DEBUGF(LWIP_LOWPAN6_DECOMPRESSION_DEBUG, ("TF: 01, ECN: 0x%2x, Flowlabel: 0x%2X, DSCP ignored\n", \
       lowpan6_buffer[lowpan6_offset] & 0xc0,header_temp));
-    IP6H_VTCFL_SET(ip6hdr, 6, lowpan6_buffer[lowpan6_offset] & 0xc0, header_temp);
+    IP6H_VTCFL_SET(ip6hdr, 6, lowpan6_buffer[lowpan6_offset] >> 6, header_temp);
     /* increase offset, processed 3 bytes here:
      * TF=01:  ECN + 2-bit Pad + Flow Label (3 bytes), DSCP is elided.*/
     lowpan6_offset += 3;
   } else if ((lowpan6_buffer[0] & 0x18) == 0x10) {
     LWIP_DEBUGF(LWIP_LOWPAN6_DECOMPRESSION_DEBUG, ("TF: 10, DCSP+ECN: 0x%2x, Flowlabel ignored\n", lowpan6_buffer[lowpan6_offset]));
-    IP6H_VTCFL_SET(ip6hdr, 6, lowpan6_buffer[lowpan6_offset],0);
+    IP6H_VTCFL_SET(ip6hdr, 6, (lowpan6_buffer[lowpan6_offset] >> 6) | (lowpan6_buffer[lowpan6_offset] << 2), 0);
     /* increase offset, processed 1 byte here:
      * ECN + DSCP (1 byte), Flow Label is elided.*/
     lowpan6_offset += 1;
