@@ -60,6 +60,47 @@
 
 #include <string.h>
 
+/* Mobility header is not supported in lwip at the moment, but we need to recognize it */
+#ifndef IP6_NEXTH_MOBILITY
+#define IP6_NEXTH_MOBILITY  135
+#endif
+
+#define NH_IS_COMPRESSIBLE(nh)  ((nh) == IP6_NEXTH_UDP || (nh) == IP6_NEXTH_HOPBYHOP || \
+                                 (nh) == IP6_NEXTH_ROUTING || (nh) == IP6_NEXTH_FRAGMENT || \
+                                 (nh) == IP6_NEXTH_DESTOPTS || (nh) == IP6_NEXTH_MOBILITY)
+/* @todo: compress IPv6 enscapsulated header */
+
+#define NH_HAS_OPTS(nh) ((nh) == IP6_NEXTH_HOPBYHOP || (nh) == IP6_NEXTH_DESTOPTS)
+
+#define LOWPAN6_NHC 0xE0
+
+/* IPv6 Extension Header ID */
+#define LOWPAN6_EID_HOPBYHOP  0
+#define LOWPAN6_EID_ROUTING   1
+#define LOWPAN6_EID_FRAGMENT  2
+#define LOWPAN6_EID_DESTOPTS  3
+#define LOWPAN6_EID_MOBILITY  4
+#define LOWPAN6_EID_IP6       7
+
+static u8_t
+lowpan6_ip6_nh_to_eid(u8_t nh)
+{
+  switch (nh) {
+    case IP6_NEXTH_HOPBYHOP:
+      return LOWPAN6_EID_HOPBYHOP;
+    case IP6_NEXTH_ROUTING:
+      return LOWPAN6_EID_ROUTING;
+    case IP6_NEXTH_FRAGMENT:
+      return LOWPAN6_EID_FRAGMENT;
+    case IP6_NEXTH_DESTOPTS:
+      return LOWPAN6_EID_DESTOPTS;
+    case IP6_NEXTH_MOBILITY:
+      return LOWPAN6_EID_MOBILITY;
+    default:
+      return 255;
+  }
+}
+
 /* Determine compression mode for unicast address. */
 s8_t
 lowpan6_get_address_mode(const ip6_addr_t *ip6addr, const struct lowpan6_link_addr *mac_addr)
@@ -139,6 +180,10 @@ lowpan6_compress_headers(struct netif *netif, u8_t *inbuf, size_t inbuf_size, u8
   s8_t i;
   struct ip6_hdr *ip6hdr;
   ip_addr_t ip6src, ip6dst;
+  u16_t hlen;
+  u8_t next_hdr, current_hdr;
+  struct ip6_opt_hdr *opt_hdr;
+  u16_t ext_hdr_offset, bytes_elided;
 
   LWIP_ASSERT("netif != NULL", netif != NULL);
   LWIP_ASSERT("inbuf != NULL", inbuf != NULL);
@@ -229,9 +274,8 @@ lowpan6_compress_headers(struct netif *netif, u8_t *inbuf, size_t inbuf_size, u8
     }
   }
 
-  /* Compress NH?
-  * Only if UDP for now. @todo support other NH compression. */
-  if (IP6H_NEXTH(ip6hdr) == IP6_NEXTH_UDP) {
+  /* Compress NH? */
+  if (NH_IS_COMPRESSIBLE(IP6H_NEXTH(ip6hdr))) {
     buffer[0] |= 0x04;
   } else {
     /* append nexth. */
@@ -316,56 +360,129 @@ lowpan6_compress_headers(struct netif *netif, u8_t *inbuf, size_t inbuf_size, u8
   inptr += IP6_HLEN;
   hidden_header_len += IP6_HLEN;
 
+  current_hdr = IP6H_NEXTH(ip6hdr);
+  while (NH_IS_COMPRESSIBLE(current_hdr)) {
 #if LWIP_UDP
-  /* Compress UDP header? */
-  if (IP6H_NEXTH(ip6hdr) == IP6_NEXTH_UDP) {
-    /* @todo support optional checksum compression */
+    /* Compress UDP header? */
+    if (current_hdr == IP6_NEXTH_UDP) {
+      /* @todo support optional checksum compression */
 
-    if (inbuf_size < IP6_HLEN + UDP_HLEN) {
-      /* input buffer too short */
-      return ERR_VAL;
-    }
-    if (outbuf_size < (size_t)(hidden_header_len + 7)) {
-      /* output buffer too short for worst case */
-      return ERR_MEM;
-    }
+      if (inbuf_size < IP6_HLEN + UDP_HLEN) {
+        /* input buffer too short */
+        return ERR_VAL;
+      }
+      if (outbuf_size < (size_t)(hidden_header_len + 7)) {
+        /* output buffer too short for worst case */
+        return ERR_MEM;
+      }
 
-    buffer[lowpan6_header_len] = 0xf0;
+      buffer[lowpan6_header_len] = 0xf0;
 
-    /* determine port compression mode. */
-    if ((inptr[0] == 0xf0) && ((inptr[1] & 0xf0) == 0xb0) &&
-        (inptr[2] == 0xf0) && ((inptr[3] & 0xf0) == 0xb0)) {
-      /* Compress source and dest ports. */
-      buffer[lowpan6_header_len++] |= 0x03;
-      buffer[lowpan6_header_len++] = ((inptr[1] & 0x0f) << 4) | (inptr[3] & 0x0f);
-    } else if (inptr[0] == 0xf0) {
-      /* Compress source port. */
-      buffer[lowpan6_header_len++] |= 0x02;
-      buffer[lowpan6_header_len++] = inptr[1];
-      buffer[lowpan6_header_len++] = inptr[2];
-      buffer[lowpan6_header_len++] = inptr[3];
-    } else if (inptr[2] == 0xf0) {
-      /* Compress dest port. */
-      buffer[lowpan6_header_len++] |= 0x01;
-      buffer[lowpan6_header_len++] = inptr[0];
-      buffer[lowpan6_header_len++] = inptr[1];
-      buffer[lowpan6_header_len++] = inptr[3];
-    } else {
-      /* append full ports. */
-      lowpan6_header_len++;
-      buffer[lowpan6_header_len++] = inptr[0];
-      buffer[lowpan6_header_len++] = inptr[1];
-      buffer[lowpan6_header_len++] = inptr[2];
-      buffer[lowpan6_header_len++] = inptr[3];
-    }
+      /* determine port compression mode. */
+      if ((inptr[0] == 0xf0) && ((inptr[1] & 0xf0) == 0xb0) &&
+          (inptr[2] == 0xf0) && ((inptr[3] & 0xf0) == 0xb0)) {
+        /* Compress source and dest ports. */
+        buffer[lowpan6_header_len++] |= 0x03;
+        buffer[lowpan6_header_len++] = ((inptr[1] & 0x0f) << 4) | (inptr[3] & 0x0f);
+      } else if (inptr[0] == 0xf0) {
+        /* Compress source port. */
+        buffer[lowpan6_header_len++] |= 0x02;
+        buffer[lowpan6_header_len++] = inptr[1];
+        buffer[lowpan6_header_len++] = inptr[2];
+        buffer[lowpan6_header_len++] = inptr[3];
+      } else if (inptr[2] == 0xf0) {
+        /* Compress dest port. */
+        buffer[lowpan6_header_len++] |= 0x01;
+        buffer[lowpan6_header_len++] = inptr[0];
+        buffer[lowpan6_header_len++] = inptr[1];
+        buffer[lowpan6_header_len++] = inptr[3];
+      } else {
+        /* append full ports. */
+        lowpan6_header_len++;
+        buffer[lowpan6_header_len++] = inptr[0];
+        buffer[lowpan6_header_len++] = inptr[1];
+        buffer[lowpan6_header_len++] = inptr[2];
+        buffer[lowpan6_header_len++] = inptr[3];
+      }
 
-    /* elide length and copy checksum */
-    buffer[lowpan6_header_len++] = inptr[6];
-    buffer[lowpan6_header_len++] = inptr[7];
+      hidden_header_len += UDP_HLEN;
 
-    hidden_header_len += UDP_HLEN;
-  }
+      /* There is no next header after UDP header */
+      break;
+    } else
 #endif /* LWIP_UDP */
+    {
+      bytes_elided = 0;
+      /* All extension headers begin with the Next Header field */
+      next_hdr = inptr[bytes_elided++];
+      /* For all headers except fragment byte1 contains len in 8 * octets */
+      if (current_hdr == IP6_NEXTH_FRAGMENT) {
+        hlen = IP6_FRAG_HLEN;
+      } else {
+        hlen = 8 * (inptr[bytes_elided++] + 1);
+      }
+
+      if (inptr + hlen > inbuf + inbuf_size) {
+        return ERR_VAL;
+      }
+
+      /* Check if a header might contain compressible padding options */
+      if (NH_HAS_OPTS(current_hdr)) {
+        ext_hdr_offset = bytes_elided;
+        while (ext_hdr_offset < hlen) {
+          opt_hdr = (struct ip6_opt_hdr *)(inptr + ext_hdr_offset);
+          if (IP6_OPT_TYPE(opt_hdr) == IP6_PAD1_OPTION) {
+            if (ext_hdr_offset + 1 != hlen) {
+              /* Not a trailing Pad1 */
+              ext_hdr_offset++;
+            } else {
+              /* Trailing Pad1 can be elided */
+              break;
+            }
+          } else if (IP6_OPT_TYPE(opt_hdr) == IP6_PADN_OPTION) {
+            if (IP6_OPT_DLEN(opt_hdr) + ext_hdr_offset + IP6_OPT_HLEN != hlen) {
+              /* PadN can't be elided */
+              ext_hdr_offset += IP6_OPT_DLEN(opt_hdr) + IP6_OPT_HLEN;
+            } else {
+              /* Elide trailing padding */
+              break;
+            }
+          } else {
+            /* Other options can't be elided */
+            ext_hdr_offset += IP6_OPT_DLEN(opt_hdr) + IP6_OPT_HLEN;
+          }
+        }
+      } else {
+        ext_hdr_offset = hlen;
+      }
+
+      /* Check if the new header len in bytes fits one byte */
+      if (ext_hdr_offset - bytes_elided > 255) {
+        return -1;
+      }
+
+      buffer[lowpan6_header_len] = LOWPAN6_NHC | (lowpan6_ip6_nh_to_eid(current_hdr) << 1);
+
+      /* Check if a next header field can be elided */
+      if (NH_IS_COMPRESSIBLE(next_hdr)) {
+        buffer[lowpan6_header_len++] |= 1;
+      } else {
+        buffer[lowpan6_header_len + 1] = next_hdr;
+        lowpan6_header_len += 2;
+      }
+
+      if (current_hdr != IP6_NEXTH_FRAGMENT) {
+        buffer[lowpan6_header_len++] = ext_hdr_offset - bytes_elided;
+      }
+      MEMCPY(buffer + lowpan6_header_len, inptr + bytes_elided, ext_hdr_offset - bytes_elided);
+      lowpan6_header_len += ext_hdr_offset - bytes_elided;
+
+      inptr += hlen;
+      hidden_header_len += hlen;
+
+      current_hdr = next_hdr;
+    }
+  }
 
   *lowpan6_header_len_out = lowpan6_header_len;
   *hidden_header_len_out = hidden_header_len;
@@ -791,8 +908,9 @@ lowpan6_decompress(struct pbuf *p, u16_t datagram_size, ip6_addr_t *lowpan6_cont
 #endif
 
   /* Allocate a buffer for decompression. This buffer will be too big and will be
-     trimmed once the final size is known. */
-  q = pbuf_alloc(PBUF_IP, p->len + IP6_HLEN + UDP_HLEN_ALLOC, PBUF_POOL);
+     trimmed once the final size is known. Beacuase of possible extension headers
+     (HOPBYHOP, DESTOPS, MOBILITY) padding, add 3 * 7 = 21 */
+  q = pbuf_alloc(PBUF_IP, p->len + IP6_HLEN + UDP_HLEN_ALLOC + 21, PBUF_POOL);
   if (q == NULL) {
     pbuf_free(p);
     return NULL;
