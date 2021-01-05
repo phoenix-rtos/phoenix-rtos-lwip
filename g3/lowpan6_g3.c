@@ -53,6 +53,7 @@
  */
 
 #include "lowpan6_g3.h"
+#include "ps_eap_psk_g3plc.h"
 
 #if LWIP_IPV6
 
@@ -70,7 +71,7 @@
 
 
 /** This is a helper struct for reassembly of fragments
- * (IEEE 802.15.4 limits to 127 bytes)
+ * (For G3 MAC layer max msdu is 400 bytes)
  */
 struct lowpan6_reass_helper {
   struct lowpan6_reass_helper *next_packet;
@@ -82,39 +83,45 @@ struct lowpan6_reass_helper {
   u16_t datagram_tag;
 };
 
-/** This struct keeps track of per-netif state */
-struct lowpan6_ieee802154_data {
-  /** fragment reassembly list */
-  struct lowpan6_reass_helper *reass_list;
-#if LWIP_6LOWPAN_NUM_CONTEXTS > 0
-  /** address context for compression */
-  struct lowpan6_context lowpan6_context[LWIP_6LOWPAN_NUM_CONTEXTS];
-#endif
-  /** Datagram Tag for fragmentation */
-  u16_t tx_datagram_tag;
-  /** local PAN ID for IEEE 802.15.4 header */
-  u16_t ieee_802154_pan_id;
-  /** Sequence Number for IEEE 802.15.4 transmission */
-  u8_t tx_frame_seq_num;
-};
-
 /* Maximum frame size is 127 bytes minus CRC size */
 #define LOWPAN6_MAX_PAYLOAD (127 - 2)
 
 /** Currently, this state is global, since there's only one 6LoWPAN netif */
-static struct lowpan6_ieee802154_data lowpan6_data;
+static lowpan6_g3_data_t lowpan6_data = {
+    .short_mac_addr = {2, {0xFF, 0xFF} },
+    .extended_mac_addr = {8, {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}},
+    .coord_short_address = {2, { 0x00, 0x00 } },
+    .max_tones = 36, /* TODO: it should be taken from PHY */
+    .security_level = 0x05,
+    .broadcast_log_table_ttl = 2,
+    .low_lqi_value = 0,
+    .high_lqi_value = 255,
+    .rrep_wait = 4,
+    .rlc_time = 4, /* Implementation specific */
+    .rreq_wait = 30,
+    .rreq_retries = 0,
+    .role_of_device = LOWPAN6_G3_ROLE_NON_LBA,
+    .unicast_rreq_gen_enable = 1,
+    .max_hops = 8,
+    .device_type = LOWPAN6_G3_DEVTYPE_NOT_DEFINED,
+    .net_traversal_time = 20,
+    .routing_table_ttl = 360,
+    .kq = 10, .kh = 4,
+    .weak_lqi_value = 52,
+    .blacklist_table_ttl = 10,
+    .max_join_wait_time = 20,
+    .path_discovery_time = 40,
+    .bandplan = ps_eap_band_id__g3_cenelec_a
+};
 
 #if LWIP_6LOWPAN_NUM_CONTEXTS > 0
-#define LWIP_6LOWPAN_CONTEXTS(netif) lowpan6_data.lowpan6_context
+#define LWIP_6LOWPAN_CONTEXTS(netif) ((((lowpan6_g3_data_t *)(netif)->state))->context_information_table)
 #else
 #define LWIP_6LOWPAN_CONTEXTS(netif) NULL
 #endif
 
 static const struct lowpan6_link_addr ieee_802154_broadcast = {2, {0xff, 0xff}};
 
-#if LWIP_6LOWPAN_INFER_SHORT_ADDRESS
-static struct lowpan6_link_addr short_mac_addr = {2, {0, 0}};
-#endif /* LWIP_6LOWPAN_INFER_SHORT_ADDRESS */
 
 /* Fragmentation specific functions: */
 
@@ -324,11 +331,11 @@ lowpan6_set_context(u8_t idx, const u32_t *context, u16_t context_length)
     return ERR_ARG;
   }
 
-  lowpan6_data.lowpan6_context[idx].cid = idx;
-  lowpan6_data.lowpan6_context[idx].context_length = context_length;
-  lowpan6_data.lowpan6_context[idx].c = 1;
-  lowpan6_data.lowpan6_context[idx].valid_lifetime = -1; /* @todo: calculate valid lifetime */
-  MEMCPY(lowpan6_data.lowpan6_context[idx].context, context, 16);
+  lowpan6_data.context_information_table[idx].cid = idx;
+  lowpan6_data.context_information_table[idx].context_length = context_length;
+  lowpan6_data.context_information_table[idx].c = 1;
+  lowpan6_data.context_information_table[idx].valid_lifetime = -1; /* @todo: calculate valid lifetime */
+  MEMCPY(lowpan6_data.context_information_table[idx].context, context, 16);
 
   return ERR_OK;
 #else
@@ -347,8 +354,8 @@ lowpan6_set_context(u8_t idx, const u32_t *context, u16_t context_length)
 err_t
 lowpan6_set_short_addr(u8_t addr_high, u8_t addr_low)
 {
-  short_mac_addr.addr[0] = addr_high;
-  short_mac_addr.addr[1] = addr_low;
+  lowpan6_data.short_mac_addr.addr[0] = addr_high;
+  lowpan6_data.short_mac_addr.addr[1] = addr_low;
 
   return ERR_OK;
 }
@@ -382,10 +389,10 @@ lowpan6_output(struct netif *netif, struct pbuf *q, const ip6_addr_t *ip6addr)
   ip6_hdr = (struct ip6_hdr *)q->payload;
   ip6_addr_copy_from_packed(ip6_src, ip6_hdr->src);
   ip6_addr_assign_zone(&ip6_src, IP6_UNICAST, netif);
-  if (lowpan6_get_address_mode(&ip6_src, &short_mac_addr) == 3) {
+  if (lowpan6_get_address_mode(&ip6_src, &lowpan6_data.short_mac_addr) == 3) {
     src.addr_len = 2;
-    src.addr[0] = short_mac_addr.addr[0];
-    src.addr[1] = short_mac_addr.addr[1];
+    src.addr[0] = lowpan6_data.short_mac_addr.addr[0];
+    src.addr[1] = lowpan6_data.short_mac_addr.addr[1];
   } else
 #endif /* LWIP_6LOWPAN_INFER_SHORT_ADDRESS */
   {
@@ -689,6 +696,7 @@ lowpan6_if_init(struct netif *netif)
 
   /* broadcast capability */
   netif->flags = NETIF_FLAG_BROADCAST /* | NETIF_FLAG_LOWPAN6 */;
+  netif->state = &lowpan6_data;
 
   return ERR_OK;
 }
@@ -700,7 +708,7 @@ lowpan6_if_init(struct netif *netif)
 err_t
 lowpan6_set_pan_id(u16_t pan_id)
 {
-  lowpan6_data.ieee_802154_pan_id = pan_id;
+  lowpan6_data.pan_id = pan_id;
 
   return ERR_OK;
 }
