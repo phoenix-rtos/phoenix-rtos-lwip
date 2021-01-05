@@ -243,6 +243,7 @@ err_t lowpan6_g3_encapsulate(struct netif *netif, struct pbuf *p, const struct l
                              const struct lowpan6_link_addr *dst, const struct lowpan6_link_addr *final_dest);
 err_t lowpan6_g3_input(struct pbuf *p, struct netif *netif, struct lowpan6_link_addr *src, struct lowpan6_link_addr *dest, struct g3_mcps_data_indication *indication);
 err_t lowpan6_g3_if_init(struct netif *netif);
+err_t lowpan6_g3_status_handle(struct netif *netif, struct pbuf *p, struct lowpan6_link_addr *dest, u8_t status);
 unsigned int lowpan6_g3_add_mesh_header(u8_t *buffer, u8_t hops_left, const struct lowpan6_link_addr *originator,
                                         const struct lowpan6_link_addr *final_dest);
 

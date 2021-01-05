@@ -783,6 +783,75 @@ lowpan6_g3_output(struct netif *netif, struct pbuf *q, const ip6_addr_t *ip6addr
 
 /**
  * @ingroup sixlowpan
+ * This function is called by the lower layer, when MCPS-DATA.confirm is received.
+ * Currently we need to handle only three statuses: NO_ACK, TRANSMISSION_EXPIRES and SUCCESS.
+ */
+err_t
+lowpan6_g3_status_handle(struct netif *netif, struct pbuf *p, struct lowpan6_link_addr *dest, u8_t status)
+{
+  lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
+  struct lowpan6_link_addr *originator, *final_dest;
+  struct lowpan6_g3_mesh_hdr mesh_hdr;
+  u8_t *buf;
+  u8_t max_hops;
+  u8_t is_route_repair;
+
+  /* We only handle short addresses at the moment. TODO: handle LBP */
+  if (dest->addr_len != 2)
+    return ERR_OK;
+
+  buf = (u8_t *) p->payload;
+
+  if (buf[0] == LOWPAN6_HEADER_ESC && buf[1] == LOWPAN6_CMD_LOADNG) {
+    return loadng_g3_status_handle(netif, p, dest, status);
+  } else if (buf[0] == LOWPAN6_HEADER_ESC && buf[1] == LOWPAN6_CMD_LBP) {
+
+  }
+  /* Basic parsing of a frame */
+  if ((buf[0] & 0xc0) == LOWPAN6_HEADER_MESH) {
+    if (lowpan6_parse_mesh_header(buf, p->len, &mesh_hdr) < 0)
+      return ERR_VAL;
+
+    pbuf_remove_header(p, 6);
+    if (mesh_hdr.final_dest.addr_len != 2 || mesh_hdr.originator.addr_len != 2)
+      return ERR_OK;
+
+    originator = &mesh_hdr.originator;
+    final_dest = &mesh_hdr.final_dest;
+  } else {
+    originator = &ctx->short_mac_addr;
+    final_dest = dest;
+  }
+
+  is_route_repair = loadng_g3_route_repair_status(netif, final_dest);
+  if (status == g3_mac_status_no_ack ||
+      status == g3_mac_status_transaction_expires) {
+    LWIP_DEBUGF(LWIP_LOWPAN6_DEBUG, ("lowpan6_g3_status_handle: Sending data failed due to device %02X%02X being unreachable.\n",
+                                     dest->addr[0], dest->addr[1]));
+    if (!is_route_repair) {
+      LWIP_DEBUGF(LWIP_LOWPAN6_DEBUG, ("lowpan6_g3_status_handle: Starting the Route Repair procedure for: %02X%02X.\n",
+                                       dest->addr[0], dest->addr[1]));
+      if (lowpan6_link_addr_cmp(originator, &ctx->short_mac_addr))
+        max_hops = ctx->max_hops;
+      else
+        max_hops = mesh_hdr.hops_left;
+
+      /* TODO: don't do route repair on lbp status */
+      loadng_g3_route_disc(netif, p, originator, final_dest, 1, max_hops);
+    } else {
+      LWIP_DEBUGF(LWIP_LOWPAN6_DEBUG, ("lowpan6_g3_status_handle: Data transmission to: %02X%02X failed after the successful Route Repair. Dropping this frame.\n",
+                                       dest->addr[0], dest->addr[1]));
+    }
+  } else if (status != g3_mac_status_success) {
+    LWIP_DEBUGF(LWIP_LOWPAN6_DEBUG, ("lowpan6_g3_status_handle: Sending data failed with status: %02X\n", status));
+  }
+  /* TODO: do we have to remove a device from blacklist? */
+
+  return ERR_OK;
+}
+
+/**
+ * @ingroup sixlowpan
  * NETIF input function: don't free the input pbuf when returning != ERR_OK!
  */
 err_t
