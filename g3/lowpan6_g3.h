@@ -65,6 +65,8 @@
 #include "lwip/ip_addr.h"
 #include "lwip/netif.h"
 
+#include "g3_adp.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -238,9 +240,13 @@ err_t lowpan6_set_context(u8_t idx, const u32_t *context, u16_t context_length);
 err_t lowpan6_set_short_addr(u8_t addr_high, u8_t addr_low);
 
 void lowpan6_g3_tmr(void *arg);
-err_t lowpan6_output(struct netif *netif, struct pbuf *q, const ip6_addr_t *ip6addr);
-err_t lowpan6_input(struct pbuf * p, struct netif *netif);
-err_t lowpan6_if_init(struct netif *netif);
+err_t lowpan6_g3_output(struct netif *netif, struct pbuf *q, const ip6_addr_t *ip6addr);
+err_t lowpan6_g3_encapsulate(struct netif *netif, struct pbuf *p, const struct lowpan6_link_addr *src,
+                             const struct lowpan6_link_addr *dst, const struct lowpan6_link_addr *final_dest);
+err_t lowpan6_g3_input(struct pbuf *p, struct netif *netif, struct lowpan6_link_addr *src, struct lowpan6_link_addr *dest, struct g3_mcps_data_indication *indication);
+err_t lowpan6_g3_if_init(struct netif *netif);
+unsigned int lowpan6_g3_add_mesh_header(u8_t *buffer, u8_t hops_left, const struct lowpan6_link_addr *originator,
+                                        const struct lowpan6_link_addr *final_dest);
 
 /* pan_id in network byte order. */
 err_t lowpan6_set_pan_id(u16_t pan_id);
