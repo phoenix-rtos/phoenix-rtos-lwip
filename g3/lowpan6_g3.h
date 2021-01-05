@@ -261,6 +261,24 @@ err_t lowpan6_g3_set_short_addr(struct netif *netif, u8_t addr_high, u8_t addr_l
 err_t lowpan6_g3_set_gmk(struct netif *netif, const u8_t *gmk, u8_t id);
 err_t lowpan6_g3_set_device_role(struct netif *netif, u8_t role);
 
+#if LWIP_G3_ADP_TEST
+void lowpan6_g3_set_coord_address(u8_t addr_high, u8_t addr_low);
+void lowpan6_g3_set_active_key_index(u8_t idx);
+err_t lowpan6_g3_set_context(u8_t idx, const u32_t *context, u16_t context_length);
+void lowpan6_g3_ihc_enable(u8_t enable);
+void lowpan6_g3_datagram_tag_set(u16_t datagram_tag);
+void lowpan6_g3_set_bc_seq_num(u8_t seq_num);
+void lowpan6_g3_set_max_hops(u8_t max_hops);
+void lowpan6_g3_set_security_level(u8_t level);
+void lowpan6_g3_set_metric_type(u8_t metric_type);
+void lowpan6_g3_set_enable_rlc(u8_t enable);
+void lowpan6_g3_set_add_rev_link_cost(u8_t val);
+void lowpan6_g3_set_metric_factor_set(u8_t kr, u8_t km, u8_t kc, u8_t kq, u8_t kh, u8_t krt);
+void lowpan6_g3_set_unicast_rreq_gen_enable(u8_t enable);
+void lowpan6_g3_set_add_rev_link_cost(u8_t val);
+void lowpan6_g3_set_weak_lqi_value(u8_t val);
+void lowpan6_g3_set_device_type(u8_t dev_type);
+#endif /* LWIP_G3_ADP_TEST */
 
 #if !NO_SYS
 err_t tcpip_6lowpan_input(struct pbuf *p, struct netif *inp);
