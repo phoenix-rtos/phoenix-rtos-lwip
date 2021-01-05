@@ -1220,6 +1220,99 @@ lowpan6_g3_set_pan_id(struct netif *netif, u16_t pan_id)
   return g3_pan_id_set(pan_id);
 }
 
+#if LWIP_G3_ADP_TEST
+/* Helper setters needed for testing */
+void lowpan6_g3_set_coord_address(u8_t addr_high, u8_t addr_low)
+{
+  lowpan6_data.coord_short_address.addr[0] = addr_high;
+  lowpan6_data.coord_short_address.addr[1] = addr_low;
+}
+
+void
+lowpan6_g3_ihc_enable(u8_t enable)
+{
+  lowpan6_data.ihc_enable = enable;
+}
+
+void
+lowpan6_g3_datagram_tag_set(u16_t datagram_tag)
+{
+  lowpan6_data.tx_datagram_tag = datagram_tag;
+}
+
+void
+lowpan6_g3_set_bc_seq_num(u8_t seq_num)
+{
+  lowpan6_data.bc0_seq_num = seq_num;
+}
+
+void
+lowpan6_g3_set_max_hops(u8_t max_hops)
+{
+  lowpan6_data.max_hops = max_hops;
+}
+
+void
+lowpan6_g3_set_metric_type(u8_t metric_type)
+{
+  lowpan6_data.metric_type = metric_type;
+}
+
+void
+lowpan6_g3_set_unicast_rreq_gen_enable(u8_t enable)
+{
+  lowpan6_data.unicast_rreq_gen_enable = enable;
+}
+
+void
+lowpan6_g3_set_enable_rlc(u8_t enable)
+{
+  lowpan6_data.enable_rlc = enable;
+}
+
+void
+lowpan6_g3_set_add_rev_link_cost(u8_t val)
+{
+  lowpan6_data.add_rev_link_cost = val;
+}
+
+void
+lowpan6_g3_set_metric_factor_set(u8_t kr, u8_t km, u8_t kc,
+                                 u8_t kq, u8_t kh, u8_t krt)
+{
+  lowpan6_data.kq = kq;
+  lowpan6_data.kh = kh;
+  lowpan6_data.krt = krt;
+  lowpan6_data.kc = kc;
+  lowpan6_data.km = km;
+  lowpan6_data.kr = kr;
+}
+
+void
+lowpan6_g3_set_security_level(u8_t level)
+{
+  lowpan6_data.security_level = level;
+}
+
+void
+lowpan6_g3_set_weak_lqi_value(u8_t val)
+{
+  lowpan6_data.weak_lqi_value = val;
+}
+
+void
+lowpan6_g3_set_device_type(u8_t dev_type)
+{
+  lowpan6_data.device_type = dev_type;
+}
+
+void
+lowpan6_g3_set_active_key_index(u8_t idx)
+{
+  lowpan6_data.active_key_index = idx;
+}
+#endif /* LWIP_G3_ADP_TEST */
+
 #if !NO_SYS
 /**
  * @ingroup sixlowpan

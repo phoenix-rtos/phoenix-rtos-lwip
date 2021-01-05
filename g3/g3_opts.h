@@ -92,4 +92,8 @@
 #define LOWPAN6_G3_GMK_LEN                  16
 #endif
 
+#ifndef LWIP_G3_ADP_TEST
+#define LWIP_G3_ADP_TEST        1
+#endif
+
 #endif
