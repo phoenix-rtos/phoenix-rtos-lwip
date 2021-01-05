@@ -42,7 +42,7 @@
 #ifndef LWIP_HDR_LOWPAN6_COMMON_H
 #define LWIP_HDR_LOWPAN6_COMMON_H
 
-#include "netif/lowpan6_opts.h"
+#include "g3_opts.h"
 
 #if LWIP_IPV6 /* don't build if IPv6 is disabled in lwipopts.h */
 
