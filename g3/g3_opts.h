@@ -116,4 +116,12 @@
 #define LOADNG_G3_RLC_TABLE_SIZE   4
 #endif
 
+#ifndef LBP_G3_DEBUG
+#define LBP_G3_DEBUG   LWIP_DBG_ON
+#endif
+
+#ifndef LBP_G3_SCAN_TABLE_SIZE
+#define LBP_G3_SCAN_TABLE_SIZE          16
+#endif
+
 #endif
