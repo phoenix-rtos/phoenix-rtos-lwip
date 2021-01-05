@@ -122,9 +122,217 @@ static lowpan6_g3_data_t lowpan6_data = {
 
 static const struct lowpan6_link_addr ieee_802154_broadcast = {2, {0xff, 0xff}};
 
+/* Table functions - data structures used might be optimized
+ * in the future. Now they are static arrays.
+ */
+struct lowpan6_g3_routing_entry *
+lowpan6_g3_routing_table_add(u16_t dst, u16_t next, u16_t metric, u16_t hop_count)
+{
+  unsigned i;
+
+  /* Find first empty/invalid entry */
+  for (i = 0; i < LOWPAN6_G3_ROUTING_TABLE_SIZE; i++) {
+    if (lowpan6_data.routing_table[i].valid_time == 0) {
+      lowpan6_data.routing_table[i].dest_addr = dst;
+      lowpan6_data.routing_table[i].next_addr = next;
+      lowpan6_data.routing_table[i].metric = metric;
+      lowpan6_data.routing_table[i].hop_count = hop_count;
+      lowpan6_data.routing_table[i].metric_type = lowpan6_data.metric_type;
+      lowpan6_data.routing_table[i].valid_time = lowpan6_data.routing_table_ttl;
+      lowpan6_data.routing_table[i].seq_num = 0xFFFF;
+      lowpan6_data.routing_table[i].is_bidirectional = 1;
+      lowpan6_data.n_routing_entries++;
+      return &lowpan6_data.routing_table[i];
+    }
+  }
+
+  return NULL;
+}
+
+/**
+ * Function used for routing table management.
+ */
+struct lowpan6_g3_routing_entry *
+lowpan6_g3_routing_table_lookup(u16_t dst, u8_t bidirectional_only)
+{
+  unsigned i;
+
+  for (i = 0; i < LOWPAN6_G3_ROUTING_TABLE_SIZE; i++) {
+    if (lowpan6_data.routing_table[i].valid_time > 0 &&
+        lowpan6_data.routing_table[i].dest_addr == dst &&
+        (!bidirectional_only || lowpan6_data.routing_table[i].is_bidirectional))
+      return &lowpan6_data.routing_table[i];
+  }
+
+  return NULL;
+}
+
+/**
+ * Function used for table lookup when routing packets.
+ * Returns ERR_OK if a route is found and sets 'next' pointer
+ * to the next hop address.
+ */
+err_t
+lowpan6_g3_routing_table_route(struct lowpan6_link_addr *dst, struct lowpan6_link_addr *next)
+{
+  struct lowpan6_g3_routing_entry *entry;
+
+  if ((entry = lowpan6_g3_routing_table_lookup(lowpan6_link_addr_to_u16(dst), 1)) == NULL) {
+    return ERR_VAL;
+  }
+
+  lowpan6_link_addr_set_u16(next, entry->next_addr);
+
+  return ERR_OK;
+}
+
+void
+lowpan6_g3_routing_table_delete(struct lowpan6_g3_routing_entry *entry)
+{
+  if (entry == NULL)
+    return;
+  entry->valid_time = 0;
+  lowpan6_data.n_routing_entries--;
+}
+
+static int
+lowpan6_g3_broadcast_log_table_add(u16_t src_addr, u8_t seq_num)
+{
+  unsigned i;
+
+  for (i = 0; i < LOWPAN6_G3_BROADCAST_LOG_TABLE_SIZE; i++) {
+    if (lowpan6_data.broadcast_log_table[i].valid_time == 0) {
+      lowpan6_data.broadcast_log_table[i].src_addr = src_addr;
+      lowpan6_data.broadcast_log_table[i].seq_number = seq_num;
+      lowpan6_data.broadcast_log_table[i].valid_time = lowpan6_data.broadcast_log_table_ttl;
+
+      return i;
+    }
+  }
+
+  return -1;
+}
+
+static struct lowpan6_g3_broadcast_log_entry *
+lowpan6_g3_broadcast_log_table_lookup(u16_t src_addr, u8_t seq_num)
+{
+  unsigned i;
+
+  for (i = 0; i < LOWPAN6_G3_BROADCAST_LOG_TABLE_SIZE; i++) {
+    if (lowpan6_data.broadcast_log_table[i].valid_time > 0 &&
+        lowpan6_data.broadcast_log_table[i].src_addr == src_addr &&
+        lowpan6_data.broadcast_log_table[i].seq_number == seq_num)
+          return &lowpan6_data.broadcast_log_table[i];
+  }
+
+  return NULL;
+}
+
+int
+lowpan6_g3_group_table_add(u16_t addr)
+{
+  unsigned i;
+
+  for (i = 0; i < LOWPAN6_G3_GROUP_TABLE_SIZE; i++) {
+    if (lowpan6_data.group_table[i] == 0) {
+      lowpan6_data.group_table[i] = addr;
+      return i;
+    }
+  }
+
+  return -1;
+}
+
+static u16_t *
+lowpan6_g3_group_table_lookup(u16_t addr)
+{
+  unsigned i;
+
+  for (i = 0; i < LOWPAN6_G3_GROUP_TABLE_SIZE; i++) {
+    if (lowpan6_data.group_table[i] == addr) {
+      return &lowpan6_data.group_table[i];
+    }
+  }
+
+  /* Not found */
+  return NULL;
+}
+
+struct lowpan6_g3_blacklist_entry *
+lowpan6_g3_blacklist_table_add(u16_t addr)
+{
+  unsigned i;
+
+  for (i = 0; i < LOWPAN6_G3_BLACKLIST_TABLE_SIZE; i++) {
+    if (lowpan6_data.blacklist_table[i].valid_time == 0) {
+      lowpan6_data.blacklist_table[i].address = addr;
+      lowpan6_data.blacklist_table[i].valid_time = lowpan6_data.blacklist_table_ttl;
+
+      return &lowpan6_data.blacklist_table[i];
+    }
+  }
+
+  return NULL;
+}
+
+struct lowpan6_g3_blacklist_entry *
+lowpan6_g3_blacklist_table_lookup(u16_t addr)
+{
+  unsigned i;
+
+  for (i = 0; i < LOWPAN6_G3_BLACKLIST_TABLE_SIZE; i++) {
+    if (lowpan6_data.blacklist_table[i].valid_time > 0 &&
+        lowpan6_data.blacklist_table[i].address == addr) {
+      return &lowpan6_data.blacklist_table[i];
+    }
+  }
+
+  return NULL;
+}
+
+static void
+lowpan6_g3_blacklist_table_remove(struct lowpan6_g3_blacklist_entry *entry)
+{
+  entry->valid_time = 0;
+}
+
+/* Iterate through all the tables in order to
+ * update their valid time. It shall be called
+ * every minute.
+ */
+static void
+lowpan6_g3_update_tables(lowpan6_g3_data_t *ctx)
+{
+  unsigned i;
+
+  for (i = 0; i < LOWPAN6_G3_ROUTING_TABLE_SIZE; i++) {
+    if (ctx->routing_table[i].valid_time > 0) {
+      if (--ctx->routing_table[i].valid_time == 0) {
+        ctx->n_routing_entries--;
+      }
+    }
+  }
+
+  for (i = 0; i < LOWPAN6_G3_BLACKLIST_TABLE_SIZE; i++) {
+    if (ctx->blacklist_table[i].valid_time > 0) {
+      ctx->blacklist_table[i].valid_time--;
+    }
+  }
+
+  for (i = 0; i < LOWPAN6_G3_BROADCAST_LOG_TABLE_SIZE; i++) {
+    if (lowpan6_data.broadcast_log_table[i].valid_time > 0) {
+      lowpan6_data.broadcast_log_table[i].valid_time--;
+    }
+  }
+
+  for (i = 0; i < LWIP_6LOWPAN_NUM_CONTEXTS; i++) {
+    if (lowpan6_data.context_information_table[i].valid_lifetime > 0) {
+      lowpan6_data.context_information_table[i].valid_lifetime--;
+    }
+  }
+}
 
 /* Fragmentation specific functions: */
-
 static void
 free_reass_datagram(struct lowpan6_reass_helper *lrh)
 {
@@ -158,9 +366,11 @@ dequeue_datagram(struct lowpan6_reass_helper *lrh, struct lowpan6_reass_helper *
  * - Remove incomplete/old packets
  */
 void
-lowpan6_tmr(void)
+lowpan6_g3_tmr(void *arg)
 {
   struct lowpan6_reass_helper *lrh, *lrh_next, *lrh_prev = NULL;
+  struct netif *netif = (struct netif *)arg;
+  lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *)netif->state;
 
   lrh = lowpan6_data.reass_list;
   while (lrh != NULL) {
@@ -172,6 +382,13 @@ lowpan6_tmr(void)
       lrh_prev = lrh;
     }
     lrh = lrh_next;
+  }
+
+  ctx->seconds += LOWPAN6_TMR_INTERVAL / 1000;
+
+  if (ctx->seconds >= 60) {
+    ctx->seconds = 0;
+    lowpan6_g3_update_tables(ctx);
   }
 }
 
@@ -679,6 +896,12 @@ lowpan6_input_discard:
   return ERR_OK;
 }
 
+static void
+g3_lowpan_timer(void *arg)
+{
+  lowpan6_g3_tmr(arg);
+  sys_timeout(LOWPAN6_TMR_INTERVAL, g3_lowpan_timer, arg);
+}
 /**
  * @ingroup sixlowpan
  */
@@ -697,6 +920,10 @@ lowpan6_if_init(struct netif *netif)
   /* broadcast capability */
   netif->flags = NETIF_FLAG_BROADCAST /* | NETIF_FLAG_LOWPAN6 */;
   netif->state = &lowpan6_data;
+
+  sys_lock_tcpip_core();
+  sys_timeout(LOWPAN6_TMR_INTERVAL, g3_lowpan_timer, netif);
+  sys_unlock_tcpip_core();
 
   return ERR_OK;
 }
