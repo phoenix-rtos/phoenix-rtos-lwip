@@ -1,13 +1,17 @@
-/**
- * @file
+/*
+ * Phoenix-RTOS --- networking stack
  *
- * 6LowPAN output for IPv6. Uses ND tables for link-layer addressing. Fragments packets to 6LowPAN units.
+ * G3-PLC Adaptation Layer - 6LoWPAN netif
  *
- * This implementation aims to conform to IEEE 802.15.4(-2015), RFC 4944 and RFC 6282.
- * @todo: RFC 6775.
+ * Copyright 2021 Phoenix Systems
+ * Author: Maciej Purski
+ *
+ * %LICENSE%
  */
 
 /*
+ * This is based on the original lowpan6 implmementation in lwip.
+ *
  * Copyright (c) 2015 Inico Technologies Ltd.
  * All rights reserved.
  *
@@ -45,7 +49,7 @@
 /**
  * @defgroup sixlowpan 6LoWPAN (RFC4944)
  * @ingroup netifs
- * 6LowPAN netif implementation
+ * G3-PLC 6LowPAN netif implementation
  */
 
 #include "lowpan6_g3.h"
@@ -61,15 +65,9 @@
 #include "lwip/udp.h"
 #include "lwip/tcpip.h"
 #include "lwip/snmp.h"
-#include "netif/ieee802154.h"
 
 #include <string.h>
 
-#if LWIP_6LOWPAN_802154_HW_CRC
-#define LWIP_6LOWPAN_DO_CALC_CRC(buf, len) 0
-#else
-#define LWIP_6LOWPAN_DO_CALC_CRC(buf, len) LWIP_6LOWPAN_CALC_CRC(buf, len)
-#endif
 
 /** This is a helper struct for reassembly of fragments
  * (IEEE 802.15.4 limits to 127 bytes)
@@ -117,170 +115,6 @@ static const struct lowpan6_link_addr ieee_802154_broadcast = {2, {0xff, 0xff}};
 #if LWIP_6LOWPAN_INFER_SHORT_ADDRESS
 static struct lowpan6_link_addr short_mac_addr = {2, {0, 0}};
 #endif /* LWIP_6LOWPAN_INFER_SHORT_ADDRESS */
-
-/* IEEE 802.15.4 specific functions: */
-
-/** Write the IEEE 802.15.4 header that encapsulates the 6LoWPAN frame.
- * Src and dst PAN IDs are filled with the ID set by @ref lowpan6_set_pan_id.
- *
- * Since the length is variable:
- * @returns the header length
- */
-static u8_t
-lowpan6_write_iee802154_header(struct ieee_802154_hdr *hdr, const struct lowpan6_link_addr *src,
-                               const struct lowpan6_link_addr *dst)
-{
-  u8_t ieee_header_len;
-  u8_t *buffer;
-  u8_t i;
-  u16_t fc;
-
-  fc = IEEE_802154_FC_FT_DATA; /* send data packet (2003 frame version) */
-  fc |= IEEE_802154_FC_PANID_COMPR; /* set PAN ID compression, for now src and dst PANs are equal */
-  if (dst != &ieee_802154_broadcast) {
-    fc |= IEEE_802154_FC_ACK_REQ; /* data packet, no broadcast: ack required. */
-  }
-  if (dst->addr_len == 2) {
-    fc |= IEEE_802154_FC_DST_ADDR_MODE_SHORT;
-  } else {
-    LWIP_ASSERT("invalid dst address length", dst->addr_len == 8);
-    fc |= IEEE_802154_FC_DST_ADDR_MODE_EXT;
-  }
-  if (src->addr_len == 2) {
-    fc |= IEEE_802154_FC_SRC_ADDR_MODE_SHORT;
-  } else {
-    LWIP_ASSERT("invalid src address length", src->addr_len == 8);
-    fc |= IEEE_802154_FC_SRC_ADDR_MODE_EXT;
-  }
-  hdr->frame_control = fc;
-  hdr->sequence_number = lowpan6_data.tx_frame_seq_num++;
-  hdr->destination_pan_id = lowpan6_data.ieee_802154_pan_id; /* pan id */
-
-  buffer = (u8_t *)hdr;
-  ieee_header_len = 5;
-  i = dst->addr_len;
-  /* reverse memcpy of dst addr */
-  while (i-- > 0) {
-    buffer[ieee_header_len++] = dst->addr[i];
-  }
-  /* Source PAN ID skipped due to PAN ID Compression */
-  i = src->addr_len;
-  /* reverse memcpy of src addr */
-  while (i-- > 0) {
-    buffer[ieee_header_len++] = src->addr[i];
-  }
-  return ieee_header_len;
-}
-
-/** Parse the IEEE 802.15.4 header from a pbuf.
- * If successful, the header is hidden from the pbuf.
- *
- * PAN IDs and seuqence number are not checked
- *
- * @param p input pbuf, p->payload pointing at the IEEE 802.15.4 header
- * @param src pointer to source address filled from the header
- * @param dest pointer to destination address filled from the header
- * @returns ERR_OK if successful
- */
-static err_t
-lowpan6_parse_iee802154_header(struct pbuf *p, struct lowpan6_link_addr *src,
-                               struct lowpan6_link_addr *dest)
-{
-  u8_t *puc;
-  s8_t i;
-  u16_t frame_control, addr_mode;
-  u16_t datagram_offset;
-
-  /* Parse IEEE 802.15.4 header */
-  puc = (u8_t *)p->payload;
-  frame_control = puc[0] | (puc[1] << 8);
-  datagram_offset = 2;
-  if (frame_control & IEEE_802154_FC_SEQNO_SUPPR) {
-    if (IEEE_802154_FC_FRAME_VERSION_GET(frame_control) <= 1) {
-      /* sequence number suppressed, this is not valid for versions 0/1 */
-      return ERR_VAL;
-    }
-  } else {
-    datagram_offset++;
-  }
-  datagram_offset += 2; /* Skip destination PAN ID */
-  addr_mode = frame_control & IEEE_802154_FC_DST_ADDR_MODE_MASK;
-  if (addr_mode == IEEE_802154_FC_DST_ADDR_MODE_EXT) {
-    /* extended address (64 bit) */
-    dest->addr_len = 8;
-    /* reverse memcpy: */
-    for (i = 0; i < 8; i++) {
-      dest->addr[i] = puc[datagram_offset + 7 - i];
-    }
-    datagram_offset += 8;
-  } else if (addr_mode == IEEE_802154_FC_DST_ADDR_MODE_SHORT) {
-    /* short address (16 bit) */
-    dest->addr_len = 2;
-    /* reverse memcpy: */
-    dest->addr[0] = puc[datagram_offset + 1];
-    dest->addr[1] = puc[datagram_offset];
-    datagram_offset += 2;
-  } else {
-    /* unsupported address mode (do we need "no address"?) */
-    return ERR_VAL;
-  }
-
-  if (!(frame_control & IEEE_802154_FC_PANID_COMPR)) {
-    /* No PAN ID compression, skip source PAN ID */
-    datagram_offset += 2;
-  }
-
-  addr_mode = frame_control & IEEE_802154_FC_SRC_ADDR_MODE_MASK;
-  if (addr_mode == IEEE_802154_FC_SRC_ADDR_MODE_EXT) {
-    /* extended address (64 bit) */
-    src->addr_len = 8;
-    /* reverse memcpy: */
-    for (i = 0; i < 8; i++) {
-      src->addr[i] = puc[datagram_offset + 7 - i];
-    }
-    datagram_offset += 8;
-  } else if (addr_mode == IEEE_802154_FC_DST_ADDR_MODE_SHORT) {
-    /* short address (16 bit) */
-    src->addr_len = 2;
-    src->addr[0] = puc[datagram_offset + 1];
-    src->addr[1] = puc[datagram_offset];
-    datagram_offset += 2;
-  } else {
-    /* unsupported address mode (do we need "no address"?) */
-    return ERR_VAL;
-  }
-
-  /* hide IEEE802.15.4 header. */
-  if (pbuf_remove_header(p, datagram_offset)) {
-    return ERR_VAL;
-  }
-  return ERR_OK;
-}
-
-/** Calculate the 16-bit CRC as required by IEEE 802.15.4 */
-u16_t
-lowpan6_calc_crc(const void* buf, u16_t len)
-{
-#define CCITT_POLY_16 0x8408U
-  u16_t i;
-  u8_t b;
-  u16_t crc = 0;
-  const u8_t* p = (const u8_t*)buf;
-
-  for (i = 0; i < len; i++) {
-    u8_t data = *p;
-    for (b = 0U; b < 8U; b++) {
-      if (((data ^ crc) & 1) != 0) {
-        crc = (u16_t)((crc >> 1) ^ CCITT_POLY_16);
-      } else {
-        crc = (u16_t)(crc >> 1);
-      }
-      data = (u8_t)(data >> 1);
-    }
-    p++;
-  }
-  return crc;
-}
 
 /* Fragmentation specific functions: */
 
@@ -362,11 +196,6 @@ lowpan6_frag(struct netif *netif, struct pbuf *p, const struct lowpan6_link_addr
   }
   LWIP_ASSERT("this needs a pbuf in one piece", p_frag->len == p_frag->tot_len);
 
-  /* Write IEEE 802.15.4 header. */
-  buffer = (u8_t *)p_frag->payload;
-  ieee_header_len = lowpan6_write_iee802154_header((struct ieee_802154_hdr *)buffer, src, dst);
-  LWIP_ASSERT("ieee_header_len < p_frag->len", ieee_header_len < p_frag->len);
-
 #if LWIP_6LOWPAN_IPHC
   /* Perform 6LowPAN IPv6 header compression according to RFC 6282 */
   /* do the header compression (this does NOT copy any non-compressed data) */
@@ -424,20 +253,12 @@ lowpan6_frag(struct netif *netif, struct pbuf *p, const struct lowpan6_link_addr
     /* Calculate frame length */
     p_frag->len = p_frag->tot_len = ieee_header_len + 4 + frag_len + 2; /* add 2 bytes for crc*/
 
-    /* 2 bytes CRC */
-    crc = LWIP_6LOWPAN_DO_CALC_CRC(p_frag->payload, p_frag->len - 2);
-    pbuf_take_at(p_frag, &crc, 2, p_frag->len - 2);
-
     /* send the packet */
     MIB2_STATS_NETIF_ADD(netif, ifoutoctets, p_frag->tot_len);
     LWIP_DEBUGF(LWIP_LOWPAN6_DEBUG | LWIP_DBG_TRACE, ("lowpan6_send: sending packet %p\n", (void *)p));
     err = netif->linkoutput(netif, p_frag);
 
     while ((remaining_len > 0) && (err == ERR_OK)) {
-      struct ieee_802154_hdr *hdr = (struct ieee_802154_hdr *)buffer;
-      /* new frame, new seq num for ACK */
-      hdr->sequence_number = lowpan6_data.tx_frame_seq_num++;
-
       buffer[ieee_header_len] |= 0x20; /* Change FRAG1 to FRAGN */
 
       LWIP_ASSERT("datagram offset must be a multiple of 8", (datagram_offset & 7) == 0);
@@ -532,26 +353,6 @@ lowpan6_set_short_addr(u8_t addr_high, u8_t addr_low)
   return ERR_OK;
 }
 #endif /* LWIP_6LOWPAN_INFER_SHORT_ADDRESS */
-
-/* Create IEEE 802.15.4 address from netif address */
-static err_t
-lowpan6_hwaddr_to_addr(struct netif *netif, struct lowpan6_link_addr *addr)
-{
-  addr->addr_len = 8;
-  if (netif->hwaddr_len == 8) {
-    LWIP_ERROR("NETIF_MAX_HWADDR_LEN >= 8 required", sizeof(netif->hwaddr) >= 8, return ERR_VAL;);
-    SMEMCPY(addr->addr, netif->hwaddr, 8);
-  } else if (netif->hwaddr_len == 6) {
-    /* Copy from MAC-48 */
-    SMEMCPY(addr->addr, netif->hwaddr, 3);
-    addr->addr[3] = addr->addr[4] = 0xff;
-    SMEMCPY(&addr->addr[5], &netif->hwaddr[3], 3);
-  } else {
-    /* Invalid address length, don't know how to convert this */
-    return ERR_VAL;
-  }
-  return ERR_OK;
-}
 
 /**
  * @ingroup sixlowpan

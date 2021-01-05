@@ -1,10 +1,17 @@
-/**
- * @file
+/*
+ * Phoenix-RTOS --- networking stack
  *
- * 6LowPAN output for IPv6. Uses ND tables for link-layer addressing. Fragments packets to 6LowPAN units.
+ * G3-PLC Adaptation Layer - 6LoWPAN netif
+ *
+ * Copyright 2021 Phoenix Systems
+ * Author: Maciej Purski
+ *
+ * %LICENSE%
  */
 
 /*
+ * This is based on the original lowpan6 implmementation in lwip.
+ *
  * Copyright (c) 2015 Inico Technologies Ltd.
  * All rights reserved.
  *
@@ -39,8 +46,14 @@
  * <delamer@inicotech.com>
  */
 
-#ifndef LWIP_HDR_LOWPAN6_H
-#define LWIP_HDR_LOWPAN6_H
+/**
+ * @defgroup sixlowpan 6LoWPAN (RFC4944)
+ * @ingroup netifs
+ * G3-PLC 6LowPAN netif implementation
+ */
+
+#ifndef LWIP_HDR_LOWPAN6_G3_H
+#define LWIP_HDR_LOWPAN6_G3_H
 
 #include "g3_opts.h"
 
@@ -64,9 +77,6 @@ void lowpan6_tmr(void);
 err_t lowpan6_set_context(u8_t idx, const u32_t *context, u16_t context_length);
 err_t lowpan6_set_short_addr(u8_t addr_high, u8_t addr_low);
 
-#if LWIP_IPV4
-err_t lowpan4_output(struct netif *netif, struct pbuf *q, const ip4_addr_t *ipaddr);
-#endif /* LWIP_IPV4 */
 err_t lowpan6_output(struct netif *netif, struct pbuf *q, const ip6_addr_t *ip6addr);
 err_t lowpan6_input(struct pbuf * p, struct netif *netif);
 err_t lowpan6_if_init(struct netif *netif);
@@ -74,7 +84,6 @@ err_t lowpan6_if_init(struct netif *netif);
 /* pan_id in network byte order. */
 err_t lowpan6_set_pan_id(u16_t pan_id);
 
-u16_t lowpan6_calc_crc(const void *buf, u16_t len);
 
 #if !NO_SYS
 err_t tcpip_6lowpan_input(struct pbuf *p, struct netif *inp);
@@ -86,4 +95,4 @@ err_t tcpip_6lowpan_input(struct pbuf *p, struct netif *inp);
 
 #endif /* LWIP_IPV6 */
 
-#endif /* LWIP_HDR_LOWPAN6_H */
+#endif /* LWIP_HDR_LOWPAN6_G3_H */
