@@ -209,6 +209,7 @@ typedef struct {
   u8_t rrep_wait; /* seconds */
   u8_t path_discovery_time; /* seconds */
   u8_t rlc_time; /* seconds - implementation specific */
+  u8_t seconds;
 
   /* Tables */
   struct lowpan6_g3_broadcast_log_entry broadcast_log_table[LOWPAN6_G3_BROADCAST_LOG_TABLE_SIZE];
@@ -233,17 +234,24 @@ typedef struct {
   u16_t loadng_sequnce_number;
   u8_t max_tones; /* This should be taken from PHY layer */
 } lowpan6_g3_data_t;
-void lowpan6_tmr(void);
-
 err_t lowpan6_set_context(u8_t idx, const u32_t *context, u16_t context_length);
 err_t lowpan6_set_short_addr(u8_t addr_high, u8_t addr_low);
 
+void lowpan6_g3_tmr(void *arg);
 err_t lowpan6_output(struct netif *netif, struct pbuf *q, const ip6_addr_t *ip6addr);
 err_t lowpan6_input(struct pbuf * p, struct netif *netif);
 err_t lowpan6_if_init(struct netif *netif);
 
 /* pan_id in network byte order. */
 err_t lowpan6_set_pan_id(u16_t pan_id);
+int lowpan6_g3_group_table_add(u16_t addr);
+struct lowpan6_g3_blacklist_entry *lowpan6_g3_blacklist_table_add(u16_t addr);
+struct lowpan6_g3_blacklist_entry *lowpan6_g3_blacklist_table_lookup(u16_t addr);
+struct lowpan6_g3_routing_entry *lowpan6_g3_routing_table_lookup(u16_t dst, u8_t bidirectional_only);
+struct lowpan6_g3_routing_entry *lowpan6_g3_routing_table_add(u16_t dst, u16_t next, u16_t metric, u16_t hop_count);
+err_t lowpan6_g3_routing_table_route(struct lowpan6_link_addr *dst, struct lowpan6_link_addr *next);
+void lowpan6_g3_routing_table_delete(struct lowpan6_g3_routing_entry *entry);
+
 
 
 #if !NO_SYS
