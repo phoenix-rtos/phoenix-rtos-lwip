@@ -456,6 +456,50 @@ loadng_g3_preq_transmit(struct netif *netif, struct pbuf *p)
   return loadng_g3_output(netif, p, entry->next_addr);
 }
 
+static err_t
+loadng_g3_rerr_transmit(struct netif *netif, struct pbuf *p)
+{
+  struct loadng_g3_rerr_msg *rerr;
+  struct lowpan6_g3_routing_entry *entry;
+
+  rerr = loadng_g3_pbuf_msg_cast(p, struct loadng_g3_rerr_msg *);
+  entry = lowpan6_g3_routing_table_lookup(rerr->destination, 1);
+  if (entry == NULL) {
+    LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3_rerr_transmit: Can't transmit RERR msg. No routing entry for %04X\n",
+                                lwip_ntohs(rerr->destination)));
+    return ERR_VAL;
+  }
+
+  return loadng_g3_output(netif, p, entry->next_addr);
+}
+
+err_t
+loadng_g3_rerr_issue(struct netif *netif, struct lowpan6_link_addr *unreachable_addr, struct lowpan6_link_addr *dest, u8_t error_code)
+{
+  lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
+  struct pbuf *p;
+  struct loadng_g3_rerr_msg *rerr;
+  err_t ret;
+
+  p = loadng_g3_msg_init(LOADNG_G3_MSG_TYPE_RERR);
+  if (p == NULL) {
+    return ERR_MEM;
+  }
+
+  rerr = loadng_g3_pbuf_msg_cast(p, struct loadng_g3_rerr_msg *);
+  rerr->unreachable_address = lowpan6_link_addr_to_u16(unreachable_addr);
+  rerr->originator = lowpan6_dev_short_addr(ctx);
+  rerr->destination = lowpan6_link_addr_to_u16(dest);
+  rerr->error_code = error_code;
+  rerr->hop_limit = ctx->max_hops;
+  rerr->reserved = 0;
+
+  ret = loadng_g3_rerr_transmit(netif, p);
+  pbuf_free(p);
+
+  return ret;
+}
+
 /**
  * Start a Route Discovery procedure, e.g. when a destination address is unreachable.
  * @param netif network interface, which received the packet
@@ -1100,6 +1144,40 @@ loadng_g3_rreq_rrep_process(struct netif *netif, struct pbuf *p, u8_t msg_type, 
 }
 
 
+static err_t
+loadng_g3_rerr_process(struct netif *netif, struct pbuf *p, u16_t previous_hop)
+{
+  lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
+  struct loadng_g3_rerr_msg *rerr;
+  struct lowpan6_g3_routing_entry *entry;
+
+  if (p->len < sizeof(struct loadng_g3_rerr_msg)) {
+    return ERR_VAL;
+  }
+
+  rerr = loadng_g3_pbuf_msg_cast(p, struct loadng_g3_rerr_msg *);
+
+  if (rerr->originator == lowpan6_dev_short_addr(ctx)) {
+    LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3_rerr_process: Received RERR msg originated by us. Discarding.\n"));
+    return ERR_OK;
+  }
+
+  rerr->hop_limit--;
+  entry = lowpan6_g3_routing_table_lookup(rerr->unreachable_address, 0);
+  if (entry != NULL && entry->next_addr == previous_hop) {
+    LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3_rerr_process: Removing routing entry to %04X\n",
+                               lwip_ntohs(entry->dest_addr)));
+    lowpan6_g3_routing_table_delete(entry);
+  }
+
+  if (rerr->hop_limit > 0 && rerr->destination != lowpan6_dev_short_addr(ctx)) {
+    /* RERR Forward */
+    loadng_g3_rerr_transmit(netif, p);
+  }
+
+  return ERR_OK;
+}
+
 /* Timer function called every second
  * by the lowpan6 timer
  */
@@ -1237,6 +1315,8 @@ loadng_g3_input(struct netif *netif, struct pbuf *p, struct lowpan6_link_addr *s
     ret = loadng_g3_preq_process(netif, p, previous_hop, indication);
   } else if (msg_type == LOADNG_G3_MSG_TYPE_PREP) {
     ret = loadng_g3_prep_process(netif, p, previous_hop, indication);
+  } else if (msg_type == LOADNG_G3_MSG_TYPE_RERR) {
+    ret = loadng_g3_rerr_process(netif, p, previous_hop);
   } else {
     LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3: Unknown msg type received: %02x\n", msg_type));
     ret = ERR_VAL;
