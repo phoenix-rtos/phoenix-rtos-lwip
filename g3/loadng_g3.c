@@ -394,6 +394,68 @@ loadng_g3_rrep_transmit(struct netif *netif, struct pbuf *p)
   return loadng_g3_output(netif, p, entry->next_addr);
 }
 
+static err_t
+loadng_g3_prep_transmit(struct netif *netif, struct pbuf *p)
+{
+  struct lowpan6_g3_routing_entry *entry;
+  struct loadng_g3_prep_msg *prep;
+
+  prep = loadng_g3_pbuf_msg_cast(p, struct loadng_g3_prep_msg *);
+  entry = lowpan6_g3_routing_table_lookup(prep->destination, 1);
+  if (entry == NULL) {
+    LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3_prep_transmit: Can't find route to %04X. Discarding RREP\n",
+                               lwip_ntohs(prep->destination)));
+    return ERR_VAL;
+  }
+
+  LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3_prep_transmit: Transmitting PREP to %04X\n",
+                               lwip_ntohs(prep->destination)));
+
+  return loadng_g3_output(netif, p, entry->next_addr);
+}
+
+static err_t
+loadng_g3_prep_generate(struct netif *netif, struct pbuf *p, u16_t preq_destination, u16_t preq_originator)
+{
+  lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
+  struct loadng_g3_prep_msg *prep;
+  u8_t *buf;
+
+  /* Don't allocate a new pbuf. Instead use the received
+   * PREQ and modify it.
+   */
+  buf = (u8_t *) p->payload;
+  buf[2] = LOADNG_G3_MSG_TYPE_PREP;
+  prep = loadng_g3_pbuf_msg_cast(p, struct loadng_g3_prep_msg *);
+  prep->originator = lowpan6_dev_short_addr(ctx);
+  prep->destination = preq_originator;
+  prep->expected_originator = preq_destination;
+  /* Other fields remain the same as in the PREQ */
+
+  return loadng_g3_prep_transmit(netif, p);
+}
+
+static err_t
+loadng_g3_preq_transmit(struct netif *netif, struct pbuf *p)
+{
+  struct lowpan6_g3_routing_entry *entry;
+  struct loadng_g3_preq_msg *preq;
+
+  preq = loadng_g3_pbuf_msg_cast(p, struct loadng_g3_preq_msg *);
+
+  entry = lowpan6_g3_routing_table_lookup(preq->destination, 1);
+  if (entry == NULL) {
+    LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3_preq_transmit: Can't find route to %04X. Replying with PREP\n",
+                               lwip_ntohs(preq->destination)));
+    return loadng_g3_prep_generate(netif, p, preq->destination, preq->originator);
+  }
+
+  LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3_preq_transmit: Transmitting PREQ destined to: %04X through: %04X\n",
+                               lwip_ntohs(preq->destination), lwip_ntohs(entry->next_addr)));
+
+  return loadng_g3_output(netif, p, entry->next_addr);
+}
+
 /**
  * Start a Route Discovery procedure, e.g. when a destination address is unreachable.
  * @param netif network interface, which received the packet
@@ -598,6 +660,207 @@ loadng_g3_routing_table_update(struct netif *netif, struct loadng_g3_route_msg *
   return ERR_OK;
 }
 
+
+/**
+ * This function should inform the upper layer, that
+ * Path Discovery has finished successfully. Now it just prints
+ * the result of this procedure.
+ */
+static void
+loadng_g3_path_discovery_confirm(struct netif *netif, struct pbuf *p)
+{
+  struct loadng_g3_prep_msg *prep;
+  struct loadng_g3_hop_field *hops;
+  unsigned i;
+  u8_t n_hops;
+
+  prep = (struct loadng_g3_prep_msg *) (p->payload + 3);
+  n_hops = (p->len - 3 - sizeof(struct loadng_g3_prep_msg)) / sizeof(struct loadng_g3_hop_field);
+  hops = (struct loadng_g3_hop_field *) (p->payload + 3 + sizeof(struct loadng_g3_prep_msg));
+
+  printf("\033[1;33m");
+  printf("ADPM-PATH-DISCOVERY.confirm:\n");
+  printf("\033[0;36m");
+  printf("PathMetricType = %X\n", prep->path_metric_type >> 4);
+  for (i = 0; i < n_hops / 2; i++) {
+    printf("Hop-%d forward:\n", i + 1);
+    printf("\tAddress = %04X\n", lwip_ntohs(hops[i].address));
+    printf("\tMNS = %d\n", hops[i].reserved >> 7);
+    printf("\tLinkCost = %d\n", hops[i].link_cost);
+  }
+
+  for (; i < n_hops; i++) {
+    printf("Hop-%d backward:\n", (i + 1) % (n_hops / 2));
+    printf("\tAddress = %04X\n", lwip_ntohs(hops[i].address));
+    printf("\tMNS = %d\n", hops[i].reserved >> 7);
+    printf("\tLinkCost = %d\n", hops[i].link_cost);
+  }
+
+  printf("\033[0m");
+  printf("\n");
+}
+
+/**
+ * Given a pbuf containing a PREQ or PREP msg, this function
+ * allocates a new pbuf, which is a copy of the old one,
+ * and appends a new msg with a hop field.
+ */
+static struct pbuf *
+loadng_g3_hop_append(struct netif *netif, struct pbuf *p, u8_t path_metric_type, struct g3_mcps_data_indication *indication)
+{
+  lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
+  struct pbuf *q;
+  struct loadng_g3_hop_field *hop;
+
+  /* Append a hop field to the PREQ msg */
+  q = pbuf_alloc(PBUF_RAW, p->len + sizeof(struct loadng_g3_hop_field), PBUF_RAM);
+  if (q == NULL)
+      return NULL;
+
+  pbuf_copy(q, p);
+  hop = (struct loadng_g3_hop_field *) (q->payload + p->len);
+  hop->address = lowpan6_dev_short_addr(ctx);
+
+  if (path_metric_type != ctx->metric_type) {
+    hop->link_cost = 0;
+    hop->reserved = (1 << 7);
+  } else {
+    /* TODO: allow RLCREQ? */
+    hop->link_cost = loadng_g3_link_cost(netif, indication, NULL);
+    hop->reserved = 0;
+  }
+
+  return q;
+}
+
+static err_t
+loadng_g3_prep_process(struct netif *netif, struct pbuf *p, u16_t previous_hop, struct g3_mcps_data_indication *indication)
+{
+  lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
+  struct loadng_g3_prep_msg *prep;
+  struct pbuf *q;
+  u8_t ret = ERR_OK;
+  unsigned i;
+
+  LWIP_ERROR("loadng_g3_prep_process: msg too short\n",
+             p->len >= sizeof(struct loadng_g3_prep_msg), return ERR_VAL;);
+
+  prep = loadng_g3_pbuf_msg_cast(p, struct loadng_g3_prep_msg *);
+  LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3_prep_process: PREP received with originator: %04X destination %04X\n",
+                             lwip_ntohs(prep->originator), lwip_ntohs(prep->destination)));
+
+  q = loadng_g3_hop_append(netif, p, prep->path_metric_type >> 4, indication);
+  if (q == NULL)
+    return ERR_MEM;
+
+  if (prep->destination == lowpan6_dev_short_addr(ctx)) {
+    /* PREP destined to us. Check if we have requested for it. */
+    for (i = 0; i < LOADNG_G3_PREQ_TABLE_SIZE; i++) {
+      if (preq_table[i].dst_addr == prep->expected_originator &&
+          preq_table[i].valid_time > 0) {
+        preq_table[i].valid_time = 0;
+        loadng_g3_path_discovery_confirm(netif, q);
+        break;
+      }
+    }
+  } else {
+    ret = loadng_g3_prep_transmit(netif, q);
+  }
+
+  pbuf_free(q);
+
+  return ret;
+}
+
+/**
+ * Start a Path Discovery Procedure used for maintanance.
+ *
+ * @param dest_addr short destination address in network-byte order
+ * @param metric_type used metric type
+ *
+ */
+err_t
+loadng_g3_path_discovery(struct netif *netif, struct lowpan6_link_addr *dst, u8_t metric_type)
+{
+  lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
+  struct loadng_g3_preq_msg *preq;
+  struct pbuf *p;
+  err_t ret;
+  unsigned i;
+  u16_t dest_short = lowpan6_link_addr_to_u16(dst);
+
+  for (i = 0; i < LOADNG_G3_PREQ_TABLE_SIZE; i++) {
+    if (preq_table[i].valid_time > 0 && preq_table[i].dst_addr == dest_short) {
+      LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3_path_discovery: There is already a path discovery of %04X in progress\n",
+                                  lwip_ntohs(rreq_table[i].dest_addr)));
+      return ERR_INPROGRESS;
+    }
+  }
+
+  for (i = 0; i < LOADNG_G3_PREQ_TABLE_SIZE; i++) {
+    if (preq_table[i].valid_time == 0) {
+      preq_table[i].netif = netif;
+      preq_table[i].dst_addr = dest_short;
+      preq_table[i].valid_time = ctx->path_discovery_time;
+      break;
+    }
+  }
+
+  if (i == LOADNG_G3_PREQ_TABLE_SIZE) {
+    LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3_path_discovery: Too many Path Discovery procedures in progress\n"));
+    return ERR_BUF;
+  }
+
+  p = loadng_g3_msg_init(LOADNG_G3_MSG_TYPE_PREQ);
+  if (p == NULL) {
+    preq_table[i].valid_time = 0;
+    return ERR_MEM;
+  }
+
+  LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3_path_discovery: Starting a new Path Discovery dest: %04X\n",
+                             lwip_ntohs(dest_short)));
+
+  preq = loadng_g3_pbuf_msg_cast(p, struct loadng_g3_preq_msg *);
+  preq->originator = lowpan6_dev_short_addr(ctx);
+  preq->destination = dest_short;
+  preq->path_metric_type = metric_type << 4;
+
+  ret = loadng_g3_preq_transmit(netif, p);
+  pbuf_free(p);
+
+  return ret;
+}
+
+static err_t
+loadng_g3_preq_process(struct netif *netif, struct pbuf *p, u16_t previous_hop, struct g3_mcps_data_indication *indication)
+{
+  lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
+  struct loadng_g3_preq_msg *preq;
+  struct pbuf *q;
+  u8_t ret;
+
+  LWIP_ERROR("loadng_g3_preq_process: msg too short\n",
+             p->len >= sizeof(struct loadng_g3_preq_msg), return ERR_VAL;);
+
+  preq = loadng_g3_pbuf_msg_cast(p, struct loadng_g3_preq_msg *);
+  LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3_preq_process: PREQ received with originator: %04X destination %04X\n",
+                             lwip_ntohs(preq->originator), lwip_ntohs(preq->destination)));
+
+  /* Append a hop field to the PREQ msg */
+  q = loadng_g3_hop_append(netif, p, preq->path_metric_type >> 4, indication);
+  if (q == NULL)
+    return ERR_MEM;
+
+  if (preq->destination == lowpan6_dev_short_addr(ctx)) {
+    ret = loadng_g3_prep_generate(netif, q, preq->destination, preq->originator);
+  } else {
+    ret = loadng_g3_preq_transmit(netif, q);
+  }
+
+  pbuf_free(q);
+
+  return ret;
+}
 
 static err_t loadng_g3_rreq_process(struct netif *netif, struct pbuf *p, u16_t previous_hop, int hop_count,
                                  int hop_limit, u16_t route_metric, u8_t used_metric, u8_t weak_link_count)
@@ -923,6 +1186,17 @@ loadng_g3_tmr(void)
       }
     }
   }
+
+  /* Update PREQ table */
+  for (i = 0; i < LOADNG_G3_PREQ_TABLE_SIZE; i++) {
+    if (preq_table[i].valid_time > 0) {
+      preq_table[i].valid_time--;
+      if (preq_table[i].valid_time == 0) {
+        LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3_tmr: Path discovery of %04X failed\n",
+                                     lwip_ntohs(preq_table[i].dst_addr)));
+      }
+    }
+  }
 }
 
 
@@ -959,6 +1233,10 @@ loadng_g3_input(struct netif *netif, struct pbuf *p, struct lowpan6_link_addr *s
 
   if (msg_type == LOADNG_G3_MSG_TYPE_RREP || msg_type == LOADNG_G3_MSG_TYPE_RREQ) {
     ret = loadng_g3_rreq_rrep_process(netif, p, msg_type, src, indication);
+  } else if (msg_type == LOADNG_G3_MSG_TYPE_PREQ) {
+    ret = loadng_g3_preq_process(netif, p, previous_hop, indication);
+  } else if (msg_type == LOADNG_G3_MSG_TYPE_PREP) {
+    ret = loadng_g3_prep_process(netif, p, previous_hop, indication);
   } else {
     LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3: Unknown msg type received: %02x\n", msg_type));
     ret = ERR_VAL;

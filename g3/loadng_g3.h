@@ -23,5 +23,6 @@ void loadng_g3_tmr(void);
 err_t loadng_g3_input(struct netif *netif, struct pbuf *p, struct lowpan6_link_addr *src, struct g3_mcps_data_indication *indication);
 err_t loadng_g3_route_disc(struct netif *netif, struct pbuf *p, struct lowpan6_link_addr *frame_originator, struct lowpan6_link_addr *dst, u8_t route_repair, u8_t max_hops);
 err_t adpm_route_discovery(struct netif *netif, struct lowpan6_link_addr *dest_addr, u8_t max_hops);
+err_t loadng_g3_path_discovery(struct netif *netif, struct lowpan6_link_addr *dest_addr, u8_t metric_type);
 
 #endif
