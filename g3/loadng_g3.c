@@ -1543,6 +1543,87 @@ loadng_g3_tmr(void)
   }
 }
 
+/**
+ * This function is called by a status handler.
+ * It checks if a confirmed frame was sent after
+ * a successful route repair procedure. If yes, it returns 1
+ * and updates the RREQ table. If not, it returns 0.
+ */
+err_t
+loadng_g3_route_repair_status(struct netif *netif, struct lowpan6_link_addr *final_dest)
+{
+  unsigned i;
+
+  for (i = 0; i < LOADNG_G3_RREQ_TABLE_SIZE; i++) {
+    if (rreq_table[i].state == LOADNG_G3_RREQ_STATE_RREPAIR_SUCCESS &&
+        rreq_table[i].dest_addr == lowpan6_link_addr_to_u16(final_dest)) {
+      rreq_table[i].state = LOADNG_G3_RREQ_STATE_EMPTY;
+      return 1;
+    }
+  }
+
+  return 0;
+}
+
+/**
+ * This function gets called when the ADP layer
+ * receives MCPS-DATA.confirm from MAC succeeding
+ * sending a LoadNG frame.
+ */
+err_t
+loadng_g3_status_handle(struct netif *netif, struct pbuf *p, struct lowpan6_link_addr *dest, u8_t status)
+{
+  lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
+  struct loadng_g3_route_msg *msg;
+  struct lowpan6_g3_routing_entry *rentry;
+  struct lowpan6_g3_blacklist_entry *bentry;
+  u8_t msg_type;
+  u16_t dst_short;
+  unsigned i;
+
+  dst_short = lowpan6_link_addr_to_u16(dest);
+  msg_type = *(u8_t *) (p->payload + 2);
+  if (msg_type == LOADNG_G3_MSG_TYPE_RREP) {
+    /* A successful sending of RREP sets the route as bidirectional */
+    if (status == g3_mac_status_success) {
+      msg = loadng_g3_pbuf_msg_cast(p, struct loadng_g3_route_msg *);
+      rentry = lowpan6_g3_routing_table_lookup(msg->destination, 0);
+      if (rentry != NULL) {
+        LWIP_DEBUGF(LOADNG_DEBUG, ("loadng_g3_status_handle: RREP msg status success. Setting route to %04X as bidirectional\n",
+                                   lwip_ntohs(msg->destination)));
+        rentry->is_bidirectional = 1;
+      }
+    } else if (status == g3_mac_status_no_ack || status == g3_mac_status_transaction_expires) {
+      /* On failure, update blacklist table */
+      bentry = lowpan6_g3_blacklist_table_lookup(dst_short);
+      if (bentry == NULL) {
+        bentry = lowpan6_g3_blacklist_table_add(dst_short);
+        LWIP_ERROR("loadng_g3_status_handle: Blacklist table full!\n", bentry != NULL, return ERR_BUF);
+      }
+      bentry->valid_time = ctx->blacklist_table_ttl;
+    }
+  } else if (msg_type == LOADNG_G3_MSG_TYPE_RREQ) {
+    msg = loadng_g3_pbuf_msg_cast(p, struct loadng_g3_route_msg *);
+    if ((msg->flags & LOADNG_G3_RREQ_FL_UNICAST) &&
+        (status == g3_mac_status_no_ack || status == g3_mac_status_transaction_expires)) {
+      /* A unicast RREQ failed, so let's try broadcast */
+      for (i = 0; i < LOADNG_G3_RREQ_TABLE_SIZE; i++) {
+        if (rreq_table[i].state != LOADNG_G3_RREQ_STATE_EMPTY &&
+            rreq_table[i].dest_addr == lowpan6_link_addr_to_u16(dest)) {
+          if (rreq_table[i].msg) {
+            LWIP_DEBUGF(LOADNG_DEBUG, ("loadng_g3_status_handle: A unicast RREQ to %04X failed. Trying broadcast\n",
+                                       dst_short));
+            loadng_g3_output(netif, rreq_table[i].msg, LOWPAN6_BROADCAST_SHORT_ADDR);
+            rreq_table[i].valid_time = 2 * ctx->net_traversal_time;
+          }
+          break;
+        }
+      }
+    }
+  }
+
+  return ERR_OK;
+}
 
 /**
  * LoadNG output function.
