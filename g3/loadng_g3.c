@@ -225,7 +225,7 @@ enum loadng_g3_route_flags {
   LOADNG_G3_RREP_FL_ROUTE_REPAIR = 0x8
 };
 
-#if LOADNG_DEBUG
+#if LOADNG_G3_DEBUG
 static void loadng_g3_routing_entry_debug(struct lowpan6_g3_routing_entry *entry);
 #else
 #define lodng_g3_routing_entry_debug(p)
@@ -277,6 +277,71 @@ loadng_g3_msg_init(u8_t msg_type)
   buf[2] = msg_type;
 
   return p;
+}
+
+/**
+ * Computes a directional link cost. Parameters to this function
+ * might be taken from the MCPS-DATA.indication structure or
+ * the MAC neighbour table.
+ */
+static u16_t
+loadng_g3_link_cost_dir(struct netif *netif, u8_t mod_type, u8_t active_tones, u8_t lqi)
+{
+  lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
+  const u8_t mod_km[5] = { 3, 3, 2, 1, 0 };
+  const u8_t mod_kr = mod_type == 0; /* Check for Robust modulation type */
+  u16_t kq_part, kc_part;
+
+  if (mod_type >= sizeof(mod_km)) {
+    return 0;
+  }
+
+  kq_part = (ctx->high_lqi_value > lqi) ? (ctx->high_lqi_value - lqi) : 0;
+  kq_part = LWIP_MIN(1, kq_part / (ctx->high_lqi_value - ctx->low_lqi_value));
+
+  kc_part = (ctx->max_tones - active_tones) / ctx->max_tones;
+
+  return ctx->kr * mod_kr
+         + ctx->km * mod_km[mod_type]
+         + ctx->kc * kc_part
+         + ctx->kq * kq_part;
+}
+
+/**
+ * Given MAX(reverse_cost, forward_cost) compute overall
+ * composite link cost.
+ */
+static u16_t
+loadng_g3_link_cost_composite(struct netif *netif, u16_t max_dir)
+{
+  lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
+
+  return max_dir + ((u16_t) ctx->krt * ctx->n_routing_entries / LOWPAN6_G3_ROUTING_TABLE_SIZE)
+        + ctx->kh;
+}
+
+/**
+ * This function is used to compute an overall link cost.
+ * The forward cost is always computed based on the MCPS-DATA.indication,
+ * while the reverse cost can be computed using a MAC neighbour entry given
+ * as a parameter or approximated using the forward cost.
+ */
+static u16_t
+loadng_g3_link_cost(struct netif *netif, struct g3_mcps_data_indication *indication, struct g3_mac_nb_entry *nb)
+{
+  lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
+  u16_t cost_fwd, cost_rev;
+
+  cost_fwd = loadng_g3_link_cost_dir(netif, indication->modulation, indication->active_tones, indication->msdu_linkquality);
+
+  /* Neighbour entry is valid */
+  if (nb != NULL) {
+    cost_rev = loadng_g3_link_cost_dir(netif, nb->mod_type, nb->active_tones, nb->lqi);
+  } else {
+    cost_rev = cost_fwd + ctx->add_rev_link_cost;
+  }
+
+  return loadng_g3_link_cost_composite(netif, LWIP_MAX(cost_fwd, cost_rev));
 }
 
 /**
