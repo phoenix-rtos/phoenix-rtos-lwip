@@ -275,6 +275,143 @@ lbp_g3_set_connected(struct netif *netif)
   ctx->connected = 1;
 }
 
+static u8_t
+lbp_g3_param_encode(u8_t *buf, u8_t attr_id, u8_t attr_type, u8_t attr_len, const u8_t *attr_val)
+{
+  buf[0] = attr_id << 2 | attr_type << 1 | 1;
+  buf[1] = attr_len;
+  MEMCPY(buf + 2, attr_val, attr_len);
+
+  return 2 + attr_len;
+}
+
+static u8_t
+lbp_g3_param_decode(u8_t *buf, u8_t *attr_id, u8_t *attr_len, u8_t **attr_val)
+{
+  *attr_id = buf[0] >> 2;
+  *attr_len = buf[1];
+  *attr_val = buf + 2;
+
+  return *attr_len + 2;
+}
+
+static u8_t
+lbp_g3_encode_param_result(u8_t *buf, u8_t id, u8_t res)
+{
+  u8_t val[] = {id, res};
+
+  return lbp_g3_param_encode(buf, LBP_G3_ATTR_PARAM_RESULT, LBP_G3_LIB_DSI, 2, val);
+}
+
+/*
+ * This method is used by the PAN device to handle configuration parameters
+ * sent by the LBS, either during bootstrapping, rekeying or in other situations.
+ * It also encodes parameter-result as a response.
+ */
+static int
+lbp_g3_handle_params(struct netif *netif, u8_t *in_buf, u16_t in_len,
+                     u8_t *out_buf, u16_t out_len, ps_eap_psk_p_result_t *res, u16_t expected_attr_mask)
+{
+  lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
+  u8_t pos_in = 0, pos_out = 0;
+  u16_t missing_param = 1;
+  u8_t attr_id, attr_len;
+  u8_t *attr_val;
+
+  while (pos_in < in_len) {
+    pos_in += lbp_g3_param_decode(in_buf + pos_in, &attr_id, &attr_len, &attr_val);
+    expected_attr_mask &= ~lbp_g3_attr_flg(attr_id);
+    switch (attr_id) {
+      case LBP_G3_ATTR_GMK:
+        if (attr_len != LOWPAN6_G3_GMK_LEN + 1 || *attr_val >= LOWPAN6_G3_N_GMK_KEYS) {
+          if (pos_out + LBP_G3_PARAM_RES_LEN < out_len) {
+            pos_out += lbp_g3_encode_param_result(out_buf + pos_out, attr_id, LBP_G3_PARAM_INVALID_VAL);
+          }
+        } else {
+          lowpan6_g3_set_gmk(netif, attr_val + 1, *attr_val);
+        }
+        break;
+      case LBP_G3_ATTR_GMK_ACTIVATION:
+        if (attr_len != 1 || *attr_val >= LOWPAN6_G3_N_GMK_KEYS || !ctx->gmk[*attr_val].is_set) {
+          if (pos_out + LBP_G3_PARAM_RES_LEN < out_len) {
+            pos_out += lbp_g3_encode_param_result(out_buf + pos_out, attr_id, LBP_G3_PARAM_INVALID_VAL);
+          }
+        } else {
+          ctx->active_key_index = *attr_val;
+        }
+        break;
+      case LBP_G3_ATTR_SHORT_ADDR:
+        if (attr_len != 2 || (attr_val[0] == 0xFF && attr_val[1] == 0xFF)) {
+          if (pos_out + LBP_G3_PARAM_RES_LEN < out_len) {
+            pos_out += lbp_g3_encode_param_result(out_buf + pos_out, attr_id, LBP_G3_PARAM_INVALID_VAL);
+          }
+        } else {
+          ctx->short_address = attr_val[0] << 8 | attr_val[1];
+          LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_handle_params: Received short address: %04X\n", ctx->short_address));
+          /* If we received this address during bootstrapping, don't set it yet */
+          if (ctx->state == LBP_G3_STATE_IDLE) {
+            lowpan6_g3_set_short_addr(netif, attr_val[0], attr_val[1]);
+          }
+        }
+        break;
+      case LBP_G3_ATTR_ADDR_LBS:
+        if (attr_len != sizeof(u16_t)) {
+          if (pos_out + LBP_G3_PARAM_RES_LEN < out_len) {
+            pos_out += lbp_g3_encode_param_result(out_buf + pos_out, attr_id, LBP_G3_PARAM_INVALID_VAL);
+          }
+        } else {
+          lowpan6_g3_set_coord_address(attr_val[0], attr_val[1]);
+        }
+        break;
+      case LBP_G3_ATTR_GMK_REMOVAL:
+        if (attr_len != 1 || *attr_val >= LOWPAN6_G3_N_GMK_KEYS ||
+            !ctx->gmk[*attr_val].is_set || ctx->active_key_index == *attr_val) {
+          if (pos_out + LBP_G3_PARAM_RES_LEN < out_len) {
+            pos_out += lbp_g3_encode_param_result(out_buf + pos_out, attr_id, LBP_G3_PARAM_INVALID_VAL);
+          }
+        } else {
+          ctx->gmk[*attr_val].is_set = 0;
+        }
+        break;
+      case LBP_G3_ATTR_JOIN_TIME:
+      case LBP_G3_ATTR_PAN_ID:
+      case LBP_G3_ATTR_PAN_TYPE:
+      case LBP_G3_ATTR_PARAM_RESULT:
+      case LBP_ATTR_SHORT_ADDR_DIST_MECH:
+      case LBP_G3_ATTR_DEVICE_ROLE:
+      case LBP_G3_ATTR_OTHER:
+        /* Not implemented */
+        break;
+      default:
+        LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_handle_params: Unknown parameter received: %02X!\n", attr_id));
+        if (pos_out + LBP_G3_PARAM_RES_LEN < out_len) {
+          pos_out += lbp_g3_encode_param_result(out_buf + pos_out, attr_id, LBP_G3_PARAM_INVALID_ID);
+        }
+    }
+  }
+
+  /* We have not received all the expected params */
+  while (expected_attr_mask != 0) {
+    /* Find, which param is missing */
+    while ((lbp_g3_attr_flg(missing_param) & expected_attr_mask) == 0) {
+      missing_param++;
+    }
+
+    LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_handle_params: Missing expected param: %u!\n", missing_param));
+    expected_attr_mask &= ~lbp_g3_attr_flg(missing_param);
+    pos_out += lbp_g3_encode_param_result(out_buf + pos_out, missing_param, LBP_G3_PARAM_MISSING);
+  }
+
+  /* If we don't encounter any errors, encode SUCCESS result */
+  if (pos_out == 0) {
+    *res = ps_eap_psk_p_result__done_success;
+    pos_out += lbp_g3_encode_param_result(out_buf + pos_out, 0, LBP_G3_PARAM_SUCCESS);
+  } else{
+    *res = ps_eap_psk_p_result__done_failure;
+  }
+
+  return pos_out;
+}
 
 /* Timer function called every second by lowpan6_g3_tmr() */
 void
