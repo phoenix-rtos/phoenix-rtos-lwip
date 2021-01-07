@@ -207,6 +207,7 @@ int main(int argc, char **argv)
 	void register_driver_rtl(void);
 	void register_driver_enet(void);
 	void register_driver_pppos(void);
+	void register_driver_pppou(void);
 	void register_driver_tun(void);
 	void register_driver_tap(void);
 
@@ -220,6 +221,9 @@ int main(int argc, char **argv)
 #endif
 #ifdef HAVE_DRIVER_pppos
 	register_driver_pppos();
+#endif
+#ifdef HAVE_DRIVER_pppou
+	register_driver_pppou();
 #endif
 #ifdef HAVE_DRIVER_tuntap
 	register_driver_tun();
