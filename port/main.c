@@ -60,8 +60,8 @@ static int writeRoutes(char *buffer, size_t bufSize, size_t offset)
 
 	if ((entry = rt_table.entries) != NULL) {
 		do {
-			SNPRINTF_APPEND(format, entry->netif->name, entry->netif->num, ntohl(ip_addr_get_ip4_u32(&entry->dst)),
-					ntohl(ip_addr_get_ip4_u32(&entry->genmask)), ntohl(ip_addr_get_ip4_u32(entry->flags & RTF_GATEWAY ? &entry->gw : &entry->netif->gw)),
+			SNPRINTF_APPEND(format, entry->netif->name, entry->netif->num, ntohl(ip4_addr_get_u32(&entry->dst)),
+					ntohl(ip4_addr_get_u32(&entry->genmask)), ntohl(ip4_addr_get_u32(entry->flags & RTF_GATEWAY ? &entry->gw : netif_ip4_gw(entry->netif))),
 					entry->flags, entry->netif->mtu, entry->metric);
 		}
 		while ((entry = entry->next) != rt_table.entries);
@@ -69,7 +69,7 @@ static int writeRoutes(char *buffer, size_t bufSize, size_t offset)
 
 	if (netif_default != NULL) {
 		SNPRINTF_APPEND(format, netif_default->name, netif_default->num, 0, 0,
-			ntohl(ip_addr_get_ip4_u32(&netif_default->gw)), netif_default->flags, netif_default->mtu, -1);
+			ntohl(ip4_addr_get_u32(netif_ip4_gw(netif_default))), netif_default->flags, netif_default->mtu, -1);
 	}
 
 	retval = bufSize - size;
