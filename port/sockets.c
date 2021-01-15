@@ -251,16 +251,17 @@ static int socket_ioctl(int sock, unsigned long request, const void* in_data, vo
 		switch (request) {
 		case SIOCGIFADDR:
 			sin = (struct sockaddr_in *) &ifreq->ifr_addr;
-			sin->sin_addr.s_addr = interface->ip_addr.addr;
+			inet_addr_from_ip4addr(&sin->sin_addr, netif_ip4_addr(interface));
 			break;
 		case SIOCGIFNETMASK:
 			sin = (struct sockaddr_in *) &ifreq->ifr_netmask;
-			sin->sin_addr.s_addr = interface->netmask.addr;
+			inet_addr_from_ip4addr(&sin->sin_addr, netif_ip4_netmask(interface));
 			break;
 		case SIOCGIFBRDADDR:
 			if (!netif_is_ppp(interface)) {
 				sin = (struct sockaddr_in *) &ifreq->ifr_broadaddr;
-				sin->sin_addr.s_addr = interface->ip_addr.addr | ~(interface->netmask.addr);
+				sin->sin_addr.s_addr = ip4_addr_get_u32(netif_ip4_addr(interface)) |
+									   ~ip4_addr_get_u32(netif_ip4_netmask(interface));
 			} else {
 				return -EOPNOTSUPP;
 			}
@@ -268,7 +269,7 @@ static int socket_ioctl(int sock, unsigned long request, const void* in_data, vo
 		case SIOCGIFDSTADDR:
 			if (netif_is_ppp(interface) || netif_is_tun(interface)) {
 				sin = (struct sockaddr_in *) &ifreq->ifr_dstaddr;
-				sin->sin_addr.s_addr = netif_ip4_gw(interface)->addr;
+				inet_addr_from_ip4addr(&sin->sin_addr, netif_ip4_gw(interface));
 			} else {
 				return -EOPNOTSUPP;
 			}
@@ -284,7 +285,7 @@ static int socket_ioctl(int sock, unsigned long request, const void* in_data, vo
 	case SIOCSIFDSTADDR: {
 		struct ifreq *ifreq = (struct ifreq *) in_data;
 		struct netif *interface = netif_find(ifreq->ifr_name);
-		ip_addr_t ipaddr;
+		ip4_addr_t ip4addr;
 		if (interface == NULL)
 			return -ENXIO;
 
@@ -292,21 +293,21 @@ static int socket_ioctl(int sock, unsigned long request, const void* in_data, vo
 		switch (request) {
 		case SIOCSIFADDR:
 			sin = (struct sockaddr_in *) &ifreq->ifr_addr;
-			ipaddr.addr = sin->sin_addr.s_addr;
-			netif_set_ipaddr(interface, &ipaddr);
+			inet_addr_to_ip4addr(&ip4addr, &sin->sin_addr);
+			netif_set_ipaddr(interface, &ip4addr);
 			break;
 		case SIOCSIFNETMASK:
 			sin = (struct sockaddr_in *) &ifreq->ifr_netmask;
-			ipaddr.addr = sin->sin_addr.s_addr;
-			netif_set_netmask(interface, &ipaddr);
+			inet_addr_to_ip4addr(&ip4addr, &sin->sin_addr);
+			netif_set_netmask(interface, &ip4addr);
 			break;
 		case SIOCSIFBRDADDR:
 			return -EOPNOTSUPP;
 		case SIOCSIFDSTADDR:
 			if (netif_is_tun(interface)) {
 				sin = (struct sockaddr_in *) &ifreq->ifr_dstaddr;
-				ipaddr.addr = sin->sin_addr.s_addr;
-				netif_set_gw(interface, &ipaddr);
+				inet_addr_to_ip4addr(&ip4addr, &sin->sin_addr);
+				netif_set_gw(interface, &ip4addr);
 				break;
 			}
 			return -EOPNOTSUPP;
@@ -429,7 +430,7 @@ static int socket_ioctl(int sock, unsigned long request, const void* in_data, vo
 			snprintf(ifreq->ifr_name, IFNAMSIZ, "%c%c%d", netif->name[0], netif->name[1], netif->num);
 
 			struct sockaddr_in* sin = (struct sockaddr_in *) &ifreq->ifr_addr;
-			sin->sin_addr.s_addr = netif->ip_addr.addr;
+			inet_addr_from_ip4addr(&sin->sin_addr, netif_ip4_addr(netif));
 
 			ifconf->ifc_len += sizeof(struct ifreq);
 			ifreq += 1;
