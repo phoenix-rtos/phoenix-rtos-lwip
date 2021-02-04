@@ -136,15 +136,12 @@ static int socket_ioctl(int sock, unsigned long request, const void* in_data, vo
 
 	case SIOCGIFNAME: {
 		struct ifreq *ifreq = (struct ifreq *) out_data;
-		struct netif *it;
-		for (it = netif_list; it != NULL; it = it->next) {
-			if (it->num == ifreq->ifr_ifindex) {
-				strncpy(ifreq->ifr_name, it->name, IFNAMSIZ);
-				return EOK;
-			}
-		}
+		char *res;
 
-		return -ENXIO;
+		LWIP_ASSERT("IFNAMSIZ >= NETIF_NAMESIZE", IFNAMSIZ >= NETIF_NAMESIZE);
+		res = netif_index_to_name(ifreq->ifr_ifindex, ifreq->ifr_name);
+		if (res == NULL)
+			return -ENXIO;
 	}
 
 	case SIOCGIFINDEX: {
@@ -153,7 +150,7 @@ static int socket_ioctl(int sock, unsigned long request, const void* in_data, vo
 			if (interface == NULL)
 				return -ENXIO;
 
-			ifreq->ifr_ifindex = interface->num;
+			ifreq->ifr_ifindex = netif_get_index(interface);
 		}
 
 		return EOK;
