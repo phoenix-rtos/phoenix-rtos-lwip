@@ -35,6 +35,11 @@
 #include <net/if_arp.h>
 #include <sys/threads.h>
 #include <posix/utils.h>
+#include <ifaddrs.h>
+
+#if LWIP_IPV6
+#include <net/if6.h>
+#endif
 
 #include "netif.h"
 #include "route.h"
@@ -120,6 +125,51 @@ static const struct sockaddr *sa_convert_sys_to_lwip(const void *sa, socklen_t s
 	return lsa;
 }
 
+#if LWIP_IPV6
+
+/*
+ * For IPv6 addresses we don't have any equivalent field,
+ * to IPv4 netif->flags, so we need to generate them.
+ */
+static int netif_ip6_flags(struct netif *netif, unsigned int idx)
+{
+	int flags = 0;
+	int state = netif_ip6_addr_state(netif, idx);
+
+	if (ip6_addr_istentative(state)) {
+		flags |= IN6_IFF_TENTATIVE;
+	}
+
+	if (ip6_addr_isduplicated(state)) {
+		flags |= IN6_IFF_DUPLICATED;
+	}
+
+	if (ip6_addr_isdeprecated(state)) {
+		flags |= IN6_IFF_DEPRECATED;
+	}
+
+	if (ip6_addr_isvalid(state) && !ip6_addr_ispreferred(state)) {
+		flags |= IN6_IFF_DETACHED;
+	}
+
+	return flags;
+}
+
+/*
+ * Generate IPv6 netmask.
+ * For now lwip assumes all IPv6 address
+ * are 64 bits long except for loopback address.
+ */
+static void inet6_addr_netmask_from_ip6addr(struct in6_addr *dst, const ip6_addr_t *src)
+{
+	memset(dst, 0xff, sizeof(*dst));
+	if (!ip6_addr_isloopback(src)) {
+		dst->un.u32_addr[2] = 0;
+		dst->un.u32_addr[3] = 0;
+	}
+}
+
+#endif /* LWIP_IPV6 */
 
 static int socket_ioctl(int sock, unsigned long request, const void* in_data, void* out_data)
 {
@@ -738,6 +788,107 @@ static int do_getaddrinfo(const char *name, const char *serv, const struct addri
 }
 #endif
 
+static int do_getifaddrs(char *buf, size_t *buflen)
+{
+	struct sockaddr_storage sa;
+	struct sockaddr_in *sin;
+	struct ifaddrs *dest;
+	struct netif *netif;
+	char *addrdest, *strdest;
+	size_t n_netifs = 0, n_ifaddrs = 0, needed;
+	size_t n_addrs = 0, str_needed = 0, addr_needed = 0;
+#if LWIP_IPV6
+	struct sockaddr_in6 *sin6;
+	int i;
+#endif
+
+	NETIF_FOREACH(netif) {
+		n_netifs++;
+		n_ifaddrs++;
+		/* lwip_netif_name | netif_num | '\0' */
+		str_needed += sizeof(netif->name) + 2;
+		 /* IPv4 addr, netmask, gw/dsy */
+		n_addrs += 3;
+		addr_needed += 3 * sizeof(struct sockaddr_in);
+#if LWIP_IPV6
+		/* Count IPv6 addresses */
+		for (i = 0; i < LWIP_IPV6_NUM_ADDRESSES; i++) {
+			if (!ip6_addr_isinvalid(netif_ip6_addr_state(netif, i))) {
+				n_addrs += 2;
+				n_ifaddrs++;
+				addr_needed += 2 * sizeof(struct sockaddr_in6);
+			}
+		}
+#endif /* LWIP_IPv6 */
+    }
+
+	needed = n_ifaddrs * sizeof(struct ifaddrs) + str_needed + addr_needed;
+	if (needed > *buflen) {
+		*buflen = needed;
+		return EAI_OVERFLOW;
+	}
+	*buflen = needed;
+	dest = (struct ifaddrs *)buf;
+	addrdest = buf + n_ifaddrs * sizeof(*dest);
+	strdest = addrdest + addr_needed;
+
+	memset(buf, 0, needed);
+	memset(&sa, 0, sizeof(sa));
+	sin = (struct sockaddr_in *) &sa;
+	NETIF_FOREACH(netif) {
+		dest->ifa_flags = netif->flags;
+		sin->sin_family = AF_INET;
+		sin->sin_len = sizeof(struct sockaddr_in);
+
+		inet_addr_from_ip4addr(&sin->sin_addr, netif_ip4_addr(netif));
+		memcpy(addrdest, sin, sin->sin_len);
+		dest->ifa_addr = (struct sockaddr *)(addrdest - buf);
+		addrdest += sizeof(struct sockaddr_in);
+
+		inet_addr_from_ip4addr(&sin->sin_addr, netif_ip4_gw(netif));
+		memcpy(addrdest, sin, sin->sin_len);
+		dest->ifa_dstaddr = (struct sockaddr *)(addrdest - buf);
+		addrdest += sizeof(struct sockaddr_in);
+
+		inet_addr_from_ip4addr(&sin->sin_addr, netif_ip4_netmask(netif));
+		memcpy(addrdest, sin, sin->sin_len);
+		dest->ifa_netmask = (struct sockaddr *)(addrdest - buf);
+		addrdest += sizeof(struct sockaddr_in);
+
+		snprintf(strdest, sizeof(netif->name) + 2, "%2s%1d", netif->name, netif->num);
+		dest->ifa_name = (char *)(strdest - buf);
+#if LWIP_IPV6
+		sin6 = (struct sockaddr_in6 *) &sa;
+		for (i = 0; i < LWIP_IPV6_NUM_ADDRESSES; i++) {
+			if (!ip6_addr_isinvalid(netif_ip6_addr_state(netif, i))) {
+				dest->ifa_next = (struct ifaddrs *)((char *)(dest + 1) - buf);
+				++dest;
+				sin6->sin6_family = AF_INET6;
+				sin6->sin6_len = sizeof(struct sockaddr_in6);
+				sin6->sin6_scope_id = ip6_addr_zone(netif_ip6_addr(netif, i));
+				inet6_addr_from_ip6addr(&sin6->sin6_addr, netif_ip6_addr(netif, i));
+				memcpy(addrdest, sin6, sin6->sin6_len);
+				dest->ifa_addr = (struct sockaddr *)(addrdest - buf);
+				addrdest += sizeof(struct sockaddr_in6);
+
+				sin6->sin6_scope_id = 0;
+				inet6_addr_netmask_from_ip6addr(&sin6->sin6_addr, netif_ip6_addr(netif, i));
+				memcpy(addrdest, sin6, sin6->sin6_len);
+				dest->ifa_netmask = (struct sockaddr *)(addrdest - buf);
+				addrdest += sizeof(struct sockaddr_in6);
+
+				dest->ifa_name = (char *)(strdest - buf);
+				dest->ifa_flags = netif_ip6_flags(netif, i);
+			}
+		}
+#endif /* LWIP_IPV6 */
+		strdest += sizeof(netif->name) + 2;
+		dest->ifa_next = netif->next ? (struct ifaddrs *)((char *)(dest + 1) - buf) : NULL;
+		++dest;
+	}
+
+	return 0;
+}
 
 static void socketsrv_thread(void *arg)
 {
@@ -801,7 +952,11 @@ static void socketsrv_thread(void *arg)
 			smo->sys.err = smo->ret == EAI_SYSTEM ? errno : 0;
 			break;
 #endif
-
+		case sockmGetIfAddrs:
+			smo->sys.buflen = msg.o.size;
+			smo->ret = do_getifaddrs(msg.o.data, &smo->sys.buflen);
+			smo->sys.err = smo->ret == EAI_SYSTEM ? errno : 0;
+			break;
 		default:
 			msg.o.io.err = -EINVAL;
 		}
