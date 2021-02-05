@@ -26,11 +26,23 @@ all: $(PREFIX_PROG_STRIPPED)lwip
 LWIPDIR := lib-lwip/src
 include $(LWIPDIR)/Filelists.mk
 LWIP_EXCLUDE := netif/slipif.c
+
+ifeq (${LWIP_G3_BUILD}, yes)
+LWIP_EXCLUDE += netif/lowpan6.c netif/lowpan6_common.c
+endif
+
 LWIP_SRCS := $(filter-out $(addprefix $(LWIPDIR)/,$(LWIP_EXCLUDE)),$(LWIPNOAPPSFILES))
 LWIP_OBJS := $(patsubst %.c,$(PREFIX_O)%.o,$(LWIP_SRCS))
 
 PORT_SRCS := $(wildcard port/*.c)
 PORT_OBJS := $(patsubst %.c,$(PREFIX_O)%.o,$(PORT_SRCS))
+
+G3_SRCS := $(wildcard g3/*.c)
+G3_OBJS := $(patsubst %.c,$(PREFIX_O)%.o,$(G3_SRCS))
+
+ifeq (${LWIP_G3_BUILD}, yes)
+LWIP_OBJS += $(G3_OBJS)
+endif
 
 DRIVERS_SRCS := netif-driver.c
 DRIVERS_SRCS_UTIL := bdring.c pktmem.c physmmap.c res-create.c
