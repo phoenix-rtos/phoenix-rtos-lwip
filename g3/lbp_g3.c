@@ -33,6 +33,8 @@
                                       lbp_g3_attr_flg(LBP_G3_ATTR_GMK) | \
                                       lbp_g3_attr_flg(LBP_G3_ATTR_GMK_ACTIVATION))
 
+static struct g3_scan_entry scan_table[LBP_G3_SCAN_TABLE_SIZE];
+
 /* LBP Type and Message codes */
 enum lbp_g3_msg_type {
   LBP_G3_MSG_JOINING = 0x01,
@@ -121,6 +123,149 @@ lbp_g3_msg_init(u8_t msg_type, const u8_t *lbd_addr, u16_t payload_size)
   return p;
 }
 
+static err_t
+lbp_g3_output(struct netif *netif, struct pbuf *p, struct lowpan6_link_addr *dst);
+
+/**
+ * Starts the joining procedure using the given LBA. It sets
+ * the PAN ID.
+ * @param pan_id in machine order
+ * @param lba in machine order
+ */
+err_t
+lbp_g3_join(struct netif *netif, u16_t pan_id, u16_t lba)
+{
+  lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
+  struct pbuf *p;
+  err_t ret;
+
+  /* Set PAN ID in MAC and in ADP */
+  if (lowpan6_g3_set_pan_id(netif, pan_id) != ERR_OK) {
+    LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_join: Can't set PAN ID\n"));
+    return ERR_VAL;
+  }
+
+  lowpan6_link_addr_set_u16(&ctx->lba_address, lwip_htons(lba));
+  p = lbp_g3_msg_init(LBP_G3_MSG_JOINING, ctx->extended_mac_addr.addr, 0);
+  if (p == NULL) {
+    return ERR_MEM;
+  }
+
+  LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_join: Joining network PAN ID: %04X using LBA: %04X\n", pan_id, lba));
+  ret = lbp_g3_output(netif, p, &ctx->lba_address);
+  if (ret == ERR_OK) {
+    ctx->state = LBP_G3_STATE_JOINING;
+    ctx->join_timeout = ctx->max_join_wait_time;
+  }
+
+  pbuf_free(p);
+
+  return ret;
+}
+
+/*
+ * This function starts network scanning.
+ * Equivalent to ADPM-DISCOVERY.request.
+ */
+err_t
+lbp_g3_discovery(struct netif *netif, u8_t duration)
+{
+  lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
+  unsigned i;
+
+  if (ctx->state == LBP_G3_STATE_SCANNING) {
+    return ERR_INPROGRESS;
+  }
+
+  for (i = 0; i < LBP_G3_SCAN_TABLE_SIZE; i++) {
+    scan_table[i].valid = 0;
+  }
+
+  if (g3_mlme_scan_request(scan_table, LBP_G3_SCAN_TABLE_SIZE, duration) < 0) {
+    return ERR_VAL;
+  }
+  ctx->state = LBP_G3_STATE_SCANNING;
+  LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_discovery: Network scan started\n"));
+
+  return ERR_OK;
+}
+
+
+
+/**
+ * Function called by a lower layer once the
+ * scanning is completed. If the receiver is a PAN device,
+ * this function initiates JOIN procedure, otherwise,
+ * it starts a new PAN.
+ */
+void lbp_g3_discovery_confirm(struct netif *netif, u8_t status)
+{
+  lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
+  unsigned i;
+  int best_idx;
+
+  if (ctx->state != LBP_G3_STATE_SCANNING)
+    return;
+
+  LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_discovery_confirm: MLME-SCAN finished with status: %02X\n", status));
+
+#if LBP_G3_DEBUG
+  printf("%-4s %-4s %-4s %s\n"
+      "-----------------------\n",
+      "PAN", "LBA", "LQI", "RC_COORD");
+  for (i = 0; i < LBP_G3_SCAN_TABLE_SIZE; i++) {
+    if (!scan_table[i].valid)
+      break;
+    printf("%04X %04X %-4d %04X\n", scan_table[i].pan_id, scan_table[i].lba, scan_table[i].lqi, scan_table[i].rc_coord);
+  }
+#endif
+
+  /*
+   * If the device is already connected, and the discovery was triggered
+   * for maintenance purpose, return to idle.
+   */
+  if (ctx->connected) {
+    ctx->state = LBP_G3_STATE_IDLE;
+    return;
+  }
+
+  if (ctx->device_type == LOWPAN6_G3_DEVTYPE_DEVICE) {
+    /* Choose the best LBA and start joinig */
+    if (!scan_table[0].valid) {
+      LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_discovery_confirm: No devices found!\n"));
+      return;
+    }
+
+    best_idx = 0;
+    for (i = 1; i < LBP_G3_SCAN_TABLE_SIZE; i++) {
+      if (!scan_table[i].valid)
+        break;
+      if (scan_table[i].rc_coord < scan_table[best_idx].rc_coord ||
+         (scan_table[i].rc_coord == scan_table[best_idx].rc_coord && scan_table[i].lqi > scan_table[best_idx].lqi)) {
+        best_idx = i;
+      }
+    }
+    lbp_g3_join(netif, scan_table[best_idx].pan_id, scan_table[best_idx].lba);
+  }
+}
+
+/**
+ * Function used to start bootstrap procedure for a PAN device.
+ * It is required to call lbp_g3_init prior to this call.
+ */
+err_t
+lbp_g3_start(struct netif *netif, u8_t scan_duration)
+{
+  lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
+
+  if (lbp_g3_discovery(netif, scan_duration) < 0) {
+    return ERR_VAL;
+  }
+
+  ctx->state = LBP_G3_STATE_SCANNING;
+  return ERR_OK;
+}
+
 void
 lbp_g3_set_connected(struct netif *netif)
 {
@@ -128,6 +273,25 @@ lbp_g3_set_connected(struct netif *netif)
 
   ctx->state = LBP_G3_STATE_IDLE;
   ctx->connected = 1;
+}
+
+
+/* Timer function called every second by lowpan6_g3_tmr() */
+void
+lbp_g3_tmr(void *arg)
+{
+  struct netif *netif = (struct netif *) arg;
+  lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
+
+  if (ctx->device_type == LOWPAN6_G3_DEVTYPE_DEVICE) {
+    if (ctx->state != LBP_G3_STATE_IDLE && ctx->state != LBP_G3_STATE_ERROR
+        && !ctx->connected) {
+      if (--ctx->join_timeout == 0) {
+        ctx->state = LBP_G3_STATE_ERROR;
+        LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_tmr: Bootstrapping failed due to timeout.\n"));
+      }
+    }
+  }
 }
 
 static err_t
