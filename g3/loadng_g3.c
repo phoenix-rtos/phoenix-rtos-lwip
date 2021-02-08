@@ -238,6 +238,8 @@ static struct loadng_g3_rrep_entry rrep_table[LOADNG_G3_RREP_TABLE_SIZE];
 static struct loadng_g3_preq_entry preq_table[LOADNG_G3_PREQ_TABLE_SIZE];
 
 static u32_t last_rreq_time = 0;
+static u32_t last_rlcreq_time = 0;
+
 static struct pbuf *
 loadng_g3_msg_init(u8_t msg_type)
 {
@@ -704,6 +706,105 @@ loadng_g3_routing_table_update(struct netif *netif, struct loadng_g3_route_msg *
   return ERR_OK;
 }
 
+/**
+ * Start a RLC procedure, if a neighbour table entry to previos_hop of a routing msg
+ * is missing and RLC is enabled.
+ * @param pbuf containing a routing msg, which should be buffered
+ */
+static err_t
+loadng_g3_rlc_start(struct netif *netif, struct pbuf *p, u16_t previous_hop, u8_t metric_type,
+                    u8_t msg_type, struct g3_mcps_data_indication *indication)
+{
+  lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
+  struct lowpan6_link_addr dest;
+  struct loadng_g3_rlcreq_msg *rlcreq;
+  struct loadng_g3_q_entry *qentry, *tmp;
+  struct pbuf *q;
+  unsigned i;
+  u32_t now = sys_now();
+  err_t ret = ERR_OK;
+
+  qentry = mem_malloc(sizeof(struct loadng_g3_q_entry));
+  if (qentry == NULL) {
+    return ERR_MEM;
+  }
+
+  pbuf_ref(p);
+  qentry->next = NULL;
+  qentry->p = p;
+
+  /* Check if there is already an RLC in progress */
+  for (i = 0; i < LOADNG_G3_RLC_TABLE_SIZE; i++) {
+    if (rlc_table[i].state != LOADNG_G3_RLC_STATE_EMPTY &&
+        rlc_table[i].previous_hop == previous_hop) {
+      if (rlc_table[i].q == NULL) {
+        rlc_table[i].q = qentry;
+      } else {
+        tmp = rlc_table[i].q;
+        while (tmp->next) {
+          tmp = tmp->next;
+        }
+        tmp->next = qentry;
+      }
+      LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3_rlc_start: RLC to %04X already in progress. Enqueue LoadNG packet.\n",
+                                 lwip_ntohs(previous_hop)));
+      return ERR_OK;
+    }
+  }
+
+  for (i = 0; i < LOADNG_G3_RLC_TABLE_SIZE; i++) {
+    if (rlc_table[i].state == LOADNG_G3_RLC_STATE_EMPTY) {
+      rlc_table[i].netif = netif;
+      rlc_table[i].previous_hop = previous_hop;
+      rlc_table[i].valid_time = ctx->rlc_time;
+      rlc_table[i].q = qentry;
+      rlc_table[i].msg_type = msg_type;
+      rlc_table[i].rlc_msg = NULL;
+      rlc_table[i].lqi = indication->msdu_linkquality;
+      rlc_table[i].fwd_link_cost = loadng_g3_link_cost_dir(netif, indication->modulation,
+                                                           indication->active_tones,
+                                                           indication->msdu_linkquality);
+      break;
+    }
+  }
+
+  if (i == LOADNG_G3_RLC_TABLE_SIZE) {
+    LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3_rlc_start: Too many RLC procedures in progress. Discarding.\n"));
+    mem_free(qentry);
+    pbuf_free(p);
+    return ERR_BUF;
+  }
+
+  q = loadng_g3_msg_init(LOADNG_G3_MSG_TYPE_RLCREQ);
+  if (q == NULL) {
+      return ERR_MEM;
+  }
+
+  rlcreq = loadng_g3_pbuf_msg_cast(q, struct loadng_g3_rlcreq_msg *);
+  rlcreq->destination = previous_hop;
+  rlcreq->originator = lowpan6_dev_short_addr(ctx);
+  rlcreq->metric_type = metric_type;
+
+  if (now - last_rlcreq_time <= ctx->rreq_wait) {
+    /* Don't send RLCREQ yet */
+    LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3_rlc_start: We need to wait %d s before sending new RLCREQ. Buffering the packet.\n",
+                                last_rlcreq_time));
+    rlc_table[i].state = LOADNG_G3_RLC_STATE_WAITING;
+    rlc_table[i].rlc_msg = q;
+  } else {
+    LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3_rlc_start: Sending RLCREQ to %04X.\n",
+                                lwip_ntohs(previous_hop)));
+    rlc_table[i].state = LOADNG_G3_RLC_STATE_PENDING;
+    last_rlcreq_time = now;
+
+    lowpan6_link_addr_set_u16(&dest, rlcreq->destination);
+    ret = loadng_g3_output(netif, q, rlcreq->destination);
+
+    pbuf_free(q);
+  }
+
+  return ret;
+}
 
 /**
  * This function should inform the upper layer, that
@@ -1107,6 +1208,11 @@ loadng_g3_rreq_rrep_process(struct netif *netif, struct pbuf *p, u8_t msg_type, 
                             (msg_type == LOADNG_G3_MSG_TYPE_RREQ) ? "RREQ" : "RREP", lwip_ntohs(previous_hop),
                             lwip_ntohs(msg->originator), lwip_ntohs(msg->destination)));
 
+  /* Check if we need RLC mechanism to calculate link cost */
+  if ((nb_valid = g3_mac_nb_table_lookup_sync(src, &nb_entry)) < 0 && ctx->enable_rlc) {
+    return loadng_g3_rlc_start(netif, p, previous_hop, msg->metric_type, msg_type, indication);
+  }
+
   hop_count = msg->hop_count + 1;
   hop_limit = msg->hop_limit - 1;
   weak_link_count = msg->weak_link;
@@ -1139,10 +1245,139 @@ loadng_g3_rreq_rrep_process(struct netif *netif, struct pbuf *p, u8_t msg_type, 
   } else {
     return ERR_VAL;
   }
+}
+
+
+static err_t
+loadng_g3_rlc_rreq_rrep_reprocess(struct netif *netif, struct pbuf *p, u8_t msg_type, u16_t rev_link_cost, u16_t fwd_link_cost, u16_t previous_hop, u8_t lqi)
+{
+  lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
+  struct loadng_g3_route_msg *msg;
+  u16_t link_metric, route_metric;
+  u8_t used_metric_type;
+  u8_t weak_link_count;
+  int hop_count, hop_limit;
+
+  msg = loadng_g3_pbuf_msg_cast(p, struct loadng_g3_route_msg *);
+  hop_count = msg->hop_count + 1;
+  hop_limit = msg->hop_limit - 1;
+  weak_link_count = msg->weak_link;
+
+  if (lqi > ctx->weak_lqi_value)
+    weak_link_count++;
+
+  used_metric_type = msg->metric_type;
+  link_metric = loadng_g3_link_cost_composite(netif, LWIP_MAX(rev_link_cost, fwd_link_cost));
+  route_metric = lwip_ntohs(msg->route_cost) + link_metric;
+
+  loadng_g3_routing_table_update(netif, msg, previous_hop, weak_link_count, used_metric_type,
+                                link_metric, route_metric, hop_count, msg_type);
+
+  LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3_rlc_rreq_rrep_reprocess: Reprocessing %s msg destined to %04X\n",
+                             (msg_type == LOADNG_G3_MSG_TYPE_RREQ) ? "RREQ" : "RREP", lwip_ntohs(msg->destination)));
+  if (msg_type == LOADNG_G3_MSG_TYPE_RREQ) {
+    return loadng_g3_rreq_process(netif, p, previous_hop, hop_count, hop_limit, route_metric, used_metric_type, weak_link_count);
+  } else if (msg_type == LOADNG_G3_MSG_TYPE_RREP) {
+    return loadng_g3_rrep_process(netif, p, previous_hop, hop_count, hop_limit, route_metric, used_metric_type, weak_link_count);
+  } else {
+    return ERR_VAL;
+  }
+}
+
+static err_t
+loadng_g3_rlcrep_process(struct netif *netif, struct pbuf *p, u16_t previous_hop, struct g3_mcps_data_indication *indication)
+{
+  lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
+  struct loadng_g3_rlcrep_msg *rlcrep;
+  struct loadng_g3_q_entry *tmp;
+  unsigned i;
+
+  LWIP_ERROR("loadng_g3_rlcrep_process: msg too short\n",
+             p->len >= sizeof(struct loadng_g3_rlcrep_msg), return ERR_VAL;);
+
+  rlcrep = loadng_g3_pbuf_msg_cast(p, struct loadng_g3_rlcrep_msg *);
+  if (rlcrep->destination != lowpan6_dev_short_addr(ctx)) {
+    LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3_rlcrep_process: Received RLCREP not for us. Dropping.\n"));
+    return ERR_VAL;
+  }
+
+
+  for (i = 0; i < LOADNG_G3_RLC_TABLE_SIZE; i++) {
+    if (rlc_table[i].state == LOADNG_G3_RLC_STATE_PENDING &&
+        rlc_table[i].previous_hop == rlcrep->originator) {
+      break;
+    }
+  }
+
+  if (i == LOADNG_G3_RLC_TABLE_SIZE) {
+      LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3_rlcrep_process: Received RLCREP we were not waiting for.\n"));
+      return ERR_VAL;
+  }
+
+  rlc_table[i].state = LOADNG_G3_RLC_STATE_EMPTY;
+
+  LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3_rlcrep_process: Received RLCREP from %04X with link cost: %d\n",
+                              lwip_ntohs(previous_hop), rlcrep->link_cost));
+  while (rlc_table[i].q) {
+    tmp = rlc_table[i].q;
+    loadng_g3_rlc_rreq_rrep_reprocess(netif, tmp->p, rlc_table[i].msg_type, rlcrep->link_cost,
+                                      rlc_table[i].fwd_link_cost, previous_hop, rlc_table[i].lqi);
+    rlc_table[i].q = tmp->next;
+    pbuf_free(tmp->p);
+    mem_free(tmp);
+  }
 
   return ERR_OK;
 }
 
+static err_t
+loadng_g3_rlcreq_process(struct netif *netif, struct pbuf *p, struct g3_mcps_data_indication *indication)
+{
+  lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
+  struct loadng_g3_rlcreq_msg *rlcreq;
+  struct loadng_g3_rlcrep_msg *rlcrep;
+  struct pbuf *q;
+  err_t ret = ERR_OK;
+
+  LWIP_ERROR("loadng_g3_rlcreq_process: msg too short\n",
+             p->len >= sizeof(struct loadng_g3_rlcreq_msg), return ERR_VAL;);
+
+  rlcreq = loadng_g3_pbuf_msg_cast(p, struct loadng_g3_rlcreq_msg *);
+
+  /* RLCREQ not for us. Routing RLCREQ is not supported */
+  if (rlcreq->destination != lowpan6_dev_short_addr(ctx)) {
+    LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3_rlcreq_process: Received RLCREQ not for us. Dropping.\n"));
+    return ERR_VAL;
+  }
+
+  if (rlcreq->metric_type != ctx->metric_type) {
+    LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3_rlcreq_process: Received RLCREQ with unknown metric type. Dropping.\n"));
+    return ERR_VAL;
+  }
+
+  q = loadng_g3_msg_init(LOADNG_G3_MSG_TYPE_RLCREP);
+  if (q == NULL) {
+    return ERR_MEM;
+  }
+
+  rlcrep = loadng_g3_pbuf_msg_cast(q, struct loadng_g3_rlcrep_msg *);
+  rlcrep->destination = rlcreq->originator;
+  rlcrep->originator = rlcreq->destination;
+  rlcrep->metric_type = rlcreq->metric_type;
+  /* Calculate forward link cost */
+  rlcrep->link_cost = loadng_g3_link_cost_dir(netif, indication->modulation,
+                                              indication->active_tones,
+                                              indication->msdu_linkquality);
+  rlcrep->reserved = 0;
+
+  LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3_rlcreq_process: Received RLCREQ from %04X. Responding with RLCREP\n",
+                             lwip_ntohs(rlcreq->originator)));
+
+  ret = loadng_g3_output(netif, q, rlcrep->destination);
+  pbuf_free(q);
+
+  return ret;
+}
 
 static err_t
 loadng_g3_rerr_process(struct netif *netif, struct pbuf *p, u16_t previous_hop)
@@ -1275,6 +1510,37 @@ loadng_g3_tmr(void)
       }
     }
   }
+
+  /* Update RLCREQ table */
+  for (i = 0; i < LOADNG_G3_RLC_TABLE_SIZE; i++) {
+    ctx = (lowpan6_g3_data_t *) rlc_table[i].netif->state;
+    if (rlc_table[i].state == LOADNG_G3_RLC_STATE_PENDING) {
+      rlc_table[i].valid_time--;
+      if (rlc_table[i].valid_time == 0) {
+        LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3_tmr: No response to RLCREQ %04X. Calculating reverse link cost using forward link cost.\n",
+                                   lwip_ntohs(rlc_table[i].previous_hop)));
+        rlc_table[i].state = LOADNG_G3_RLC_STATE_EMPTY;
+        while (rlc_table[i].q) {
+          tmp = rlc_table[i].q;
+          loadng_g3_rlc_rreq_rrep_reprocess(rlc_table[i].netif, tmp->p, rlc_table[i].msg_type,
+                                            rlc_table[i].fwd_link_cost + ctx->add_rev_link_cost,
+                                            rlc_table[i].fwd_link_cost, rlc_table[i].previous_hop,
+                                            rlc_table[i].lqi);
+          rlc_table[i].q = rlc_table[i].q->next;
+          pbuf_free(tmp->p);
+          mem_free(tmp);
+        }
+      }
+    } else if (rlc_table[i].state == LOADNG_G3_RLC_STATE_WAITING &&
+               now - last_rlcreq_time > ctx->rreq_wait) {
+      LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3_tmr: Sending the buffered RLCREQ to %04X.\n",
+                                 lwip_ntohs(rlc_table[i].previous_hop)));
+      rlc_table[i].state = LOADNG_G3_RLC_STATE_PENDING;
+      last_rlcreq_time = now;
+      loadng_g3_output(rlc_table[i].netif, rlc_table[i].rlc_msg, rlc_table[i].previous_hop);
+      pbuf_free(rlc_table[i].rlc_msg);
+    }
+  }
 }
 
 
@@ -1317,6 +1583,10 @@ loadng_g3_input(struct netif *netif, struct pbuf *p, struct lowpan6_link_addr *s
     ret = loadng_g3_prep_process(netif, p, previous_hop, indication);
   } else if (msg_type == LOADNG_G3_MSG_TYPE_RERR) {
     ret = loadng_g3_rerr_process(netif, p, previous_hop);
+  } else if (msg_type == LOADNG_G3_MSG_TYPE_RLCREP) {
+    ret = loadng_g3_rlcrep_process(netif, p, previous_hop, indication);
+  } else if (msg_type == LOADNG_G3_MSG_TYPE_RLCREQ) {
+    ret = loadng_g3_rlcreq_process(netif, p, indication);
   } else {
     LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3: Unknown msg type received: %02x\n", msg_type));
     ret = ERR_VAL;
