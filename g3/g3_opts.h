@@ -96,4 +96,24 @@
 #define LWIP_G3_ADP_TEST        1
 #endif
 
+#ifndef LOADNG_G3_DEBUG
+#define LOADNG_G3_DEBUG LWIP_DBG_ON
+#endif
+
+#ifndef LOADNG_G3_RREQ_TABLE_SIZE
+#define LOADNG_G3_RREQ_TABLE_SIZE  10
+#endif
+
+#ifndef LOADNG_G3_RREP_TABLE_SIZE
+#define LOADNG_G3_RREP_TABLE_SIZE  10
+#endif
+
+#ifndef LOADNG_G3_PREQ_TABLE_SIZE
+#define LOADNG_G3_PREQ_TABLE_SIZE  10
+#endif
+
+#ifndef LOADNG_G3_RLC_TABLE_SIZE
+#define LOADNG_G3_RLC_TABLE_SIZE   4
+#endif
+
 #endif
