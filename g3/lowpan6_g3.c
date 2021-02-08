@@ -54,6 +54,7 @@
 
 #include "lowpan6_g3.h"
 #include "loadng_g3.h"
+#include "lbp_g3.h"
 
 #if LWIP_IPV6
 
@@ -427,6 +428,7 @@ lowpan6_g3_tmr(void *arg)
   }
 
   ctx->seconds += LOWPAN6_TMR_INTERVAL / 1000;
+  lbp_g3_tmr(arg);
 
   if (ctx->seconds >= 60) {
     ctx->seconds = 0;
@@ -1082,8 +1084,7 @@ lowpan6_g3_input(struct pbuf *p, struct netif *netif, struct lowpan6_link_addr *
         return ERR_OK;
       }
     } else if (b == LOWPAN6_HEADER_ESC && puc[1] == LOWPAN6_CMD_LBP) {
-      /* TODO: call LBP input function */
-      goto lowpan6_input_discard;
+      return lbp_g3_input(netif, p, originator);
     } else if (b == LOWPAN6_HEADER_ESC && puc[1] == LOWPAN6_CMD_LOADNG) {
       return loadng_g3_input(netif, p, src, indication);
     } else {
