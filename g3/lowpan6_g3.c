@@ -53,6 +53,7 @@
  */
 
 #include "lowpan6_g3.h"
+#include "loadng_g3.h"
 
 #if LWIP_IPV6
 
@@ -111,6 +112,7 @@ static lowpan6_g3_data_t lowpan6_data = {
     .broadcast_log_table_ttl = 2,
     .low_lqi_value = 0,
     .high_lqi_value = 255,
+    .metric_type = LOADNG_G3_METRIC_COMPOSITE,
     .rrep_wait = 4,
     .rlc_time = 4, /* Implementation specific */
     .rreq_wait = 30,
@@ -767,9 +769,8 @@ lowpan6_g3_output(struct netif *netif, struct pbuf *q, const ip6_addr_t *ip6addr
       if (lowpan6_g3_routing_table_route(&final_dest, &next) != ERR_OK) {
         /* Routing entry not found */
         if (g3_mac_nb_table_lookup_sync(&final_dest, &nb_entry) < 0) {
-          /* return loadng_g3_route_disc(netif, q, &ctx->short_mac_addr,
-                                        &final_dest, 0, ctx->max_hops); */
-          return -1;
+          return loadng_g3_route_disc(netif, q, &ctx->short_mac_addr,
+                                        &final_dest, 0, ctx->max_hops);
         }
       }
     }
@@ -886,8 +887,8 @@ lowpan6_g3_input(struct pbuf *p, struct netif *netif, struct lowpan6_link_addr *
           lowpan6_g3_routing_table_delete(entry);
         }
 
-        /* loadng_g3_rerr_issue(netif, &mesh_header.final_dest,
-                             &mesh_header.originator, 0); */
+        loadng_g3_rerr_issue(netif, &mesh_header.final_dest,
+                             &mesh_header.originator, 0);
         goto lowpan6_input_discard;
       }
     }
@@ -1084,8 +1085,7 @@ lowpan6_g3_input(struct pbuf *p, struct netif *netif, struct lowpan6_link_addr *
       /* TODO: call LBP input function */
       goto lowpan6_input_discard;
     } else if (b == LOWPAN6_HEADER_ESC && puc[1] == LOWPAN6_CMD_LOADNG) {
-      /* TODO: call LoadNG input function */
-      goto lowpan6_input_discard;
+      return loadng_g3_input(netif, p, src, indication);
     } else {
       goto lowpan6_input_discard;
     }
