@@ -766,6 +766,33 @@ lbp_g3_tmr(void *arg)
   }
 }
 
+err_t
+lbp_g3_lba_route_msg(struct netif *netif, struct pbuf *p, struct lowpan6_link_addr *origin)
+{
+  lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
+  struct lowpan6_link_addr lbd_dest;
+  u8_t msg_type = lbp_g3_msg_code(p);
+  u8_t *lbd_addr = lbp_g3_msg_addr(p);
+
+  lbd_dest.addr_len = 8;
+  MEMCPY(lbd_dest.addr, lbd_addr, 8);
+
+  if (lowpan6_link_addr_cmp(origin, &ctx->coord_short_address) &&
+      (msg_type == LBP_G3_MSG_CHALLENGE || msg_type == LBP_G3_MSG_ACCEPTED ||
+       msg_type == LBP_G3_MSG_DECLINE || msg_type == LBP_G3_MSG_LBS_KICK)) {
+    LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_lba_route_msg: Received a msg from LBS. Forwarding to LBD.\n"));
+
+    return lbp_g3_output(netif, p, &lbd_dest);
+  } else if (lowpan6_link_addr_cmp(&lbd_dest, origin) &&
+             (msg_type == LBP_G3_MSG_JOINING || msg_type == LBP_G3_MSG_LBD_KICK)) {
+    LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_lba_route_msg: Received a msg from LBD. Forwarding to LBS.\n"));
+
+    return lbp_g3_output(netif, p, &ctx->coord_short_address);
+  }
+
+  return ERR_VAL;
+}
+
 static err_t
 lbp_g3_output(struct netif *netif, struct pbuf *p, struct lowpan6_link_addr *dst)
 {
@@ -831,8 +858,12 @@ lbp_g3_input(struct netif *netif, struct pbuf *p, struct lowpan6_link_addr *orig
   if (ctx->device_type == LOWPAN6_G3_DEVTYPE_DEVICE) {
     if (memcmp(ctx->extended_mac_addr.addr, lbd_addr, 8)) {
       /* Frame not for us */
-      LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_input: Frame not for us: %016llX. Discarding.\n", lowpan6_link_addr_to_u64(lbd_addr)));
-      ret = ERR_VAL;
+      if (ctx->role_of_device == LOWPAN6_G3_ROLE_LBA) {
+        ret = lbp_g3_lba_route_msg(netif, p, origin);
+      } else {
+        LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_input: Frame not for us: %016llX. Discarding.\n", lowpan6_link_addr_to_u64(lbd_addr)));
+        ret = ERR_VAL;
+      }
     } else {
       /* During bootstrapping we may only accept frames from our LBA.
        * When we are connected - only from our LBS.
