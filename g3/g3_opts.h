@@ -124,4 +124,20 @@
 #define LBP_G3_SCAN_TABLE_SIZE          16
 #endif
 
+#ifndef LBP_G3_PAN_COORDINATOR
+#define LBP_G3_PAN_COORDINATOR  1
+#endif
+
+#if LBP_G3_PAN_COORDINATOR
+
+#ifndef LBP_G3_PAN_DEVINFO_TABLE_SIZE
+#define LBP_G3_PAN_DEVINFO_TABLE_SIZE   64
+#endif
+
+#ifndef LBP_G3_PAN_BLACKLIST_SIZE
+#define LBP_G3_PAN_BLACKLIST_SIZE       8
+#endif
+
+#endif /* LBP_G3_PAN_COORDINATOR */
+
 #endif

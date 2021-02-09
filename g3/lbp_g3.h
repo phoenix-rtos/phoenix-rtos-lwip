@@ -34,4 +34,10 @@ err_t lbp_g3_start(struct netif *netif, u8_t scan_duration);
 
 void lbp_g3_tmr(void *arg);
 
+err_t lbp_g3_lbs_blacklist_add(const u8_t *addr);
+err_t lbp_g3_lbs_kick(struct netif *netif, const struct lowpan6_link_addr *addr);
+err_t lbp_g3_lbs_rekey(struct netif *netif, u8_t gmk_id);
+err_t lbp_g3_lbs_dev_add(struct netif *netif, u16_t short_addr, const u8_t *ext_addr, int idx);
+err_t lbp_g3_lbs_pan_start(struct netif *netif, u8_t scan_duration, u16_t pan_id, u16_t short_address);
+
 #endif
