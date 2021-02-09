@@ -27,6 +27,7 @@ void lbp_g3_discovery_confirm(struct netif *netif, u8_t status);
 void lbp_set_lba(u8_t is_lba);
 void lbp_g3_set_connected(struct netif *netif);
 
+err_t lbp_g3_leave(struct netif *netif);
 err_t lbp_g3_discovery(struct netif *netif, u8_t duration);
 err_t lbp_g3_join(struct netif *netif, u16_t pan_id, u16_t lba);
 err_t lbp_g3_start(struct netif *netif, u8_t scan_duration);
