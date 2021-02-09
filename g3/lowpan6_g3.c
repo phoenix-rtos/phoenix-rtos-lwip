@@ -1150,16 +1150,74 @@ lowpan6_g3_if_init(struct netif *netif)
   return ERR_OK;
 }
 
+/* Setter functions for accessing MAC */
+err_t
+lowpan6_g3_set_short_addr(struct netif *netif, u8_t addr_high, u8_t addr_low)
+{
+  lowpan6_data.short_mac_addr.addr[0] = addr_high;
+  lowpan6_data.short_mac_addr.addr[1] = addr_low;
+
+  return g3_set_shortaddr((u16_t)addr_high << 8 | addr_low);
+}
+
+err_t
+lowpan6_g3_set_ext_addr(struct netif *netif, const u8_t *addr)
+{
+  lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
+
+  MEMCPY(ctx->extended_mac_addr.addr, addr, 8);
+
+  return g3_set_hwaddr(addr);
+}
+
+err_t
+lowpan6_g3_set_gmk(struct netif *netif, const u8_t *gmk, u8_t id)
+{
+  lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
+
+  if (id >= LOWPAN6_G3_N_GMK_KEYS) {
+    return ERR_VAL;
+  }
+
+  if (g3_set_gmk(gmk, id) < 0) {
+    LWIP_DEBUGF(LBP_DEBUG, ("lowpan6_g3_set_gmk: Can't set GMK key!\n"));
+    return ERR_VAL;
+  }
+
+  MEMCPY(&ctx->gmk[id].key, gmk, 16);
+  ctx->gmk[id].is_set = 1;
+
+  return ERR_OK;
+}
+
+err_t
+lowpan6_g3_set_device_role(struct netif *netif, u8_t role)
+{
+  lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
+  u16_t rc_val;
+
+  ctx->role_of_device = role;
+  if (role == LOWPAN6_G3_ROLE_LBA) {
+    rc_val = 0x7FFF;
+  } else {
+    rc_val = 0xFFFF;
+  }
+
+  return g3_set_rc_coord(rc_val);
+}
+
 /**
  * @ingroup sixlowpan
  * Set PAN ID
  */
 err_t
-lowpan6_set_pan_id(u16_t pan_id)
+lowpan6_g3_set_pan_id(struct netif *netif, u16_t pan_id)
 {
-  lowpan6_data.pan_id = pan_id;
+  lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
 
-  return ERR_OK;
+  ctx->pan_id = pan_id;
+
+  return g3_pan_id_set(pan_id);
 }
 
 #if !NO_SYS

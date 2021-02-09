@@ -236,8 +236,6 @@ typedef struct {
   u16_t loadng_sequnce_number;
   u8_t max_tones; /* This should be taken from PHY layer */
 } lowpan6_g3_data_t;
-err_t lowpan6_set_context(u8_t idx, const u32_t *context, u16_t context_length);
-err_t lowpan6_set_short_addr(u8_t addr_high, u8_t addr_low);
 
 void lowpan6_g3_tmr(void *arg);
 err_t lowpan6_g3_output(struct netif *netif, struct pbuf *q, const ip6_addr_t *ip6addr);
@@ -248,8 +246,6 @@ err_t lowpan6_g3_if_init(struct netif *netif);
 unsigned int lowpan6_g3_add_mesh_header(u8_t *buffer, u8_t hops_left, const struct lowpan6_link_addr *originator,
                                         const struct lowpan6_link_addr *final_dest);
 
-/* pan_id in network byte order. */
-err_t lowpan6_set_pan_id(u16_t pan_id);
 int lowpan6_g3_group_table_add(u16_t addr);
 struct lowpan6_g3_blacklist_entry *lowpan6_g3_blacklist_table_add(u16_t addr);
 struct lowpan6_g3_blacklist_entry *lowpan6_g3_blacklist_table_lookup(u16_t addr);
@@ -258,6 +254,12 @@ struct lowpan6_g3_routing_entry *lowpan6_g3_routing_table_add(u16_t dst, u16_t n
 err_t lowpan6_g3_routing_table_route(struct lowpan6_link_addr *dst, struct lowpan6_link_addr *next);
 void lowpan6_g3_routing_table_delete(struct lowpan6_g3_routing_entry *entry);
 
+/* Setter functions */
+err_t lowpan6_g3_set_ext_addr(struct netif *netif, const u8_t *addr);
+err_t lowpan6_g3_set_pan_id(struct netif *netif, u16_t pan_id);
+err_t lowpan6_g3_set_short_addr(struct netif *netif, u8_t addr_high, u8_t addr_low);
+err_t lowpan6_g3_set_gmk(struct netif *netif, const u8_t *gmk, u8_t id);
+err_t lowpan6_g3_set_device_role(struct netif *netif, u8_t role);
 
 
 #if !NO_SYS
