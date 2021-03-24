@@ -31,7 +31,8 @@
  *
  *  1. On device (phoenix-rtos) side, addr=10.0.0.2, use:
  *     lwip pppou:/dev/uart3:<speed>:up
- *     (speed defaults to 115200 if ommited, 'up' brings interface up after setup, also optional)
+ *     (speed defaults to 115200 if ommited, optional 'up' brings interface up after setup, optional `nodefault` instructs pppou driver
+ *     to not add `default-route`)
  *
  *  2. On host (linux, bsd) side, addr=10.0.0.1, use e.g.:
  *     pppd /dev/ttyUSB0 <speed> 10.0.0.1:10.0.0.2 lock local nodetach noauth debug dump nocrtscts nodefaultroute maxfail 0 holdoff 1
@@ -48,7 +49,8 @@ enum conn_state_e {
 };
 
 enum cfg_flag_e {
-	CFG_FLAG_DEFAULT_UP = 0x01
+	CFG_FLAG_DEFAULT_UP = 0x01,
+	CFG_FLAG_NO_DEFAULT_ROUTE = 0x02,
 };
 
 typedef struct
@@ -552,6 +554,12 @@ static int pppou_netifInit(struct netif *netif, char *cfg)
 			continue;
 		}
 
+		if (strcmp(cfg, "nodefault") == 0) {
+			flags |= CFG_FLAG_NO_DEFAULT_ROUTE;
+			log_info("config no default route: yes");
+			continue;
+		}
+
 		/* TODO: extend with other flags */
 	}
 
@@ -577,6 +585,9 @@ static int pppou_netifInit(struct netif *netif, char *cfg)
 		}
 		netif->flags &= ~NETIF_FLAG_UP;
 		ppp_set_netif_statuscallback(state->ppp, pppou_statusCallback);
+
+		if (!(flags & CFG_FLAG_NO_DEFAULT_ROUTE))
+			ppp_set_default(state->ppp);
 	}
 
 	beginthread(pppou_mainLoop, 4, (void *)state->main_loop_stack, sizeof(state->main_loop_stack), state);
