@@ -65,4 +65,5 @@
 #define LWIP_NETIF_STATUS_CALLBACK 1
 #define LWIP_DHCP_AUTOIP_COOP 1
 #define LWIP_DHCP_AUTOIP_COOP_TRIES 3
+#define LWIP_SO_RCVTIMEO 1
 #define ifreq lwip_ifreq
