@@ -6,7 +6,7 @@
 # Copyright 2020 Phoenix Systems
 #
 
-NET_DRIVERS_SUPPORTED := pppos enet tuntap
+NET_DRIVERS_SUPPORTED := enet tuntap
 NET_DRIVERS ?= $(NET_DRIVERS_SUPPORTED)
 
 DRIVERS_SRCS_enet := imx6-enet.c ephy.c gpio.c imx6ull-gpio.c $(DRIVERS_SRCS_UTIL) hw-debug.c
