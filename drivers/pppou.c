@@ -11,6 +11,8 @@
 
 #include "netif-driver.h"
 
+#include <lwip/dns.h>
+
 #include <netif/ppp/pppapi.h>
 
 #include <errno.h>
@@ -276,6 +278,11 @@ static void pppou_link_status_cb(ppp_pcb *pcb, int err_code, void *ctx)
 				log_info("   our_ip4addr = %s", ip4addr_ntoa(netif_ip4_addr(pppif)));
 				log_info("   his_ip4addr = %s", ip4addr_ntoa(netif_ip4_gw(pppif)));
 				log_info("   netmask     = %s", ip4addr_ntoa(netif_ip4_netmask(pppif)));
+#if LWIP_DNS
+				log_info("   dns0_addr   = %s", ipaddr_ntoa(dns_getserver(0)));
+				log_info("   dns1_addr   = %s", ipaddr_ntoa(dns_getserver(1)));
+#endif /* LWIP_DNS */
+
 #endif /* LWIP_IPV4 */
 #if LWIP_IPV6
 				log_info("   our_ip6addr = %s", ip6addr_ntoa(netif_ip6_addr(pppif, 0)));
@@ -585,7 +592,9 @@ static int pppou_netifInit(struct netif *netif, char *cfg)
 		}
 		netif->flags &= ~NETIF_FLAG_UP;
 		ppp_set_netif_statuscallback(state->ppp, pppou_statusCallback);
-
+#if LWIP_DNS
+		ppp_set_usepeerdns(state->ppp, 1);
+#endif /* LWIP_DNS */
 		if (!(flags & CFG_FLAG_NO_DEFAULT_ROUTE))
 			ppp_set_default(state->ppp);
 	}
