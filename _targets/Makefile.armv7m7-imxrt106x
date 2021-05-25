@@ -1,0 +1,10 @@
+#
+# Makefile for Phoenix-RTOS 3 LwIP
+#
+# iMX RT1064 target
+#
+# Copyright 2021 Phoenix Systems
+#
+
+NET_DRIVERS_SUPPORTED := pppou
+NET_DRIVERS ?= $(NET_DRIVERS_SUPPORTED)
