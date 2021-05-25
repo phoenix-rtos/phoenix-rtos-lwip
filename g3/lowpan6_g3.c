@@ -659,7 +659,7 @@ lowpan6_g3_encapsulate(struct netif *netif, struct pbuf *p, const struct lowpan6
 
     /* Calculate frame length */
     p_frag->len = p_frag->tot_len = frag_len + header_len + lowpan6_header_len;
-    LWIP_ASSERT("", p_frag->len <= LOWPAN6_MSDU_MAX);
+    LWIP_ASSERT("p_frag->len <= LOWPAN6_MSDU_MAX", p_frag->len <= LOWPAN6_MSDU_MAX);
 
     /* send the packet */
     MIB2_STATS_NETIF_ADD(netif, ifoutoctets, p_frag->tot_len);
@@ -1250,7 +1250,7 @@ lowpan6_g3_set_gmk(struct netif *netif, const u8_t *gmk, u8_t id)
   }
 
   if (g3_set_gmk(gmk, id) < 0) {
-    LWIP_DEBUGF(LBP_DEBUG, ("lowpan6_g3_set_gmk: Can't set GMK key!\n"));
+    LWIP_DEBUGF(LBP_G3_DEBUG, ("lowpan6_g3_set_gmk: Can't set GMK key!\n"));
     return ERR_VAL;
   }
 
