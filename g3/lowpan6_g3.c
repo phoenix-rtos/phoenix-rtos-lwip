@@ -1385,20 +1385,4 @@ lowpan6_g3_set_active_key_index(u8_t idx)
 }
 #endif /* LWIP_G3_ADP_TEST */
 
-#if !NO_SYS
-/**
- * @ingroup sixlowpan
- * Pass a received packet to tcpip_thread for input processing
- *
- * @param p the received packet, p->payload pointing to the
- *          IEEE 802.15.4 header.
- * @param inp the network interface on which the packet was received
- */
-err_t
-tcpip_6lowpan_input(struct pbuf *p, struct netif *inp)
-{
-  return tcpip_inpkt(p, inp, lowpan6_g3_input);
-}
-#endif /* !NO_SYS */
-
 #endif /* LWIP_IPV6 */

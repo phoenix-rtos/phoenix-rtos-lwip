@@ -281,10 +281,6 @@ void lowpan6_g3_set_weak_lqi_value(u8_t val);
 void lowpan6_g3_set_device_type(u8_t dev_type);
 #endif /* LWIP_G3_ADP_TEST */
 
-#if !NO_SYS
-err_t tcpip_6lowpan_input(struct pbuf *p, struct netif *inp);
-#endif /* !NO_SYS */
-
 #ifdef __cplusplus
 }
 #endif
