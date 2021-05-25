@@ -1443,6 +1443,7 @@ void lbp_g3_discovery_confirm(struct netif *netif, u8_t status)
   if (ctx->device_type == LOWPAN6_G3_DEVTYPE_DEVICE) {
     /* Choose the best LBA and start joinig */
     if (!scan_table[0].valid) {
+      ctx->state = LBP_G3_STATE_IDLE; /* Scan finished */
       LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_discovery_confirm: No devices found!\n"));
       return;
     }
@@ -1469,6 +1470,7 @@ void lbp_g3_discovery_confirm(struct netif *netif, u8_t status)
     }
   }
 #endif
+  /* TODO: clear scan table */
 }
 
 /* Timer function called every second by lowpan6_g3_tmr() */
