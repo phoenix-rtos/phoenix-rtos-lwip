@@ -140,8 +140,9 @@ static lowpan6_g3_data_t lowpan6_data = {
 
 static const struct lowpan6_link_addr ieee_802154_broadcast = {2, {0xff, 0xff}};
 
-static err_t adpd_data_indication(const struct pbuf *p, struct netif *netif)
+static err_t adpd_data_indication(struct pbuf *p, struct netif *netif)
 {
+#if LWIP_G3_ADP_TEST
   unsigned i;
 
   LWIP_DEBUGF(LWIP_LOWPAN6_DEBUG, ("\033[1;33m"));
@@ -160,9 +161,9 @@ static err_t adpd_data_indication(const struct pbuf *p, struct netif *netif)
   }
 
   LWIP_DEBUGF(LWIP_LOWPAN6_DEBUG, ("\033[0m\n"));
+#endif
 
-  // TODO: call ip6_input
-  return 0;
+  return ip6_input(p, netif);
 }
 
 /* Table functions - data structures used might be optimized
