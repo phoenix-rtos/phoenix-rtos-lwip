@@ -1215,7 +1215,9 @@ lowpan6_g3_if_init(struct netif *netif)
    */
   lowpan6_data.device_type = LOWPAN6_G3_DEVTYPE_DEVICE;
 
+  LOCK_TCPIP_CORE();
   sys_timeout(LOWPAN6_TMR_INTERVAL, g3_lowpan_timer, netif);
+  UNLOCK_TCPIP_CORE();
 
   return ERR_OK;
 }
