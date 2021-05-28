@@ -1589,7 +1589,7 @@ loadng_g3_status_handle(struct netif *netif, struct pbuf *p, struct lowpan6_link
       msg = loadng_g3_pbuf_msg_cast(p, struct loadng_g3_route_msg *);
       rentry = lowpan6_g3_routing_table_lookup(msg->destination, 0);
       if (rentry != NULL) {
-        LWIP_DEBUGF(LOADNG_DEBUG, ("loadng_g3_status_handle: RREP msg status success. Setting route to %04X as bidirectional\n",
+        LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3_status_handle: RREP msg status success. Setting route to %04X as bidirectional\n",
                                    lwip_ntohs(msg->destination)));
         rentry->is_bidirectional = 1;
       }
@@ -1611,7 +1611,7 @@ loadng_g3_status_handle(struct netif *netif, struct pbuf *p, struct lowpan6_link
         if (rreq_table[i].state != LOADNG_G3_RREQ_STATE_EMPTY &&
             rreq_table[i].dest_addr == lowpan6_link_addr_to_u16(dest)) {
           if (rreq_table[i].msg) {
-            LWIP_DEBUGF(LOADNG_DEBUG, ("loadng_g3_status_handle: A unicast RREQ to %04X failed. Trying broadcast\n",
+            LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3_status_handle: A unicast RREQ to %04X failed. Trying broadcast\n",
                                        dst_short));
             loadng_g3_output(netif, rreq_table[i].msg, LOWPAN6_BROADCAST_SHORT_ADDR);
             rreq_table[i].valid_time = 2 * ctx->net_traversal_time;

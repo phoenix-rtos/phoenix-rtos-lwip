@@ -140,8 +140,9 @@ static lowpan6_g3_data_t lowpan6_data = {
 
 static const struct lowpan6_link_addr ieee_802154_broadcast = {2, {0xff, 0xff}};
 
-static err_t adpd_data_indication(const struct pbuf *p, struct netif *netif)
+static err_t adpd_data_indication(struct pbuf *p, struct netif *netif)
 {
+#if LWIP_G3_ADP_TEST
   unsigned i;
 
   LWIP_DEBUGF(LWIP_LOWPAN6_DEBUG, ("\033[1;33m"));
@@ -160,9 +161,9 @@ static err_t adpd_data_indication(const struct pbuf *p, struct netif *netif)
   }
 
   LWIP_DEBUGF(LWIP_LOWPAN6_DEBUG, ("\033[0m\n"));
+#endif
 
-  // TODO: call ip6_input
-  return 0;
+  return ip6_input(p, netif);
 }
 
 /* Table functions - data structures used might be optimized
@@ -659,7 +660,7 @@ lowpan6_g3_encapsulate(struct netif *netif, struct pbuf *p, const struct lowpan6
 
     /* Calculate frame length */
     p_frag->len = p_frag->tot_len = frag_len + header_len + lowpan6_header_len;
-    LWIP_ASSERT("", p_frag->len <= LOWPAN6_MSDU_MAX);
+    LWIP_ASSERT("p_frag->len <= LOWPAN6_MSDU_MAX", p_frag->len <= LOWPAN6_MSDU_MAX);
 
     /* send the packet */
     MIB2_STATS_NETIF_ADD(netif, ifoutoctets, p_frag->tot_len);
@@ -1215,7 +1216,9 @@ lowpan6_g3_if_init(struct netif *netif)
    */
   lowpan6_data.device_type = LOWPAN6_G3_DEVTYPE_DEVICE;
 
+  LOCK_TCPIP_CORE();
   sys_timeout(LOWPAN6_TMR_INTERVAL, g3_lowpan_timer, netif);
+  UNLOCK_TCPIP_CORE();
 
   return ERR_OK;
 }
@@ -1250,7 +1253,7 @@ lowpan6_g3_set_gmk(struct netif *netif, const u8_t *gmk, u8_t id)
   }
 
   if (g3_set_gmk(gmk, id) < 0) {
-    LWIP_DEBUGF(LBP_DEBUG, ("lowpan6_g3_set_gmk: Can't set GMK key!\n"));
+    LWIP_DEBUGF(LBP_G3_DEBUG, ("lowpan6_g3_set_gmk: Can't set GMK key!\n"));
     return ERR_VAL;
   }
 
@@ -1382,21 +1385,5 @@ lowpan6_g3_set_active_key_index(u8_t idx)
   lowpan6_data.active_key_index = idx;
 }
 #endif /* LWIP_G3_ADP_TEST */
-
-#if !NO_SYS
-/**
- * @ingroup sixlowpan
- * Pass a received packet to tcpip_thread for input processing
- *
- * @param p the received packet, p->payload pointing to the
- *          IEEE 802.15.4 header.
- * @param inp the network interface on which the packet was received
- */
-err_t
-tcpip_6lowpan_input(struct pbuf *p, struct netif *inp)
-{
-  return tcpip_inpkt(p, inp, lowpan6_g3_input);
-}
-#endif /* !NO_SYS */
 
 #endif /* LWIP_IPV6 */

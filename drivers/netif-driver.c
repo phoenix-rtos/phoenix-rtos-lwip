@@ -14,6 +14,7 @@
 #include "lwip/netifapi.h"
 #include "lwip/stats.h"
 #include "lwip/snmp.h"
+#include "lwip/ethip6.h"
 
 #include <sys/threads.h>
 #include <errno.h>
