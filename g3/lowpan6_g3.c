@@ -10,7 +10,7 @@
  */
 
 /*
- * This is based on the original lowpan6 implmementation in lwip.
+ * This is based on the original lowpan6 implementation in lwip.
  *
  * Copyright (c) 2015 Inico Technologies Ltd.
  * All rights reserved.
@@ -82,7 +82,7 @@ enum lowpan6_header_size {
 };
 
 /** This is a helper struct for reassembly of fragments
- * (For G3 MAC layer max msdu is 400 bytes)
+ * (For G3 MAC layer max MSDU is 400 bytes)
  */
 struct lowpan6_reass_helper {
   struct lowpan6_reass_helper *next_packet;
@@ -405,7 +405,7 @@ dequeue_datagram(struct lowpan6_reass_helper *lrh, struct lowpan6_reass_helper *
 }
 
 /**
- * Periodic timer for 6LowPAN functions:
+ * Periodic timer for 6LoWPAN functions:
  *
  * - Remove incomplete/old packets
  */
@@ -536,7 +536,7 @@ lowpan6_g3_encapsulate(struct netif *netif, struct pbuf *p, const struct lowpan6
   err_t err = ERR_IF;
   u16_t header_len = 0;
 
-  /* We'll use a dedicated pbuf for building 6LowPAN fragments. */
+  /* We'll use a dedicated pbuf for building 6LoWPAN fragments. */
   p_frag = pbuf_alloc(PBUF_RAW, LOWPAN6_MSDU_MAX, PBUF_RAM);
   if (p_frag == NULL) {
     MIB2_STATS_NETIF_INC(netif, ifoutdiscards);
@@ -557,7 +557,7 @@ lowpan6_g3_encapsulate(struct netif *netif, struct pbuf *p, const struct lowpan6
   }
 
   if (ctx->ihc_enable) {
-    /* Perform 6LowPAN IPv6 header compression according to RFC 6282 */
+    /* Perform 6LoWPAN IPv6 header compression according to RFC 6282 */
     /* do the header compression (this does NOT copy any non-compressed data) */
     err = lowpan6_compress_headers(netif, (u8_t *)p->payload, p->len,
       buffer + header_len, p_frag->len, &lowpan6_header_len,
@@ -718,11 +718,11 @@ lowpan6_set_short_addr(u8_t addr_high, u8_t addr_low)
 
 /**
  * @ingroup sixlowpan
- * Resolves IPv6 address to link layer address, performs mesh routing if necessery,
+ * Resolves IPv6 address to link layer address, performs mesh routing if necessary,
  * fragment packet, compresses IPv6 headers if configured. Sends 6LoWPAN frames
  * to MAC layer.
  *
- * @param netif The lwIP network interface which the IP packet will be sent on.
+ * @param netif The LwIP network interface which the IP packet will be sent on.
  * @param q The pbuf(s) containing the IP packet to be sent.
  * @param ip6addr The IP address of the packet destination.
  *
@@ -973,7 +973,7 @@ lowpan6_g3_input(struct pbuf *p, struct netif *netif, struct lowpan6_link_addr *
   puc = (u8_t *)p->payload;
   b = *puc;
   if ((b & 0xf8) == 0xc0) {
-    /* FRAG1 dispatch. add this packet to reassembly list. */
+    /* FRAG1 dispatch, add this packet to reassembly list. */
     datagram_size = ((u16_t)(puc[0] & 0x07) << 8) | (u16_t)puc[1];
     datagram_tag = ((u16_t)puc[2] << 8) | (u16_t)puc[3];
 

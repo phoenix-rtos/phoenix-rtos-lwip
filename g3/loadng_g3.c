@@ -1,7 +1,7 @@
 /*
  * Phoenix-RTOS --- networking stack
  *
- * G3-PLC Adaptation Layer - LoadNG routing protocol
+ * G3-PLC Adaptation Layer - LOADng routing protocol
  *
  * Copyright 2021 Phoenix Systems
  * Author: Maciej Purski
@@ -151,7 +151,7 @@ enum loadng_g3_rreq_state {
   LOADNG_G3_RREQ_STATE_EMPTY = 0,
   LOADNG_G3_RREQ_STATE_WAITING,  /* RREQ waiting for a next time slot */
   LOADNG_G3_RREQ_STATE_PENDING, /* RREQ sent, waiting for RREP */
-  LOADNG_G3_RREQ_STATE_RREPAIR_SUCCESS /* Route repair suceeded, waiting for MAC ack */
+  LOADNG_G3_RREQ_STATE_RREPAIR_SUCCESS /* Route repair succeeded, waiting for MAC ack */
 };
 
 struct loadng_g3_q_entry {
@@ -247,7 +247,7 @@ loadng_g3_msg_init(u8_t msg_type)
   u8_t msg_len;
   u8_t *buf;
 
-  /* 2 bytes for LOWPAN6 escape 1 byte for msg_type */
+  /* 2 bytes for LoWPAN6 escape 1 byte for msg_type */
   msg_len = 3;
   switch (msg_type) {
     case LOADNG_G3_MSG_TYPE_RREQ:
@@ -577,7 +577,7 @@ loadng_g3_route_disc(struct netif *netif, struct pbuf *p, struct lowpan6_link_ad
   rreq->weak_link = 0;
   rreq->sequence_number = lwip_htons(ctx->loadng_sequnce_number++);
 
-  /* Set first free entry in rreq table */
+  /* Set first free entry in rreq_table */
   for (i = 0; i < LOADNG_G3_RREQ_TABLE_SIZE; i++) {
     if (rreq_table[i].state == LOADNG_G3_RREQ_STATE_EMPTY) {
       rreq_table[i].dest_addr = dst_short;
@@ -593,7 +593,7 @@ loadng_g3_route_disc(struct netif *netif, struct pbuf *p, struct lowpan6_link_ad
       rreq_table[i].msg = q;
       rreq_table[i].netif = netif;
       /* Set state to pending (transmit the frame) only if the
-       * time passed since last RREQ tranmission is greater than rreq_wait. */
+       * time passed since last RREQ transmission is greater than rreq_wait. */
       rreq_table[i].state = (now - last_rreq_time > ctx->rreq_wait) ? LOADNG_G3_RREQ_STATE_PENDING : LOADNG_G3_RREQ_STATE_WAITING;
       break;
     }
@@ -603,13 +603,13 @@ loadng_g3_route_disc(struct netif *netif, struct pbuf *p, struct lowpan6_link_ad
   if (i == LOADNG_G3_RREQ_TABLE_SIZE) {
     mem_free(n_entry);
     pbuf_free(q);
-    LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3_route_disc: Can't start the Route Disvoery procedure. RREQ table full\n"));
+    LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3_route_disc: Can't start the Route Discovery procedure. RREQ table full\n"));
     return ERR_BUF;
   }
 
   LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3_route_disc: Route Discovery of %04X started. Unicast: %d Route repair %d\n",
                              lwip_ntohs(dst_short), ctx->unicast_rreq_gen_enable, route_repair));
-  /* Transmit it if we can, or it will be transmited later */
+  /* Transmit it if we can, or it will be transmitted later */
   if (rreq_table[i].state == LOADNG_G3_RREQ_STATE_PENDING) {
     last_rreq_time = now;
     loadng_g3_rreq_transmit(netif, q);
@@ -671,8 +671,8 @@ loadng_g3_routing_table_update(struct netif *netif, struct loadng_g3_route_msg *
     entry->seq_num = msg_seq_num;
     entry->valid_time = ctx->routing_table_ttl;
     entry->weak_link_count = weak_link_count;
-    /* RREQ is_bideractional is going to be set if
-     * sending RREP to this node succedes
+    /* RREQ is_bidirectional is going to be set if
+     * sending RREP to this node succeeds
      */
     if (msg_type == LOADNG_G3_MSG_TYPE_RREP) {
       entry->is_bidirectional = 1;
@@ -707,7 +707,7 @@ loadng_g3_routing_table_update(struct netif *netif, struct loadng_g3_route_msg *
 }
 
 /**
- * Start a RLC procedure, if a neighbour table entry to previos_hop of a routing msg
+ * Start a RLC procedure, if a neighbour table entry to previous_hop of a routing msg
  * is missing and RLC is enabled.
  * @param pbuf containing a routing msg, which should be buffered
  */
@@ -746,7 +746,7 @@ loadng_g3_rlc_start(struct netif *netif, struct pbuf *p, u16_t previous_hop, u8_
         }
         tmp->next = qentry;
       }
-      LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3_rlc_start: RLC to %04X already in progress. Enqueue LoadNG packet.\n",
+      LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3_rlc_start: RLC to %04X already in progress. Enqueue LOADng packet.\n",
                                  lwip_ntohs(previous_hop)));
       return ERR_OK;
     }
@@ -918,7 +918,7 @@ loadng_g3_prep_process(struct netif *netif, struct pbuf *p, u16_t previous_hop, 
 }
 
 /**
- * Start a Path Discovery Procedure used for maintanance.
+ * Start a Path Discovery Procedure used for maintenance.
  *
  * @param dest_addr short destination address in network-byte order
  * @param metric_type used metric type
@@ -962,7 +962,7 @@ loadng_g3_path_discovery(struct netif *netif, struct lowpan6_link_addr *dst, u8_
     return ERR_MEM;
   }
 
-  LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3_path_discovery: Starting a new Path Discovery dest: %04X\n",
+  LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3_path_discovery: Starting a new Path Discovery destination: %04X\n",
                              lwip_ntohs(dest_short)));
 
   preq = loadng_g3_pbuf_msg_cast(p, struct loadng_g3_preq_msg *);
@@ -1191,7 +1191,7 @@ loadng_g3_rreq_rrep_process(struct netif *netif, struct pbuf *p, u8_t msg_type, 
   /* Discard msg, if we have a routing entry newer than msg */
   r_entry = lowpan6_g3_routing_table_lookup(msg->originator, 0);
   if (r_entry != NULL && loadng_seq_num_gt(r_entry->seq_num, lwip_ntohs(msg->sequence_number))) {
-    LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3: Discard %s msg, as we have a newer routing entry for dest: %04X.\n",
+    LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3: Discard %s msg, as we have a newer routing entry for destination: %04X.\n",
                               (msg_type == LOADNG_G3_MSG_TYPE_RREQ) ? "RREQ" : "RREP", lwip_ntohs(msg->originator)));
     return ERR_OK;
   }
@@ -1568,7 +1568,7 @@ loadng_g3_route_repair_status(struct netif *netif, struct lowpan6_link_addr *fin
 /**
  * This function gets called when the ADP layer
  * receives MCPS-DATA.confirm from MAC succeeding
- * sending a LoadNG frame.
+ * sending a LOADng frame.
  */
 err_t
 loadng_g3_status_handle(struct netif *netif, struct pbuf *p, struct lowpan6_link_addr *dest, u8_t status)
@@ -1626,7 +1626,7 @@ loadng_g3_status_handle(struct netif *netif, struct pbuf *p, struct lowpan6_link
 }
 
 /**
- * LoadNG output function.
+ * LOADng output function.
  * @param dest 16-bits network order destination address.
  */
 static err_t
@@ -1642,7 +1642,7 @@ loadng_g3_output(struct netif *netif, struct pbuf *p, u16_t short_dest)
 }
 
 /**
- * LoadNG input function called by lowpan6_g3_input function.
+ * LOADng input function called by lowpan6_g3_input function.
  */
 err_t
 loadng_g3_input(struct netif *netif, struct pbuf *p, struct lowpan6_link_addr *src, struct g3_mcps_data_indication *indication)
@@ -1690,7 +1690,7 @@ loadng_g3_routing_entry_debug(struct lowpan6_g3_routing_entry *entry)
   printf("|\tHop Count: %d\n", entry->hop_count);
   printf("|\tWeak Link Count: %d\n", entry->weak_link_count);
   printf("|\tValid time: %d\n", entry->valid_time);
-  printf("|\tIs bideractional: %d\n", entry->is_bidirectional);
+  printf("|\tIs bidirectional: %d\n", entry->is_bidirectional);
   printf("---------------------------------------\n");
 }
 

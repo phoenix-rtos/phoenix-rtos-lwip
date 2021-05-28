@@ -580,7 +580,7 @@ lbp_g3_handle_msg3(struct netif *netif, struct lowpan6_link_addr *origin, u8_t *
                                             sizeof(p_data_out) - 1, &p_result, expected_params_mask) + 1;
     }
   } else {
-    LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_handle_msg3: Expected PCHANNEL_RESULT_DONE_SUCCES. EAP failed.\n"));
+    LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_handle_msg3: Expected PCHANNEL_RESULT_DONE_SUCCESS. EAP failed.\n"));
     p_result = ps_eap_psk_p_result__done_failure;
   }
 
@@ -909,7 +909,7 @@ lbp_g3_lbs_gen_msg1(struct netif *netif, u8_t *lbd_addr, struct lowpan6_link_add
  * starts scanning to check if there are any networks
  * in the POS. If not, it will start a new network.
  * Values, which needs to be set outside this function:
- * - extended address (is automatically fetche from MAC during lowpan6_if_init)
+ * - extended address (is automatically fetched from MAC during lowpan6_if_init)
  * - GMK,
  * - RAND_S,
  * @param scan_duration Duration of the discovery phase in seconds. If 0,
@@ -1109,7 +1109,7 @@ lbp_g3_lbs_handle_rekey_update(struct netif *netif)
     }
   }
 
-  LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_lbs_handle_rekey_update: Authetication phase of rekeying finished.\n"));
+  LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_lbs_handle_rekey_update: Authentication phase of rekeying finished.\n"));
 
   /* Once all devices are authenticated, we send them GMK-activation msg */
   for (i = 0; i < LBP_G3_PAN_DEVINFO_TABLE_SIZE; i++) {
@@ -1208,7 +1208,7 @@ lbp_g3_lbs_handle_msg2(struct netif *netif, struct lowpan6_link_addr *origin, st
     p_data_len += lbp_g3_param_encode(p_data + p_data_len, LBP_G3_ATTR_GMK_ACTIVATION, LBP_G3_LIB_PSI, sizeof(gmk_id), &gmk_id);
   }
 
-  /* TODO: each device should have a seperate TEK */
+  /* TODO: each device should have a separate TEK */
   ps_eap_psk_tek_init(&lbp_data.eap_ctx, &rand_p);
 
   if ((len = ps_eap_psk_create_message3(lbp_g3_msg_payload(reply), lbp_g3_msg_payload_len(reply), &lbp_data.eap_ctx, &rand_s, &rand_p,
@@ -1441,7 +1441,7 @@ void lbp_g3_discovery_confirm(struct netif *netif, u8_t status)
   }
 
   if (ctx->device_type == LOWPAN6_G3_DEVTYPE_DEVICE) {
-    /* Choose the best LBA and start joinig */
+    /* Choose the best LBA and start joining */
     if (!scan_table[0].valid) {
       ctx->state = LBP_G3_STATE_IDLE; /* Scan finished */
       LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_discovery_confirm: No devices found!\n"));
