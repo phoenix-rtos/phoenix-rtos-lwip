@@ -86,7 +86,7 @@ enum {
 };
 
 
-#if 0
+#if 1
 static void enet_printf(enet_priv_t *state, const char *format, ...)
 {
 	char buf[192];

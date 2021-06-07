@@ -100,6 +100,7 @@ static uint32_t ephy_show_id(eth_phy_state_t *phy)
 static void ephy_show_link_state(eth_phy_state_t *phy)
 {
 	uint16_t bctl, bstat, adv, lpa, pc1, pc2;
+	int speed, full_duplex;
 
 	bctl = ephy_reg_read(phy, 0x00);
 	bstat = ephy_reg_read(phy, 0x01);
@@ -108,16 +109,17 @@ static void ephy_show_link_state(eth_phy_state_t *phy)
 	lpa = ephy_reg_read(phy, 0x05);
 	pc1 = ephy_reg_read(phy, 0x1e);
 	pc2 = ephy_reg_read(phy, 0x1f);
+	speed = ephy_link_speed(phy, &full_duplex);
 
 	int linkup = (bstat & 4) != 0;
 
 	if (phy->link_state_callback)
 		phy->link_state_callback(phy->link_state_callback_arg, linkup);
 
-/*
-	printf("lwip: ephy%u.%u link is %s (ctl %04x, status %04x, adv %04x, lpa %04x, pctl %04x,%04x)\n",
-		phy->bus, phy->addr, linkup ? "UP  " : "DOWN", bctl, bstat, adv, lpa, pc1, pc2);
-*/
+
+	printf("lwip: ephy%u.%u link is %s %uMbps/%s (ctl %04x, status %04x, adv %04x, lpa %04x, pctl %04x,%04x)\n",
+		phy->bus, phy->addr, linkup ? "UP  " : "DOWN", speed, full_duplex ? "Full" : "Half",
+		bctl, bstat, adv, lpa, pc1, pc2);
 }
 
 
