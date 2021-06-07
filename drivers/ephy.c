@@ -49,7 +49,7 @@ static void ephy_reset(eth_phy_state_t *phy)
 		usleep(phy->reset_release_time_us);
 		mdio_unlock_bus(phy->bus);
 	} else {
-		int err, n = 10;
+		int err = 0, n = 10;
 
 		ephy_reg_write(phy, 0, 0x8000);
 		usleep(phy->reset_release_time_us);
