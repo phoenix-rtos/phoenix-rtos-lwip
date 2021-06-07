@@ -232,7 +232,7 @@ size_t net_reapTxFinished(net_bufdesc_ring_t *ring)
 static size_t net_fillFragments(struct pbuf *p, addr_t *pa, size_t *psz, size_t max_n, size_t max_fragsz)
 {
 	size_t n, sz, fragsz;
-	void *data;
+	void *data = NULL;
 
 	sz = p->tot_len;
 	n = fragsz = 0;
