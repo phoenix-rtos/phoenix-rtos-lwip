@@ -598,6 +598,7 @@ static int socket_ioctl(int sock, unsigned long request, const void* in_data, vo
 	case SIOCDELRT: {
 		struct rtentry *rt = (struct rtentry *) in_data;
 		struct netif *interface = netif_find(rt->rt_dev);
+		int ret = EOK;
 
 		if (interface == NULL) {
 			free(rt->rt_dev);
@@ -608,17 +609,17 @@ static int socket_ioctl(int sock, unsigned long request, const void* in_data, vo
 		switch (request) {
 
 		case SIOCADDRT:
-			route_add(interface, rt);
+			ret = route_add(interface, rt);
 			break;
 		case SIOCDELRT:
-			route_del(interface, rt);
+			ret = route_del(interface, rt);
 			break;
 		}
 
 		free(rt->rt_dev);
 		free(rt);
 
-		return EOK;
+		return ret;
 	}
 
 #if LWIP_IPV6
