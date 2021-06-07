@@ -119,8 +119,10 @@ static const struct sockaddr *sa_convert_sys_to_lwip(const void *sa, socklen_t s
 	uint16_t fam = *(volatile uint16_t *)sa;
 	struct sockaddr *lsa = (void *)sa;
 
-	lsa->sa_len = (uint8_t)salen;
-	lsa->sa_family = (sa_family_t)fam;
+	if (fam != AF_PACKET) {
+		lsa->sa_len = (uint8_t)salen;
+		lsa->sa_family = (sa_family_t)fam;
+	}
 
 	return lsa;
 }
