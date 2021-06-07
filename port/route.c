@@ -68,7 +68,7 @@ static int route_table_add(rt_entry_t *entry)
 
 static int route_same(rt_entry_t *e1, rt_entry_t *e2)
 {
-	return e1->dst.addr == e2->dst.addr && e1->gw.addr == e2->gw.addr &&
+	return e1->dst.addr == e2->dst.addr && ((e1->gw.addr == 0) || (e1->gw.addr == e2->gw.addr)) &&
 		e1->genmask.addr == e2->genmask.addr && e1->netif == e2->netif;
 }
 
