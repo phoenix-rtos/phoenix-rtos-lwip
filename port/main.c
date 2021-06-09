@@ -52,6 +52,7 @@
 static int writeRoutes(char *buffer, size_t bufSize, size_t offset)
 {
 	rt_entry_t *entry;
+	struct netif *netif;
 	size_t write, size = bufSize;
 
 
@@ -73,9 +74,22 @@ static int writeRoutes(char *buffer, size_t bufSize, size_t offset)
 		while ((entry = entry->next) != rt_table.entries);
 	}
 
-	if (netif_default != NULL) {
-		SNPRINTF_APPEND(format, netif_default->name, netif_default->num, 0, 0,
-			ntohl(ip4_addr_get_u32(netif_ip4_gw(netif_default))), netif_default->flags, netif_default->mtu, -1);
+	/* add per-netif routing (LwIP uses it regardless of our routing table) - with highest priority (apart for our custom GW) */
+	for (netif = netif_list; netif != NULL; netif = netif->next) {
+		uint32_t prefix = ((netif->ip_addr.addr) & (netif->netmask.addr));
+		unsigned int flags = netif_is_up(netif) ? RTF_UP : 0;
+		if (netif->gw.addr != 0)
+			flags |= RTF_GATEWAY;
+
+		SNPRINTF_APPEND("%2s%u\t%08X\t%08X\t%04X\t%d\t%u\t%d\t%08X\t%d\t%u\t%u\n",
+			netif->name, netif->num,
+			prefix,                                /* Destination */
+			ip4_addr_get_u32(netif_ip4_gw(netif)), /* Gateway */
+			flags, 0, 0,                           /* Flags, RefCnt, Use */
+			0,                                     /* Metric */
+			ip4_addr_get_u32(netif_ip4_netmask(netif)),
+			netif->mtu,
+			0, 0); /* Window, IRTT */
 	}
 
 	return bufSize - size;
@@ -98,8 +112,7 @@ static int writeStatus(char *buffer, size_t bufSize, size_t offset)
 			SNPRINTF_APPEND("%2s%d_dhcp=%u\n", netif->name, netif->num, netif_is_dhcp(netif));
 #endif
 			SNPRINTF_APPEND("%2s%d_netmask=%s\n", netif->name, netif->num, inet_ntoa(netif->netmask));
-			if (netif == netif_default)
-				SNPRINTF_APPEND("%2s%d_gateway=%s\n", netif->name, netif->num, inet_ntoa(netif->gw));
+			SNPRINTF_APPEND("%2s%d_gateway=%s\n", netif->name, netif->num, inet_ntoa(netif->gw));
 		} else {
 			SNPRINTF_APPEND("%2s%d_ptp=%s\n", netif->name, netif->num, inet_ntoa(netif->gw));
 		}
