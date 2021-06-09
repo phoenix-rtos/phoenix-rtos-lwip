@@ -34,10 +34,6 @@ struct mdio_bus {
 };
 
 
-static const ip4_addr_t default_ip = { PP_HTONL(0x0A020001) };
-static const ip4_addr_t default_mask = { PP_HTONL(0xFFFFFF00) };
-static const ip4_addr_t default_gw = { PP_HTONL(0x0A020002) };
-
 static netif_driver_t *net_driver_list;
 static struct mdio_bus mdio[MAX_MDIO_BUSSES];
 
@@ -118,7 +114,6 @@ int create_netif(char *conf)
 	netif_driver_t *drv;
 	struct netif *ni;
 	char *arg;
-	ip4_addr_t ipaddr, netmask, gw;
 	size_t sz;
 	err_t err;
 	int is_ppp = 0;
@@ -136,10 +131,6 @@ int create_netif(char *conf)
 	if (!drv)
 		return -ENOENT;
 
-	ipaddr = default_ip;
-	netmask = default_mask;
-	gw = default_gw;
-
 	sz = sizeof(*storage);
 	if (drv->state_align)
 		sz = (sz + drv->state_align - 1) & ~(drv->state_align - 1);
@@ -153,11 +144,8 @@ int create_netif(char *conf)
 	storage->drv = drv;
 
 	if (!is_ppp) {
-		err = netifapi_netif_add(ni, &ipaddr, &netmask, &gw,
+		err = netifapi_netif_add(ni, NULL, NULL, NULL,
 			(char *)storage + sz, netif_dev_init, tcpip_input);
-
-		ipaddr.addr = PP_HTONL(0x0A020000 + ni->num);
-		netif_set_ipaddr(ni, &ipaddr);
 	} else {
 		ni->state = (char *)storage + sz;
 		err = storage->drv->init(ni, storage->cfg);
