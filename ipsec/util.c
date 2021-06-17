@@ -69,48 +69,47 @@
  */
 void ipsec_print_ip(struct ip_hdr *header)
 {
-	char	log_message[IPSEC_LOG_MESSAGE_SIZE+1] ;
-	char 	port[4+1] ;
-	char	src[15+1] ;
-	char	dest[15+1] ;
-	u16_t	len ;
+	char log_message[IPSEC_LOG_MESSAGE_SIZE + 1];
+	char port[4 + 1];
+	char src[15 + 1];
+	char dest[15 + 1];
+	u16_t len;
 
-	strcpy(src, inet_ntoa(header->src)) ;
-	strcpy(dest, inet_ntoa(header->dest)) ;
+	strcpy(src, inet_ntoa(header->src));
+	strcpy(dest, inet_ntoa(header->dest));
 
-	len = lwip_ntohs(header->_len) ;
+	len = lwip_ntohs(header->_len);
 
-	switch(IPH_PROTO(header))
-	{
+	switch (IPH_PROTO(header)) {
 		case IP_PROTO_TCP:
-			strcpy(port, " TCP") ;
-			break ;
+			strcpy(port, " TCP");
+			break;
 		case IP_PROTO_UDP:
-			strcpy(port, " UDP") ;
-			break ;
+			strcpy(port, " UDP");
+			break;
 		case IP_PROTO_AH:
-			strcpy(port, "  AH") ;
-			break ;
+			strcpy(port, "  AH");
+			break;
 		case IP_PROTO_ESP:
-			strcpy(port, " ESP") ;
-			break ;
+			strcpy(port, " ESP");
+			break;
 		case IP_PROTO_ICMP:
-			strcpy(port, "ICMP") ;
-			break ;
+			strcpy(port, "ICMP");
+			break;
 		default:
-			strcpy(port, "????") ;
+			strcpy(port, "????");
 	}
 
-	main_snprintf(log_message, IPSEC_LOG_MESSAGE_SIZE, "src: %15s dest: %15s protocol: %3s size: %d", src, dest, port, len) ;
-	main_printf(ATTR_INFO, "          %s\n", log_message) ;
+	main_snprintf(log_message, IPSEC_LOG_MESSAGE_SIZE, "src: %15s dest: %15s protocol: %3s size: %d", src, dest, port, len);
+	main_printf(ATTR_INFO, "          %s\n", log_message);
 
-	return ;
+	return;
 }
 
 
 #ifdef IPSEC_TRACE
-int __ipsec_trace_indication = 0;		/**< dummy variable to avoid compiler warnings */
-int __ipsec_trace_indication__pos = 0;	/**< dummy variable to avoid compiler warnings */
+int __ipsec_trace_indication = 0;      /**< dummy variable to avoid compiler warnings */
+int __ipsec_trace_indication__pos = 0; /**< dummy variable to avoid compiler warnings */
 #endif
 
 /**
@@ -123,38 +122,45 @@ int __ipsec_trace_indication__pos = 0;	/**< dummy variable to avoid compiler war
  *              initialized with IP, netmask and gateway address.
  * @return void
  */
-void ipsec_dump_buffer(char *prefix, unsigned char *data, int offs, int length) 
+void ipsec_dump_buffer(char *prefix, unsigned char *data, int offs, int length)
 {
 	unsigned char *ptr;
 	unsigned char *tmp_ptr;
 	int i;
 
 	main_printf(ATTR_INFO, "%sDumping %d bytes from address 0x%p using an offset of %d bytes\n", prefix, length, data, offs);
-	if(length == 0) {
+	if (length == 0) {
 		main_printf(ATTR_INFO, "%s => nothing to dump\n", prefix);
 		return;
 	}
 
-	for(ptr = (data + offs); ptr < (data + offs + length); ptr++) {
-		if(((ptr - (data + offs)) % 16) == 0) main_printf(ATTR_INFO, "%s%p:", prefix, ptr);
+	for (ptr = (data + offs); ptr < (data + offs + length); ptr++) {
+		if (((ptr - (data + offs)) % 16) == 0)
+			main_printf(ATTR_INFO, "%s%p:", prefix, ptr);
 		main_printf(ATTR_INFO, " %02x", *ptr);
-		if(((ptr - (data + offs)) % 16) == 15) {
+		if (((ptr - (data + offs)) % 16) == 15) {
 			main_printf(ATTR_INFO, " :");
-			for(tmp_ptr = (ptr - 15); tmp_ptr < ptr; tmp_ptr++) {
-				if(*tmp_ptr < 32) main_printf(ATTR_INFO, "."); else main_printf(ATTR_INFO, "%c", *tmp_ptr);
+			for (tmp_ptr = (ptr - 15); tmp_ptr < ptr; tmp_ptr++) {
+				if (*tmp_ptr < 32)
+					main_printf(ATTR_INFO, ".");
+				else
+					main_printf(ATTR_INFO, "%c", *tmp_ptr);
 			}
-		main_printf(ATTR_INFO, "\n");
+			main_printf(ATTR_INFO, "\n");
 		}
 	}
 
-	if((length % 16) > 0) {
-		for(i = 0; i < (16 - (length % 16)); i++) {
+	if ((length % 16) > 0) {
+		for (i = 0; i < (16 - (length % 16)); i++) {
 			main_printf(ATTR_INFO, "   ");
 		}
 
 		main_printf(ATTR_INFO, " :");
-		for(tmp_ptr = ((data + offs + length) - (length % 16)); tmp_ptr < (data + offs + length); tmp_ptr++) {
-			if(*tmp_ptr < 32) main_printf(ATTR_INFO, "."); else main_printf(ATTR_INFO, "%c", *tmp_ptr);
+		for (tmp_ptr = ((data + offs + length) - (length % 16)); tmp_ptr < (data + offs + length); tmp_ptr++) {
+			if (*tmp_ptr < 32)
+				main_printf(ATTR_INFO, ".");
+			else
+				main_printf(ATTR_INFO, "%c", *tmp_ptr);
 		}
 	}
 
@@ -197,7 +203,7 @@ ipsec_audit ipsec_check_replay_window(u32_t seq, u32_t lastSeq, u32_t bitField)
 	    if(bitField & ((u32_t)1 << diff)) return IPSEC_AUDIT_SEQ_MISMATCH; 
     }
 #endif
-    return IPSEC_AUDIT_SUCCESS;
+	return IPSEC_AUDIT_SUCCESS;
 }
 
 
@@ -233,6 +239,6 @@ ipsec_audit ipsec_update_replay_window(u32_t seq, u32_t *lastSeq, u32_t *bitFiel
     if (diff >= IPSEC_SEQ_MAX_WINDOW) return IPSEC_AUDIT_SEQ_MISMATCH; /* too old or wrapped */
     if (*bitField & ((u32_t)1 << diff)) return IPSEC_AUDIT_SEQ_MISMATCH; /* already seen 	*/
     *bitField |= ((u32_t)1 << diff);      		/* mark as seen 			*/
- #endif
-  return IPSEC_AUDIT_SUCCESS;           		/* out of order but good 	*/
+#endif
+	return IPSEC_AUDIT_SUCCESS; /* out of order but good 	*/
 }

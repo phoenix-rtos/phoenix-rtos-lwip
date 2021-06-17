@@ -1,4 +1,4 @@
- /*
+/*
  * Phoenix-RTOS
  * Copyright Phoenix Systems
  *
@@ -17,7 +17,8 @@
 #include <proc/if.h>
 
 typedef struct sockkey {
-	LIST_ENTRY(sockkey) list;
+	LIST_ENTRY(sockkey)
+	list;
 	mbuff_t *mbuff;
 
 	mutex_t mutex;

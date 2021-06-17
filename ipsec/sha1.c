@@ -76,25 +76,21 @@ unsigned char *SHA1(const unsigned char *d, unsigned long n, unsigned char *md)
 }
 
 
-#define Xupdate(a,ix,ia,ib,ic,id)	( (a)=(ia^ib^ic^id),	\
-					  ix=(a)=ROTATE((a),1)	\
-					)
+#define Xupdate(a, ix, ia, ib, ic, id) ((a) = (ia ^ ib ^ ic ^ id), \
+	ix = (a) = ROTATE((a), 1))
 
 void sha1_block_host_order (SHA_CTX *c, const void *p,int num);
 void sha1_block_data_order (SHA_CTX *c, const void *p,int num);
 
 
-
-#define SHA_CBLOCK	(SHA_LBLOCK*4)	/* SHA treats input data as a
-					 * contiguous array of 32 bit
-					 * wide big-endian values. */
-#define SHA_LAST_BLOCK  (SHA_CBLOCK-8)
-
-
+#define SHA_CBLOCK (SHA_LBLOCK * 4) /* SHA treats input data as a \
+									 * contiguous array of 32 bit \
+									 * wide big-endian values. */
+#define SHA_LAST_BLOCK (SHA_CBLOCK - 8)
 
 
 #ifndef SHA_LBLOCK
-#define SHA_LBLOCK	(SHA_CBLOCK/4)
+#define SHA_LBLOCK (SHA_CBLOCK / 4)
 #endif
 
 
@@ -107,54 +103,64 @@ void sha1_block_data_order (SHA_CTX *c, const void *p,int num);
 // *** Keil C166 ***
 #ifdef __C166__
 #include <intrins.h>
-#define ROTATE(a,n)	_lrol_(a,n)
+#define ROTATE(a, n) _lrol_(a, n)
 #endif
 
 
 /* A nice byte order reversal from Wei Dai <weidai@eskimo.com> */
 #ifdef ROTATE
 /* 5 instructions with rotate instruction, else 9 */
-#define REVERSE_FETCH32(a,l)	(					\
-		l=*(const SHA_LONG *)(a),				\
-		((ROTATE(l,8)&0x00FF00FF)|(ROTATE((l&0x00FF00FF),24)))	\
-				)
+#define REVERSE_FETCH32(a, l) ( \
+	l = *(const SHA_LONG *)(a), \
+	((ROTATE(l, 8) & 0x00FF00FF) | (ROTATE((l & 0x00FF00FF), 24))))
 #endif
 
 
 // #if defined(DATA_ORDER_IS_BIG_ENDIAN)
-#define HOST_c2l(c,l)	(l =(((unsigned long)(*((c)++)))<<24),		\
-			 l|=(((unsigned long)(*((c)++)))<<16),		\
-			 l|=(((unsigned long)(*((c)++)))<< 8),		\
-			 l|=(((unsigned long)(*((c)++)))    ),		\
-			 l)
-#define HOST_p_c2l(c,l,n)	{					\
-			switch (n) {					\
-			case 0: l =((unsigned long)(*((c)++)))<<24;	\
-			case 1: l|=((unsigned long)(*((c)++)))<<16;	\
-			case 2: l|=((unsigned long)(*((c)++)))<< 8;	\
-			case 3: l|=((unsigned long)(*((c)++)));		\
-				} }
-#define HOST_p_c2l_p(c,l,sc,len) {					\
-			switch (sc) {					\
-			case 0: l =((unsigned long)(*((c)++)))<<24;	\
-				if (--len == 0) break;			\
-			case 1: l|=((unsigned long)(*((c)++)))<<16;	\
-				if (--len == 0) break;			\
-			case 2: l|=((unsigned long)(*((c)++)))<< 8;	\
-				} }
+#define HOST_c2l(c, l) (l = (((unsigned long)(*((c)++))) << 24), \
+	l |= (((unsigned long)(*((c)++))) << 16), \
+	l |= (((unsigned long)(*((c)++))) << 8), \
+	l |= (((unsigned long)(*((c)++)))), \
+	l)
+#define HOST_p_c2l(c, l, n) \
+	{ \
+		switch (n) { \
+			case 0: l = ((unsigned long)(*((c)++))) << 24; \
+			case 1: l |= ((unsigned long)(*((c)++))) << 16; \
+			case 2: l |= ((unsigned long)(*((c)++))) << 8; \
+			case 3: l |= ((unsigned long)(*((c)++))); \
+		} \
+	}
+#define HOST_p_c2l_p(c, l, sc, len) \
+	{ \
+		switch (sc) { \
+			case 0: \
+				l = ((unsigned long)(*((c)++))) << 24; \
+				if (--len == 0) \
+					break; \
+			case 1: \
+				l |= ((unsigned long)(*((c)++))) << 16; \
+				if (--len == 0) \
+					break; \
+			case 2: l |= ((unsigned long)(*((c)++))) << 8; \
+		} \
+	}
 // NOTE the pointer is not incremented at the end of this
-#define HOST_c2l_p(c,l,n)	{					\
-			l=0; (c)+=n;					\
-			switch (n) {					\
-			case 3: l =((unsigned long)(*(--(c))))<< 8;	\
-			case 2: l|=((unsigned long)(*(--(c))))<<16;	\
-			case 1: l|=((unsigned long)(*(--(c))))<<24;	\
-				} }
-#define HOST_l2c(l,c)	(*((c)++)=(unsigned char)(((l)>>24)&0xff),	\
-			 *((c)++)=(unsigned char)(((l)>>16)&0xff),	\
-			 *((c)++)=(unsigned char)(((l)>> 8)&0xff),	\
-			 *((c)++)=(unsigned char)(((l)    )&0xff),	\
-			 l)
+#define HOST_c2l_p(c, l, n) \
+	{ \
+		l = 0; \
+		(c) += n; \
+		switch (n) { \
+			case 3: l = ((unsigned long)(*(--(c)))) << 8; \
+			case 2: l |= ((unsigned long)(*(--(c)))) << 16; \
+			case 1: l |= ((unsigned long)(*(--(c)))) << 24; \
+		} \
+	}
+#define HOST_l2c(l, c) (*((c)++) = (unsigned char)(((l) >> 24) & 0xff), \
+	*((c)++) = (unsigned char)(((l) >> 16) & 0xff), \
+	*((c)++) = (unsigned char)(((l) >> 8) & 0xff), \
+	*((c)++) = (unsigned char)(((l)) & 0xff), \
+	l)
 
 
 /*
@@ -303,7 +309,6 @@ void SHA1_Final (unsigned char *md, SHA_CTX *c)
 }
 
 
-
 #define INIT_DATA_h0 0x67452301UL
 #define INIT_DATA_h1 0xefcdab89UL
 #define INIT_DATA_h2 0x98badcfeUL
@@ -322,10 +327,10 @@ void SHA1_Init (SHA_CTX *c)
 	c->num=0;
 }
 
-#define K_00_19	0x5a827999UL
-#define K_20_39 0x6ed9eba1UL
-#define K_40_59 0x8f1bbcdcUL
-#define K_60_79 0xca62c1d6UL
+#define K_00_19          0x5a827999UL
+#define K_20_39          0x6ed9eba1UL
+#define K_40_59          0x8f1bbcdcUL
+#define K_60_79          0xca62c1d6UL
 
 /* As  pointed out by Wei Dai <weidai@eskimo.com>, F() below can be
  * simplified to the code in F_00_19.  Wei attributes these optimisations
@@ -334,42 +339,42 @@ void SHA1_Init (SHA_CTX *c)
  * I've just become aware of another tweak to be made, again from Wei Dai,
  * in F_40_59, (x&a)|(y&a) -> (x|y)&a
  */
-#define	F_00_19(b,c,d)	((((c) ^ (d)) & (b)) ^ (d))
-#define	F_20_39(b,c,d)	((b) ^ (c) ^ (d))
-#define F_40_59(b,c,d)	(((b) & (c)) | (((b)|(c)) & (d)))
-#define	F_60_79(b,c,d)	F_20_39(b,c,d)
+#define F_00_19(b, c, d) ((((c) ^ (d)) & (b)) ^ (d))
+#define F_20_39(b, c, d) ((b) ^ (c) ^ (d))
+#define F_40_59(b, c, d) (((b) & (c)) | (((b) | (c)) & (d)))
+#define F_60_79(b, c, d) F_20_39(b, c, d)
 
-#define BODY_00_15(i,a,b,c,d,e,f,xi) \
-	(f)=xi+(e)+K_00_19+ROTATE((a),5)+F_00_19((b),(c),(d)); \
-	(b)=ROTATE((b),30);
+#define BODY_00_15(i, a, b, c, d, e, f, xi) \
+	(f) = xi + (e) + K_00_19 + ROTATE((a), 5) + F_00_19((b), (c), (d)); \
+	(b) = ROTATE((b), 30);
 
-#define BODY_16_19(i,a,b,c,d,e,f,xi,xa,xb,xc,xd) \
-	Xupdate(f,xi,xa,xb,xc,xd); \
-	(f)+=(e)+K_00_19+ROTATE((a),5)+F_00_19((b),(c),(d)); \
-	(b)=ROTATE((b),30);
+#define BODY_16_19(i, a, b, c, d, e, f, xi, xa, xb, xc, xd) \
+	Xupdate(f, xi, xa, xb, xc, xd); \
+	(f) += (e) + K_00_19 + ROTATE((a), 5) + F_00_19((b), (c), (d)); \
+	(b) = ROTATE((b), 30);
 
-#define BODY_20_31(i,a,b,c,d,e,f,xi,xa,xb,xc,xd) \
-	Xupdate(f,xi,xa,xb,xc,xd); \
-	(f)+=(e)+K_20_39+ROTATE((a),5)+F_20_39((b),(c),(d)); \
-	(b)=ROTATE((b),30);
+#define BODY_20_31(i, a, b, c, d, e, f, xi, xa, xb, xc, xd) \
+	Xupdate(f, xi, xa, xb, xc, xd); \
+	(f) += (e) + K_20_39 + ROTATE((a), 5) + F_20_39((b), (c), (d)); \
+	(b) = ROTATE((b), 30);
 
-#define BODY_32_39(i,a,b,c,d,e,f,xa,xb,xc,xd) \
-	Xupdate(f,xa,xa,xb,xc,xd); \
-	(f)+=(e)+K_20_39+ROTATE((a),5)+F_20_39((b),(c),(d)); \
-	(b)=ROTATE((b),30);
+#define BODY_32_39(i, a, b, c, d, e, f, xa, xb, xc, xd) \
+	Xupdate(f, xa, xa, xb, xc, xd); \
+	(f) += (e) + K_20_39 + ROTATE((a), 5) + F_20_39((b), (c), (d)); \
+	(b) = ROTATE((b), 30);
 
-#define BODY_40_59(i,a,b,c,d,e,f,xa,xb,xc,xd) \
-	Xupdate(f,xa,xa,xb,xc,xd); \
-	(f)+=(e)+K_40_59+ROTATE((a),5)+F_40_59((b),(c),(d)); \
-	(b)=ROTATE((b),30);
+#define BODY_40_59(i, a, b, c, d, e, f, xa, xb, xc, xd) \
+	Xupdate(f, xa, xa, xb, xc, xd); \
+	(f) += (e) + K_40_59 + ROTATE((a), 5) + F_40_59((b), (c), (d)); \
+	(b) = ROTATE((b), 30);
 
-#define BODY_60_79(i,a,b,c,d,e,f,xa,xb,xc,xd) \
-	Xupdate(f,xa,xa,xb,xc,xd); \
-	(f)=xa+(e)+K_60_79+ROTATE((a),5)+F_60_79((b),(c),(d)); \
-	(b)=ROTATE((b),30);
+#define BODY_60_79(i, a, b, c, d, e, f, xa, xb, xc, xd) \
+	Xupdate(f, xa, xa, xb, xc, xd); \
+	(f) = xa + (e) + K_60_79 + ROTATE((a), 5) + F_60_79((b), (c), (d)); \
+	(b) = ROTATE((b), 30);
 
 
-#define X(i)	XX##i
+#define X(i) XX##i
 
 void sha1_block_host_order (SHA_CTX *c, const void *d, int num)
 {
@@ -623,13 +628,13 @@ void sha1_block_data_order (SHA_CTX *c, const void *p, int num)
  *   unsigned char*  digest        caller digest to be filled in
  *
  */
-void hmac_sha1(unsigned char* text, int text_len, unsigned char*  key, int key_len, unsigned char*  digest)
+void hmac_sha1(unsigned char *text, int text_len, unsigned char *key, int key_len, unsigned char *digest)
 {
-    sha1_context_t context;
-    unsigned char k_ipad[65];    /* inner padding - key XORd with ipad */
-    unsigned char k_opad[65];    /* outer padding - key XORd with opad */
-    unsigned char tk[20];		 /* L=20 for SHA1 (RFC 2141, 2. Definition of HMAC) */
-    int i;
+	sha1_context_t context;
+	unsigned char k_ipad[65]; /* inner padding - key XORd with ipad */
+	unsigned char k_opad[65]; /* outer padding - key XORd with opad */
+	unsigned char tk[20];     /* L=20 for SHA1 (RFC 2141, 2. Definition of HMAC) */
+	int i;
 
 #if 1
 	/*
@@ -645,20 +650,20 @@ void hmac_sha1(unsigned char* text, int text_len, unsigned char*  key, int key_l
 	}
 
 	 */
-    /* if key is longer than 64 bytes reset it to key=SHA1(key) */
-    if (key_len > 64) {
+	/* if key is longer than 64 bytes reset it to key=SHA1(key) */
+	if (key_len > 64) {
 
-            sha1_context_t      tctx;
+		sha1_context_t tctx;
 
-            sha1_init(&tctx);
-            sha1_write(&tctx, key, key_len);
-            sha1_final(&tctx);
+		sha1_init(&tctx);
+		sha1_write(&tctx, key, key_len);
+		sha1_final(&tctx);
 
-            hal_memcpy(key, tctx.buf, 20);
-            key_len = 20;
-    }
+		hal_memcpy(key, tctx.buf, 20);
+		key_len = 20;
+	}
 
-    /*
+	/*
      * the HMAC_SHA1 transform looks like:
      *
      * SHA1(K XOR opad, SHA1(K XOR ipad, text))
@@ -669,57 +674,56 @@ void hmac_sha1(unsigned char* text, int text_len, unsigned char*  key, int key_l
      * and text is the data being protected
      */
 
-    /* start out by storing key in pads */
-    hal_memset(k_ipad, '\0', sizeof(k_ipad));
-    hal_memset(k_opad, '\0', sizeof(k_opad));
-    hal_memcpy(k_ipad, key, key_len);
-    hal_memcpy(k_opad, key, key_len);
+	/* start out by storing key in pads */
+	hal_memset(k_ipad, '\0', sizeof(k_ipad));
+	hal_memset(k_opad, '\0', sizeof(k_opad));
+	hal_memcpy(k_ipad, key, key_len);
+	hal_memcpy(k_opad, key, key_len);
 
 
-    /* XOR key with ipad and opad values */
-    for (i = 0; i < 64; i++) {
-            k_ipad[i] ^= 0x36;
-            k_opad[i] ^= 0x5c;
-    }
-    /*
+	/* XOR key with ipad and opad values */
+	for (i = 0; i < 64; i++) {
+		k_ipad[i] ^= 0x36;
+		k_opad[i] ^= 0x5c;
+	}
+	/*
      * perform inner SHA
      */
-    sha1_init(&context);                 /* init context for 1st pass */
-    sha1_write(&context, k_ipad, 64);   /* start with inner pad */
-    sha1_write(&context, text, text_len);/* then text of datagram */
-    sha1_final(&context);         /* finish up 1st pass */
-    hal_memcpy(digest, context.buf, 20);
+	sha1_init(&context);                  /* init context for 1st pass */
+	sha1_write(&context, k_ipad, 64);     /* start with inner pad */
+	sha1_write(&context, text, text_len); /* then text of datagram */
+	sha1_final(&context);                 /* finish up 1st pass */
+	hal_memcpy(digest, context.buf, 20);
 
-    /*
+	/*
      * perform outer SHA
      */
-    sha1_init(&context);                 /* init context for 2nd pass */
-    sha1_write(&context, k_opad, 64);   /* start with outer pad */
-    sha1_write(&context, digest, 20);   /* then results of 1st hash */
-    sha1_final(&context);        /* finish up 2nd pass */
-    hal_memcpy(digest, context.buf, 20);
+	sha1_init(&context);              /* init context for 2nd pass */
+	sha1_write(&context, k_opad, 64); /* start with outer pad */
+	sha1_write(&context, digest, 20); /* then results of 1st hash */
+	sha1_final(&context);             /* finish up 2nd pass */
+	hal_memcpy(digest, context.buf, 20);
 
 #else
-	IPSEC_LOG_TRC(IPSEC_TRACE_ENTER, 
-	              "hmac_sha1", 
-				  ("text=%p, text_len=%d, key=%p, key_len=%d, digest=%p",
-			      (void *)text, text_len, (void *)key, key_len, (void *)digest)
-				 );
+	IPSEC_LOG_TRC(IPSEC_TRACE_ENTER,
+		"hmac_sha1",
+		("text=%p, text_len=%d, key=%p, key_len=%d, digest=%p",
+			(void *)text, text_len, (void *)key, key_len, (void *)digest));
 
-    /* if key is longer than 64 bytes reset it to key=SHA1(key) */
-    if (key_len > 64) {
+	/* if key is longer than 64 bytes reset it to key=SHA1(key) */
+	if (key_len > 64) {
 
-            SHA_CTX      tctx;
+		SHA_CTX tctx;
 
-            SHA1_Init(&tctx);
-            SHA1_Update(&tctx, key, key_len);
-            SHA1_Final(tk, &tctx);
+		SHA1_Init(&tctx);
+		SHA1_Update(&tctx, key, key_len);
+		SHA1_Final(tk, &tctx);
 
-            key = tk;
-            key_len = 20;
-    }
+		key = tk;
+		key_len = 20;
+	}
 
-    /*
+	/*
      * the HMAC_SHA1 transform looks like:
      *
      * SHA1(K XOR opad, SHA1(K XOR ipad, text))
@@ -730,42 +734,34 @@ void hmac_sha1(unsigned char* text, int text_len, unsigned char*  key, int key_l
      * and text is the data being protected
      */
 
-    /* start out by storing key in pads */
-    memset(k_ipad, '\0', sizeof(k_ipad));  
-    memset(k_opad, '\0', sizeof(k_opad));  
-    memcpy(k_ipad, key, key_len); 		   
-    memcpy(k_opad, key, key_len); 		   
+	/* start out by storing key in pads */
+	memset(k_ipad, '\0', sizeof(k_ipad));
+	memset(k_opad, '\0', sizeof(k_opad));
+	memcpy(k_ipad, key, key_len);
+	memcpy(k_opad, key, key_len);
 
 
-    /* XOR key with ipad and opad values */
-    for (i=0; i<64; i++) {
-            k_ipad[i] ^= 0x36;
-            k_opad[i] ^= 0x5c;
-    }
-    /*
+	/* XOR key with ipad and opad values */
+	for (i = 0; i < 64; i++) {
+		k_ipad[i] ^= 0x36;
+		k_opad[i] ^= 0x5c;
+	}
+	/*
      * perform inner SHA
      */
-    SHA1_Init(&context);                 /* init context for 1st pass */
-    SHA1_Update(&context, k_ipad, 64);   /* start with inner pad */
-    SHA1_Update(&context, text, text_len);/* then text of datagram */
-    SHA1_Final(digest, &context);         /* finish up 1st pass */
-    /*
+	SHA1_Init(&context);                   /* init context for 1st pass */
+	SHA1_Update(&context, k_ipad, 64);     /* start with inner pad */
+	SHA1_Update(&context, text, text_len); /* then text of datagram */
+	SHA1_Final(digest, &context);          /* finish up 1st pass */
+	/*
      * perform outer SHA
      */
-    SHA1_Init(&context);                 /* init context for 2nd
+	SHA1_Init(&context);               /* init context for 2nd
                                           * pass */
-    SHA1_Update(&context, k_opad, 64);   /* start with outer pad */
-    SHA1_Update(&context, digest, 20);   /* then results of 1st hash */
-    SHA1_Final(digest, &context);        /* finish up 2nd pass */
+	SHA1_Update(&context, k_opad, 64); /* start with outer pad */
+	SHA1_Update(&context, digest, 20); /* then results of 1st hash */
+	SHA1_Final(digest, &context);      /* finish up 2nd pass */
 
-	IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "hmac_sha1", "void" );
+	IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "hmac_sha1", "void");
 #endif
 }
-
-
-
-
-
-
-
-

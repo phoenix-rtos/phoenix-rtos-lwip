@@ -40,4 +40,4 @@ size_t mbuff_sizeFirst(mbuff_t *mbuff);
 void mbuff_merge(mbuff_t *first, mbuff_t *second);
 void mbuff_remove(mbuff_t **mbuff, size_t size);
 
-#endif 
+#endif

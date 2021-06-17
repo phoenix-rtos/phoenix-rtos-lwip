@@ -39,7 +39,6 @@
  */
 
 
-
 #ifndef __DUMPDEV_H__
 #define __DUMPDEV_H__
 
@@ -47,14 +46,13 @@
 
 
 /** Used to gather statistics, etc */
-struct dumpdev_stats
-{
-	u32_t sentbytes; 				/**< #number of sent bytes */
+struct dumpdev_stats {
+	u32_t sentbytes; /**< #number of sent bytes */
 };
 
 err_t dumpdev_init(struct netif *);
 err_t dumpdev_output(struct netif *, struct pbuf *, struct ip_addr *);
-err_t dumpdev_netlink_output(struct netif *netif, struct pbuf *p) ;
+err_t dumpdev_netlink_output(struct netif *netif, struct pbuf *p);
 void dumpdev_input(struct netif *);
 void dumpdev_service(struct netif *);
 

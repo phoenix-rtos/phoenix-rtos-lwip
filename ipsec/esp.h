@@ -45,32 +45,30 @@
 
 #include "sa.h"
 
-#define IPSEC_ESP_PADDING		(8)			/**< Max padding added to meet size requirements */
-#define IPSEC_ESP_IV_SIZE		(8)			/**< Defines the size (in bytes) of the Initialization Vector used by DES and 3DES */
-#define IPSEC_ESP_SPI_SIZE		(4)			/**< Defines the size (in bytes) of the SPI of an ESP packet */
-#define IPSEC_ESP_SEQ_SIZE		(4)			/**< Defines the size (in bytes) of the Sequence Number of an ESP packet */
-#define IPSEC_ESP_HDR_SIZE		(IPSEC_ESP_SPI_SIZE+IPSEC_ESP_SEQ_SIZE)	/**< Defines the size (in bytes) of the ESP header. Actually it defines just the size of the header which is located in */
+#define IPSEC_ESP_PADDING  (8)                                       /**< Max padding added to meet size requirements */
+#define IPSEC_ESP_IV_SIZE  (8)                                       /**< Defines the size (in bytes) of the Initialization Vector used by DES and 3DES */
+#define IPSEC_ESP_SPI_SIZE (4)                                       /**< Defines the size (in bytes) of the SPI of an ESP packet */
+#define IPSEC_ESP_SEQ_SIZE (4)                                       /**< Defines the size (in bytes) of the Sequence Number of an ESP packet */
+#define IPSEC_ESP_HDR_SIZE (IPSEC_ESP_SPI_SIZE + IPSEC_ESP_SEQ_SIZE) /**< Defines the size (in bytes) of the ESP header. Actually it defines just the size of the header which is located in */
 
 
-typedef struct ipsec_esp_header_struct
-{
-	u32_t 	spi;			/**< Security Parameters Index      */
-	u32_t	sequence_number;/**< Sequence number                */
+typedef struct ipsec_esp_header_struct {
+	u32_t spi;             /**< Security Parameters Index      */
+	u32_t sequence_number; /**< Sequence number                */
 } ipsec_esp_header;
 
 
-typedef struct esp_packet_struct
-{
-	u32_t 	spi ;					/**< Security Parameters Index */
-	u32_t	sequence ;				/**< Sequence number */
-	u8_t	data[1] ;				/**< start of data, usually start of the IV */
-} esp_packet ;
+typedef struct esp_packet_struct {
+	u32_t spi;      /**< Security Parameters Index */
+	u32_t sequence; /**< Sequence number */
+	u8_t data[1];   /**< start of data, usually start of the IV */
+} esp_packet;
 
 
-extern u32_t ipsec_esp_bitmap; 	
+extern u32_t ipsec_esp_bitmap;
 extern u32_t ipsec_esp_lastSeq;
 
-ipsec_status ipsec_esp_decapsulate(struct ip_hdr *packet, int *offset, int *len, sad_entry_t *sa) ;
-ipsec_status ipsec_esp_encapsulate(struct ip_hdr *packet, int *offset, int *len, sad_entry_t *sa, u32_t src_addr, u32_t dest_addr) ;
+ipsec_status ipsec_esp_decapsulate(struct ip_hdr *packet, int *offset, int *len, sad_entry_t *sa);
+ipsec_status ipsec_esp_encapsulate(struct ip_hdr *packet, int *offset, int *len, sad_entry_t *sa, u32_t src_addr, u32_t dest_addr);
 
 #endif

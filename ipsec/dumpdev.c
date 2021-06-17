@@ -64,8 +64,8 @@
 #include "debug.h"
 #include "util.h"
 
-#define DUMPDEV_NAME0 'd'	/**< 1st letter of device name "dp" */
-#define DUMPDEV_NAME1 'p'	/**< 1st letter of device name "dp" */
+#define DUMPDEV_NAME0 'd' /**< 1st letter of device name "dp" */
+#define DUMPDEV_NAME1 'p' /**< 1st letter of device name "dp" */
 
 
 /** If defined, response of upper level stacks (ipsec/TCP/IP) will not be
@@ -95,11 +95,11 @@
 */
 
 #ifdef DUMPDEV_USE_PING_DATA
-#include "testing/functional/ipsec-lwip-integration/dumpdev-pingdata.h"	/** include dumped packets */
+#include "testing/functional/ipsec-lwip-integration/dumpdev-pingdata.h" /** include dumped packets */
 #endif
 
 #ifdef DUMPDEV_USE_HTTPGET_DATA
-#include "testing/functional/ipsec-lwip-integration/dumpdev-httpgetdata.h"	/** include dumped packets */
+#include "testing/functional/ipsec-lwip-integration/dumpdev-httpgetdata.h" /** include dumped packets */
 #endif
 
 

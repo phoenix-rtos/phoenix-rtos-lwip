@@ -52,24 +52,20 @@
  * ! DES_LONG has to be at least 32 bits wide.                    !
  * !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
  */
-#define DES_LONG u32_t				
+#define DES_LONG u32_t
 
 typedef unsigned char DES_cblock[8];
 typedef const unsigned char const_DES_cblock[8];
 
-typedef struct DES_ks
-{
-    union
-	{
+typedef struct DES_ks {
+	union {
 		DES_cblock cblock;
 		DES_LONG deslong[2]; /* make sure things are correct size on machines with 8 byte longs */
 	} ks[16];
 } DES_key_schedule;
 
-int DES_set_key_checked(const_DES_cblock *key,DES_key_schedule *schedule);
-int DES_set_key_unchecked(const_DES_cblock *key,DES_key_schedule *schedule);
-void cipher_3des_cbc(unsigned char*, int, unsigned char*, unsigned char*, int, unsigned char*);
+int DES_set_key_checked(const_DES_cblock *key, DES_key_schedule *schedule);
+int DES_set_key_unchecked(const_DES_cblock *key, DES_key_schedule *schedule);
+void cipher_3des_cbc(unsigned char *, int, unsigned char *, unsigned char *, int, unsigned char *);
 
 #endif
-
-

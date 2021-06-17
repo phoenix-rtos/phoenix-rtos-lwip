@@ -47,26 +47,23 @@
 #include "util.h"
 
 
-#define IPSEC_AH_HDR_SIZE (12)			/**< AH header size without ICV */
+#define IPSEC_AH_HDR_SIZE (12) /**< AH header size without ICV */
 
 
-typedef struct ah_hdr_struct 
-{
-  u8_t	nexthdr;	/**< type of next payload (protocol nr) */
-  u8_t	len;		/**< type of service */
-  u16_t reserved;	/**< MUST be 0x0000 (reserved for future use) */
-  u32_t spi;		/**< Security Parameter Index (0, 1..255 are special cases RFC2402, p.4) */
-  u32_t sequence;	/**< sequence number (increasing strictly), used by anti-replay feature */
-  u8_t  ah_data[IPSEC_AUTH_ICV]; /**< ICV (Integrity Check Value), variable-length data. 12 bytes (96 bits) for HMAC-SHA1-96 and HMAC-MD5-96 */
+typedef struct ah_hdr_struct {
+	u8_t nexthdr;                 /**< type of next payload (protocol nr) */
+	u8_t len;                     /**< type of service */
+	u16_t reserved;               /**< MUST be 0x0000 (reserved for future use) */
+	u32_t spi;                    /**< Security Parameter Index (0, 1..255 are special cases RFC2402, p.4) */
+	u32_t sequence;               /**< sequence number (increasing strictly), used by anti-replay feature */
+	u8_t ah_data[IPSEC_AUTH_ICV]; /**< ICV (Integrity Check Value), variable-length data. 12 bytes (96 bits) for HMAC-SHA1-96 and HMAC-MD5-96 */
 } ipsec_ah_header;
 
 
-extern u32_t ipsec_ah_bitmap; 			/**< bitmap used for anti-replay service */
-extern u32_t ipsec_ah_lastSeq;			/**< last seen sequence number, used for anit-replay service */
+extern u32_t ipsec_ah_bitmap;  /**< bitmap used for anti-replay service */
+extern u32_t ipsec_ah_lastSeq; /**< last seen sequence number, used for anit-replay service */
 
 int ipsec_ah_check(struct ip_hdr *, int *, int *, sad_entry_t *);
 int ipsec_ah_encapsulate(struct ip_hdr *, int *, int *, sad_entry_t *, u32_t, u32_t);
 
 #endif
-
-

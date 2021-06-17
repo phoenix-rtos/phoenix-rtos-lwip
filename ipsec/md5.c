@@ -47,7 +47,7 @@
 #include "debug.h"
 
 
- /**
+/**
  * RFC 2104 hmac_md5 function calculates a digest from a given data buffer and a given key.
  *
  * @param text		pointer to data stream
@@ -58,32 +58,32 @@
  * @return void
  *
  */
-void hmac_md5(unsigned char* text, int text_len, unsigned char*  key, int key_len, unsigned char*  digest)
+void hmac_md5(unsigned char *text, int text_len, unsigned char *key, int key_len, unsigned char *digest)
 {
-    md5_context_t context;
-    unsigned char k_ipad[64];    /* inner padding - key XORd with ipad */
-    unsigned char k_opad[64];    /* outer padding - key XORd with opad */
-    unsigned char tk[16];	 	 /* L=16 for MD5 (RFC 2141, 2. Definition of HMAC) */
-    int i;
+	md5_context_t context;
+	unsigned char k_ipad[64]; /* inner padding - key XORd with ipad */
+	unsigned char k_opad[64]; /* outer padding - key XORd with opad */
+	unsigned char tk[16];     /* L=16 for MD5 (RFC 2141, 2. Definition of HMAC) */
+	int i;
 
 	IPSEC_LOG_TRC(IPSEC_TRACE_ENTER, "hmac_md5", "text=%p, text_len=%d, key=%p, key_len=%d, digest=%p",
-			      text, text_len, key, key_len, digest);
+		text, text_len, key, key_len, digest);
 
 
-    /* if key is longer than 64 bytes reset it to key=MD5(key) */
-    if (key_len > 64) {
+	/* if key is longer than 64 bytes reset it to key=MD5(key) */
+	if (key_len > 64) {
 
-            md5_context_t      tctx;
+		md5_context_t tctx;
 
-            md5_init(&tctx);
-            md5_update(&tctx, key, key_len);
-            md5_final(tk, &tctx);
+		md5_init(&tctx);
+		md5_update(&tctx, key, key_len);
+		md5_final(tk, &tctx);
 
-            key = tk;
-            key_len = 16;
-    }
+		key = tk;
+		key_len = 16;
+	}
 
-    /*
+	/*
      * the HMAC_MD5 transform looks like:
      *
      * MD5(K XOR opad, MD5(K XOR ipad, text))
@@ -94,34 +94,33 @@ void hmac_md5(unsigned char* text, int text_len, unsigned char*  key, int key_le
      * and text is the data being protected
      */
 
-    /* start out by storing key in pads */
-    memset(k_ipad, 0x36, sizeof(k_ipad));
-    memset(k_opad, 0x5c, sizeof(k_opad));
+	/* start out by storing key in pads */
+	memset(k_ipad, 0x36, sizeof(k_ipad));
+	memset(k_opad, 0x5c, sizeof(k_opad));
 
 
-    /* XOR key with ipad and opad values */
-    for (i=0; i<key_len; i++) {
-            k_ipad[i] ^= key[i];
-            k_opad[i] ^= key[i];
-    }
-    /*
+	/* XOR key with ipad and opad values */
+	for (i = 0; i < key_len; i++) {
+		k_ipad[i] ^= key[i];
+		k_opad[i] ^= key[i];
+	}
+	/*
      * perform inner MD5
      */
-    md5_init(&context);                  /* init context for 1st
+	md5_init(&context);                   /* init context for 1st
                                           * pass */
-    md5_update(&context, k_ipad, 64);    /* start with inner pad */
-    md5_update(&context, text, text_len);/* then text of datagram */
-    md5_final(digest, &context);         /* finish up 1st pass */
-    /*
+	md5_update(&context, k_ipad, 64);     /* start with inner pad */
+	md5_update(&context, text, text_len); /* then text of datagram */
+	md5_final(digest, &context);          /* finish up 1st pass */
+	/*
      * perform outer MD5
      */
-    md5_init(&context);                  /* init context for 2nd
+	md5_init(&context);               /* init context for 2nd
                                           * pass */
-    md5_update(&context, k_opad, 64);    /* start with outer pad */
-    md5_update(&context, digest, 16);    /* then results of 1st
+	md5_update(&context, k_opad, 64); /* start with outer pad */
+	md5_update(&context, digest, 16); /* then results of 1st
                                           * hash */
-    md5_final(digest, &context);         /* finish up 2nd pass */
+	md5_final(digest, &context);      /* finish up 2nd pass */
 
-	IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "hmac_md5", "void" );
+	IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "hmac_md5", "void");
 }
-

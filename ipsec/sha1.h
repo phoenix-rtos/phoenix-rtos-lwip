@@ -52,24 +52,23 @@
 
 #define SHA_LONG u32_t
 
-#define SHA_LBLOCK	16
+#define SHA_LBLOCK        16
 #define SHA_DIGEST_LENGTH 20
 
-typedef struct SHAstate_st
-	{
-	SHA_LONG h0,h1,h2,h3,h4;
-	SHA_LONG Nl,Nh;
+typedef struct SHAstate_st {
+	SHA_LONG h0, h1, h2, h3, h4;
+	SHA_LONG Nl, Nh;
 	SHA_LONG data[SHA_LBLOCK];
 	int num;
-	} SHA_CTX;
+} SHA_CTX;
 
 void SHA1_Init(SHA_CTX *c);
 void SHA1_Update(SHA_CTX *c, const void *data, unsigned long len);
 void SHA1_Final(unsigned char *md, SHA_CTX *c);
-unsigned char *SHA1(const unsigned char *d, unsigned long n,unsigned char *md);
+unsigned char *SHA1(const unsigned char *d, unsigned long n, unsigned char *md);
 void SHA1_Transform(SHA_CTX *c, const unsigned char *data);
 
-void hmac_sha1(unsigned char*, int, unsigned char*, int, unsigned char*);
+void hmac_sha1(unsigned char *, int, unsigned char *, int, unsigned char *);
 
 
 #endif
