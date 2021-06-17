@@ -1,4 +1,4 @@
-  /*
+/*
  * Phoenix-RTOS
  * Copyright Phoenix Systems
  *
@@ -29,8 +29,8 @@ void socketKey_release(void)
 void *socketKey_socket(void)
 {
 	sockkey_t *sock = vm_kmalloc(sizeof(sockkey_t));
-    if (sock == NULL)
-        return NULL;
+	if (sock == NULL)
+		return NULL;
 
 	LIST_ELEM_INIT(sock, list);
 	sock->mbuff = mbuff_alloc();
@@ -64,16 +64,17 @@ void socketKey_destroy(sockkey_t *sock)
 int socketKey_send(file_t *file, const void *buff, size_t len)
 {
 	char reply[512];
-	ipsec_sadbDispatch((void *) buff, (struct sadb_msg *) reply, sizeof(reply));
+	ipsec_sadbDispatch((void *)buff, (struct sadb_msg *)reply, sizeof(reply));
 
-	struct sadb_msg *sadb_reply = (struct sadb_msg *) reply;
+	struct sadb_msg *sadb_reply = (struct sadb_msg *)reply;
 	size_t reply_size = sadb_reply->sadb_msg_len * sizeof(u64);
 
 	proc_mutexLock(&socks_mutex);
 
 	/* AF_KEY socket requires sending response to all clients. */
 	sockkey_t *iter;
-	LIST_FOR_EACH(&active_socks, iter, list) {
+	LIST_FOR_EACH(&active_socks, iter, list)
+	{
 		proc_mutexLock(&iter->mutex);
 		mbuff_feed(iter->mbuff, reply, reply_size);
 		proc_semaphoreUp(&iter->semaphore);
@@ -87,7 +88,7 @@ int socketKey_send(file_t *file, const void *buff, size_t len)
 
 int socketKey_recv(file_t *file, void *buff, size_t len, int flags)
 {
-	sock_t *sock = (sock_t *) file->vnode->dev_priv;
+	sock_t *sock = (sock_t *)file->vnode->dev_priv;
 	sockkey_t *keysock = sock->priv;
 	if (keysock == NULL || buff == NULL)
 		return -EINVAL;
@@ -116,7 +117,7 @@ int socketKey_recv(file_t *file, void *buff, size_t len, int flags)
 
 int socketKey_selectPoll(file_t *file, unsigned int *ready)
 {
-	sock_t *sock = (sock_t *) file->vnode->dev_priv;
+	sock_t *sock = (sock_t *)file->vnode->dev_priv;
 	sockkey_t *keysock = sock->priv;
 
 	if (mbuff_size(keysock->mbuff) > 0)
@@ -134,9 +135,10 @@ int socketKey_notify(const struct sadb_msg *notify)
 
 	/* AF_KEY socket requires sending response to all clients. */
 	sockkey_t *iter;
-	LIST_FOR_EACH(&active_socks, iter, list) {
+	LIST_FOR_EACH(&active_socks, iter, list)
+	{
 		proc_mutexLock(&iter->mutex);
-		mbuff_feed(iter->mbuff, (const char*) notify, notify_size);
+		mbuff_feed(iter->mbuff, (const char *)notify, notify_size);
 		proc_semaphoreUp(&iter->semaphore);
 		proc_mutexUnlock(&iter->mutex);
 	}
@@ -145,4 +147,3 @@ int socketKey_notify(const struct sadb_msg *notify)
 
 	return EOK;
 }
-

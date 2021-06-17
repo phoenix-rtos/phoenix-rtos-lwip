@@ -50,6 +50,6 @@
 
 #define MD5_DIGEST_LENGTH 16
 
-void hmac_md5(unsigned char*, int, unsigned char*, int, unsigned char*);
+void hmac_md5(unsigned char *, int, unsigned char *, int, unsigned char *);
 
 #endif

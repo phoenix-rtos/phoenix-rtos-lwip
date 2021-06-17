@@ -23,18 +23,18 @@ typedef struct {
 } AES_ctx_t;
 
 
-#define AES_128	16
-#define AES_192	24
-#define AES_256	32
+#define AES_128     16
+#define AES_192     24
+#define AES_256     32
 #define AES_BLOCKSZ 16
-#define AES_EBC 0
-#define AES_CBC 1
+#define AES_EBC     0
+#define AES_CBC     1
 
 
 extern int AES_init(AES_ctx_t *ctx, unsigned char *pIV, unsigned char *pKey, size_t KeyLen, int Mode);
 extern int AES_encrypt(AES_ctx_t *ctx, unsigned char *plain, unsigned char *cipher, size_t len);
 extern int AES_decrypt(AES_ctx_t *ctx, unsigned char *cipher, unsigned char *plain, size_t len);
 extern void ipsec_cipher_aes(u8 *text, const size_t text_len, const u8 *key, const size_t key_len,
-	                         const u8 *iv, const int mode, u8* output);
+	const u8 *iv, const int mode, u8 *output);
 
 #endif /* _IPSEC_AES_H */

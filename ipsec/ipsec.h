@@ -44,23 +44,23 @@
 
 #include <lwip/ip4_addr.h>
 
-#define IPSEC_HLEN	(PBUF_IP_HLEN + 28 + PBUF_TRANSPORT_HLEN)			/**< Add room for an other IP header and AH(28 bytes with HMAC-xxx-96)/ESP(8 bytes) data */
+#define IPSEC_HLEN (PBUF_IP_HLEN + 28 + PBUF_TRANSPORT_HLEN) /**< Add room for an other IP header and AH(28 bytes with HMAC-xxx-96)/ESP(8 bytes) data */
 
-#define IPSEC_DES_KEY_LEN		(8)							/**< Defines the size of a DES key in bytes */
-#define IPSEC_3DES_KEY_LEN		(IPSEC_DES_KEY_LEN*3)		/**< Defines the length of a 3DES key in bytes */
-#define IPSEC_AES_KEY_LEN		(32)
-#define IPSEC_MAX_ENCKEY_LEN	(IPSEC_AES_KEY_LEN)			/**< Defines the maximum encryption key length of our IPsec system */
+#define IPSEC_DES_KEY_LEN    (8)                     /**< Defines the size of a DES key in bytes */
+#define IPSEC_3DES_KEY_LEN   (IPSEC_DES_KEY_LEN * 3) /**< Defines the length of a 3DES key in bytes */
+#define IPSEC_AES_KEY_LEN    (32)
+#define IPSEC_MAX_ENCKEY_LEN (IPSEC_AES_KEY_LEN) /**< Defines the maximum encryption key length of our IPsec system */
 
-#define IPSEC_AUTH_ICV			(16)						/**< Defines the authentication key length in bytes (12 bytes for 96bit keys) */
-#define IPSEC_AUTH_MD5_KEY_LEN	(16)						/**< Length of MD5 secret key  */
-#define IPSEC_AUTH_SHA1_KEY_LEN	(20)						/**< Length of SHA1 secret key */
-#define IPSEC_AUTH_SHA256_KEY_LEN	(32)					/**< Length of SHA1 secret key */
-#define IPSEC_MAX_AUTHKEY_LEN   (IPSEC_AUTH_SHA256_KEY_LEN) 	/**< Maximum length of authentication keys */
+#define IPSEC_AUTH_ICV            (16)                        /**< Defines the authentication key length in bytes (12 bytes for 96bit keys) */
+#define IPSEC_AUTH_MD5_KEY_LEN    (16)                        /**< Length of MD5 secret key  */
+#define IPSEC_AUTH_SHA1_KEY_LEN   (20)                        /**< Length of SHA1 secret key */
+#define IPSEC_AUTH_SHA256_KEY_LEN (32)                        /**< Length of SHA1 secret key */
+#define IPSEC_MAX_AUTHKEY_LEN     (IPSEC_AUTH_SHA256_KEY_LEN) /**< Maximum length of authentication keys */
 
-#define IPSEC_MIN_IPHDR_SIZE	(20) 	/**< Defines the minimum IP header size (in bytes).*/
-#define IPSEC_SEQ_MAX_WINDOW	(32)	/**< Defines the maximum window for Sequence Number checks (used as anti-replay protection) */
-#define IPSEC_CIPHER_ENCRYPT	(0x1000)
-#define IPSEC_CIPHER_DECRYPT	(0x0000)
+#define IPSEC_MIN_IPHDR_SIZE (20) /**< Defines the minimum IP header size (in bytes).*/
+#define IPSEC_SEQ_MAX_WINDOW (32) /**< Defines the maximum window for Sequence Number checks (used as anti-replay protection) */
+#define IPSEC_CIPHER_ENCRYPT (0x1000)
+#define IPSEC_CIPHER_DECRYPT (0x0000)
 
 struct sad_entry_s;
 struct db_set_netif_s;
@@ -101,6 +101,6 @@ int ipsec_input(unsigned char *, int, int *, int *, struct db_set_netif_s *);
  * @return int 			  return status code
  */
 
-int ipsec_output(unsigned char *, int , int *, int *, ip_addr_t, struct sad_entry_s *);
+int ipsec_output(unsigned char *, int, int *, int *, ip_addr_t, struct sad_entry_s *);
 
-#endif 
+#endif

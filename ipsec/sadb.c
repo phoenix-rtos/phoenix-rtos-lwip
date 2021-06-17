@@ -27,9 +27,13 @@
 
 
 #define DEBUG_SADB 1
-#define log_debug(fmt, ...)  do { if (DEBUG_SADB) main_printf(ATTR_DEBUG,  "%s : " fmt "\n", __func__, ##__VA_ARGS__); } while (0)
+#define log_debug(fmt, ...) \
+	do { \
+		if (DEBUG_SADB) \
+			main_printf(ATTR_DEBUG, "%s : " fmt "\n", __func__, ##__VA_ARGS__); \
+	} while (0)
 
-#define SADB_LARVAL_ADD_TIMEOUT_SECS		(60*5)
+#define SADB_LARVAL_ADD_TIMEOUT_SECS (60 * 5)
 
 static int sadb_check_timeouts_enabled = 0;
 
@@ -42,32 +46,32 @@ static inline void *_sadb_next(void *msg)
 union sadb_headers {
 	struct sadb_ext *ext[SADB_EXT_MAX + 1];
 	struct {
-		void  *reserved;
-		struct sadb_sa           *sa;
-		struct sadb_lifetime     *lifetime_current;
-		struct sadb_lifetime     *lifetime_hard;
-		struct sadb_lifetime     *lifetime_soft;
-		struct sadb_address      *address_src;
-		struct sadb_address      *address_dst;
-		struct sadb_address      *address_proxy;
-		struct sadb_key          *key_auth;
-		struct sadb_key          *key_encrypt;
-		struct sadb_ident        *identity_src;
-		struct sadb_ident        *identity_dst;
-		struct sadb_sens         *sensitivity;
-		struct sadb_prop         *proposal;
-		struct sadb_supported    *supported_auth;
-		struct sadb_supported    *supported_encrypt;
-		struct sadb_spirange     *spirange;
-		struct sadb_x_kmprivate  *kmprivate;
-		struct sadb_x_policy     *policy;
-		struct sadb_x_sa2        *sa2;
+		void *reserved;
+		struct sadb_sa *sa;
+		struct sadb_lifetime *lifetime_current;
+		struct sadb_lifetime *lifetime_hard;
+		struct sadb_lifetime *lifetime_soft;
+		struct sadb_address *address_src;
+		struct sadb_address *address_dst;
+		struct sadb_address *address_proxy;
+		struct sadb_key *key_auth;
+		struct sadb_key *key_encrypt;
+		struct sadb_ident *identity_src;
+		struct sadb_ident *identity_dst;
+		struct sadb_sens *sensitivity;
+		struct sadb_prop *proposal;
+		struct sadb_supported *supported_auth;
+		struct sadb_supported *supported_encrypt;
+		struct sadb_spirange *spirange;
+		struct sadb_x_kmprivate *kmprivate;
+		struct sadb_x_policy *policy;
+		struct sadb_x_sa2 *sa2;
 		struct sadb_x_nat_t_type *nat_t_type;
 		struct sadb_x_nat_t_port *nat_t_sport;
 		struct sadb_x_nat_t_port *nat_t_dport;
-		void                     *nat_t_oa;
-		void                     *nat_t_oai;
-		void                     *nat_t_oar;
+		void *nat_t_oa;
+		void *nat_t_oai;
+		void *nat_t_oar;
 		struct sadb_x_nat_t_frag *nat_t_frag;
 	};
 };
@@ -103,14 +107,16 @@ static int _sadb_serializeMsg(const struct sadb_msg *msg, union sadb_headers *he
 	remaining = PFKEY_UNUNIT64(msg->sadb_msg_len) - sizeof(struct sadb_msg);
 
 	/* fast forward to the next populated extension */
-	for (i = 1; i <= SADB_EXT_MAX && headers->ext[i] == NULL; i++);
+	for (i = 1; i <= SADB_EXT_MAX && headers->ext[i] == NULL; i++)
+		;
 
 	while (i <= SADB_EXT_MAX && remaining >= PFKEY_UNUNIT64(headers->ext[i]->sadb_ext_len)) {
 		memcpy(next_ext, headers->ext[i], PFKEY_UNUNIT64(headers->ext[i]->sadb_ext_len));
 		remaining -= PFKEY_UNUNIT64(next_ext->sadb_ext_len);
 		next_ext = (struct sadb_ext *)((u64 *)next_ext + next_ext->sadb_ext_len);
 		/* fast forward to the next populated extension */
-		for (i++; i <= SADB_EXT_MAX && headers->ext[i] == NULL; i++);
+		for (i++; i <= SADB_EXT_MAX && headers->ext[i] == NULL; i++)
+			;
 	}
 
 	return PFKEY_UNUNIT64(msg->sadb_msg_len) - remaining;
@@ -166,7 +172,7 @@ static int sadb_getSPI(const struct sadb_msg *msg, struct sadb_msg *reply)
 	sa_ext->sadb_sa_state = SADB_SASTATE_LARVAL;
 
 	log_debug("itor: %p  spi: %x  mode: %d  dst_addr: %x", sa->initiator,
-			(unsigned)sa->spi, sa->mode, (unsigned)sa->addr.addr);
+		(unsigned)sa->spi, sa->mode, (unsigned)sa->addr.addr);
 
 	addr_reply = (struct sadb_address *)_sadb_next(sa_ext);
 	memcpy(addr_reply, h.address_src, PFKEY_UNUNIT64(h.address_src->sadb_address_len));
@@ -206,9 +212,9 @@ static int sadb_fill_sa_common(const struct sadb_msg *msg, const union sadb_head
 	}
 
 	if (msg->sadb_msg_satype == SADB_SATYPE_AH)
-		sa->proto	= IP_PROTO_AH;
+		sa->proto = IP_PROTO_AH;
 	else if (msg->sadb_msg_satype == SADB_SATYPE_ESP)
-		sa->proto	= IP_PROTO_ESP;
+		sa->proto = IP_PROTO_ESP;
 	else
 		return -EINVAL;
 
@@ -217,22 +223,22 @@ static int sadb_fill_sa_common(const struct sadb_msg *msg, const union sadb_head
 			return -EINVAL;
 
 		switch (h->nat_t_type->sadb_x_nat_t_type_type) {
-		case UDP_ENCAP_ESPINUDP_NON_IKE:
-		case UDP_ENCAP_ESPINUDP:
-			sa->natt_mode = h->nat_t_type->sadb_x_nat_t_type_type;
-			if (sa->proto != IP_PROTO_ESP)
+			case UDP_ENCAP_ESPINUDP_NON_IKE:
+			case UDP_ENCAP_ESPINUDP:
+				sa->natt_mode = h->nat_t_type->sadb_x_nat_t_type_type;
+				if (sa->proto != IP_PROTO_ESP)
+					return -EINVAL;
+				break;
+			default:
 				return -EINVAL;
-			break;
-		default:
-			return -EINVAL;
 		}
 
 		sa->natt_sport = h->nat_t_sport->sadb_x_nat_t_port_port;
 		sa->natt_dport = h->nat_t_dport->sadb_x_nat_t_port_port;
 
 		log_debug("%s(): itor: %p  spi: %x  nat-t(%u): %u->%u", func,
-	                        sa->initiator, (unsigned)sa->spi, sa->natt_mode,
-				lwip_ntohs(sa->natt_sport), lwip_ntohs(sa->natt_dport));
+			sa->initiator, (unsigned)sa->spi, sa->natt_mode,
+			lwip_ntohs(sa->natt_sport), lwip_ntohs(sa->natt_dport));
 	}
 
 	if (h->lifetime_soft) {
@@ -246,9 +252,9 @@ static int sadb_fill_sa_common(const struct sadb_msg *msg, const union sadb_head
 	}
 	// lifetime_current should never arrive in the message
 
-	sa->auth_alg	= h->sa->sadb_sa_auth;
-	sa->enc_alg	= h->sa->sadb_sa_encrypt;
-	sa->replay_win	= h->sa->sadb_sa_replay;
+	sa->auth_alg = h->sa->sadb_sa_auth;
+	sa->enc_alg = h->sa->sadb_sa_encrypt;
+	sa->replay_win = h->sa->sadb_sa_replay;
 
 	return 0;
 }
@@ -258,7 +264,7 @@ static int sadb_fill_msg_common(struct sadb_msg *msg, sad_entry_t *sa, int hsc)
 
 	size_t remaining = PFKEY_UNUNIT64(msg->sadb_msg_len) - sizeof(struct sadb_msg);
 
-  	memset(msg, 0, sizeof(struct sadb_msg));
+	memset(msg, 0, sizeof(struct sadb_msg));
 	msg->sadb_msg_version = PF_KEY_V2;
 	/* leaving set to 0 to be filled by the caller */
 	/*
@@ -275,10 +281,10 @@ static int sadb_fill_msg_common(struct sadb_msg *msg, sad_entry_t *sa, int hsc)
 	else
 		return -EINVAL;
 
-	struct sadb_ext* next_ext = (struct sadb_ext *)(msg + 1);
+	struct sadb_ext *next_ext = (struct sadb_ext *)(msg + 1);
 
 	/* sa */
-	struct sadb_sa* sa_ext = (struct sadb_sa*) next_ext;
+	struct sadb_sa *sa_ext = (struct sadb_sa *)next_ext;
 	sa_ext->sadb_sa_len = PFKEY_UNIT64(sizeof(struct sadb_sa));
 	sa_ext->sadb_sa_exttype = SADB_EXT_SA;
 	sa_ext->sadb_sa_spi = sa->spi;
@@ -291,11 +297,11 @@ static int sadb_fill_msg_common(struct sadb_msg *msg, sad_entry_t *sa, int hsc)
 
 	/* hard time */
 	if (hsc & 2) {
-		struct sadb_lifetime* lifetime = (struct sadb_lifetime *) next_ext;
+		struct sadb_lifetime *lifetime = (struct sadb_lifetime *)next_ext;
 		memset(lifetime, 0, sizeof(struct sadb_lifetime));
 		lifetime->sadb_lifetime_len = PFKEY_UNIT64(sizeof(struct sadb_lifetime));
 		lifetime->sadb_lifetime_exttype = SADB_EXT_LIFETIME_HARD;
-		lifetime->sadb_lifetime_allocations =  0;
+		lifetime->sadb_lifetime_allocations = 0;
 		lifetime->sadb_lifetime_bytes = 0;
 		lifetime->sadb_lifetime_addtime = sa->lifetime.hard_add_expires_seconds;
 		lifetime->sadb_lifetime_usetime = sa->lifetime.hard_use_expires_seconds;
@@ -304,11 +310,11 @@ static int sadb_fill_msg_common(struct sadb_msg *msg, sad_entry_t *sa, int hsc)
 	}
 	/* soft time */
 	if (hsc & 1) {
-		struct sadb_lifetime* lifetime = (struct sadb_lifetime *) next_ext;
+		struct sadb_lifetime *lifetime = (struct sadb_lifetime *)next_ext;
 		memset(lifetime, 0, sizeof(struct sadb_lifetime));
 		lifetime->sadb_lifetime_len = PFKEY_UNIT64(sizeof(struct sadb_lifetime));
 		lifetime->sadb_lifetime_exttype = SADB_EXT_LIFETIME_SOFT;
-		lifetime->sadb_lifetime_allocations =  0;
+		lifetime->sadb_lifetime_allocations = 0;
 		lifetime->sadb_lifetime_bytes = 0;
 		lifetime->sadb_lifetime_addtime = sa->lifetime.soft_add_expires_seconds;
 		lifetime->sadb_lifetime_usetime = sa->lifetime.soft_use_expires_seconds;
@@ -317,7 +323,7 @@ static int sadb_fill_msg_common(struct sadb_msg *msg, sad_entry_t *sa, int hsc)
 	}
 
 	//TODO: add more
-	msg->sadb_msg_len = PFKEY_UNIT64(((uint8_t*)next_ext - (uint8_t*)msg));
+	msg->sadb_msg_len = PFKEY_UNIT64(((uint8_t *)next_ext - (uint8_t *)msg));
 
 	return msg->sadb_msg_len;
 }
@@ -341,7 +347,7 @@ static int sadb_update(const struct sadb_msg *msg, struct sadb_msg *reply)
 		return -ESRCH;
 
 	log_debug("itor: %p  spi: %x  mode: %d  dst_addr: %x", sa->initiator,
-			(unsigned)sa->spi, sa->mode, (unsigned)sa->addr.addr);
+		(unsigned)sa->spi, sa->mode, (unsigned)sa->addr.addr);
 
 	/* Is SPI a valid SA entry pointer? */
 	if (sa->spi != h.sa->sadb_sa_spi)
@@ -355,7 +361,7 @@ static int sadb_update(const struct sadb_msg *msg, struct sadb_msg *reply)
 		return ret;
 
 	/* forget initiator, SA moves from LARVAL to MATURE state */
-	sa->initiator		= NULL;
+	sa->initiator = NULL;
 
 	/* TODO: Add SADB_EXT_LIFETIME_* and SADB_EXT_IDENTITY_* extensions handling */
 	h.key_auth = NULL;
@@ -393,7 +399,8 @@ static int sadb_add(const struct sadb_msg *msg, struct sadb_msg *reply)
 
 	if (addr == ipsecdev_getIP("ipsec0")) {
 		sad = &db_sets->outbound_sad;
-		addr = ((struct sockaddr_in *)PFKEY_ADDR_SADDR(h.address_dst))->sin_addr.s_addr;;
+		addr = ((struct sockaddr_in *)PFKEY_ADDR_SADDR(h.address_dst))->sin_addr.s_addr;
+		;
 	}
 	else
 		sad = &db_sets->inbound_sad;
@@ -404,21 +411,21 @@ static int sadb_add(const struct sadb_msg *msg, struct sadb_msg *reply)
 	if (ret)
 		return ret;
 
-	sa_entry.spi        = h.sa->sadb_sa_spi;
-	sa_entry.addr.addr  = addr;
+	sa_entry.spi = h.sa->sadb_sa_spi;
+	sa_entry.addr.addr = addr;
 	if (h.sa2 != NULL) {
-		sa_entry.mode   = h.sa2->sadb_x_sa2_mode;
+		sa_entry.mode = h.sa2->sadb_x_sa2_mode;
 		sa_entry.seqnum = h.sa2->sadb_x_sa2_sequence;
 	}
 	else
 		sa_entry.mode = IPSEC_MODE_TUNNEL;
 
 	/* TODO: Add SADB_EXT_LIFETIME_* and SADB_EXT_IDENTITY_* extensions handling */
-	if((sa = ipsec_sad_add(&sa_entry, sad)) == NULL)
+	if ((sa = ipsec_sad_add(&sa_entry, sad)) == NULL)
 		return -ENOMEM;
 
 	log_debug("itor: %p  spi: %x  mode: %d  dst_addr: %x", sa->initiator,
-			(unsigned)sa->spi, sa->mode, (unsigned)sa->addr.addr);
+		(unsigned)sa->spi, sa->mode, (unsigned)sa->addr.addr);
 
 	ipsecdev_enable("ipsec0");
 
@@ -492,46 +499,34 @@ static int sadb_register(const struct sadb_msg *msg, struct sadb_msg *reply)
 	struct sadb_supported *supported;
 	const struct sadb_alg *algs;
 	size_t algs_size;
-	int	ext_type;
+	int ext_type;
 	static const struct sadb_alg enc_algs[] = {
-		{
-			.sadb_alg_id = SADB_EALG_DESCBC,
+		{ .sadb_alg_id = SADB_EALG_DESCBC,
 			.sadb_alg_ivlen = 8,
 			.sadb_alg_minbits = 64,
-			.sadb_alg_maxbits = 64
-		},
-		{
-			.sadb_alg_id = SADB_EALG_3DESCBC,
+			.sadb_alg_maxbits = 64 },
+		{ .sadb_alg_id = SADB_EALG_3DESCBC,
 			.sadb_alg_ivlen = 8,
 			.sadb_alg_minbits = 192,
-			.sadb_alg_maxbits = 192
-		},
-		{
-			.sadb_alg_id = SADB_X_EALG_AES,
+			.sadb_alg_maxbits = 192 },
+		{ .sadb_alg_id = SADB_X_EALG_AES,
 			.sadb_alg_ivlen = 8,
 			.sadb_alg_minbits = 128,
-			.sadb_alg_maxbits = 256
-		},
+			.sadb_alg_maxbits = 256 },
 	};
 	static const struct sadb_alg auth_algs[] = {
-		{
-			.sadb_alg_id = SADB_AALG_MD5HMAC,
+		{ .sadb_alg_id = SADB_AALG_MD5HMAC,
 			.sadb_alg_ivlen = 0,
 			.sadb_alg_minbits = 128,
-			.sadb_alg_maxbits = 128
-		},
-		{
-			.sadb_alg_id = SADB_AALG_SHA1HMAC,
+			.sadb_alg_maxbits = 128 },
+		{ .sadb_alg_id = SADB_AALG_SHA1HMAC,
 			.sadb_alg_ivlen = 0,
 			.sadb_alg_minbits = 160,
-			.sadb_alg_maxbits = 160
-		},
-		{
-			.sadb_alg_id = SADB_X_AALG_SHA2_256,
+			.sadb_alg_maxbits = 160 },
+		{ .sadb_alg_id = SADB_X_AALG_SHA2_256,
 			.sadb_alg_ivlen = 0,
 			.sadb_alg_minbits = 256,
-			.sadb_alg_maxbits = 256
-		},
+			.sadb_alg_maxbits = 256 },
 	};
 
 	switch (msg->sadb_msg_satype) {
@@ -581,9 +576,9 @@ static int sadb_debug_ipsecreq(const struct sadb_x_ipsecrequest *req, unsigned i
 	unsigned addridx = 0;
 
 	log_debug("SADB_X_SPDADD: ipsec[%u]: proto=%u mode=%u level=%u id=%u (len=%u, sa_len=%u)",
-		    idx, req->sadb_x_ipsecrequest_proto,
-		    req->sadb_x_ipsecrequest_mode, req->sadb_x_ipsecrequest_level,
-		    req->sadb_x_ipsecrequest_reqid, req->sadb_x_ipsecrequest_len, sa_len);
+		idx, req->sadb_x_ipsecrequest_proto,
+		req->sadb_x_ipsecrequest_mode, req->sadb_x_ipsecrequest_level,
+		req->sadb_x_ipsecrequest_reqid, req->sadb_x_ipsecrequest_len, sa_len);
 
 	while (sa_len > 2) {
 		if (sa->sin_family != AF_INET) {
@@ -670,7 +665,7 @@ static int sadb_x_spdadd(const struct sadb_msg *msg, struct sadb_msg *reply)
 		}
 
 		if (ipsecreq->sadb_x_ipsecrequest_len <= sizeof(*ipsecreq))
-			return -EINVAL; // addresses are required for tunnel mode
+			return -EINVAL;  // addresses are required for tunnel mode
 
 		if (ipsecreq->sadb_x_ipsecrequest_len != sizeof(*ipsecreq) + 2 * sizeof(*addr)) {
 			main_printf(ATTR_DEBUG, "SADB_X_SPDADD: FIXME: ipsec: non-IPv4 addrs?\n");
@@ -707,7 +702,7 @@ static int sadb_x_spdadd(const struct sadb_msg *msg, struct sadb_msg *reply)
 	sp = ipsec_spd_add(src_addr, src_mask, dst_addr, dst_mask, PFKEY_ADDR_PROTO(h.address_src),
 		src_port, dst_port, h.policy->sadb_x_policy_type, dst_tun, spd,
 		h.policy->sadb_x_policy_dir != IPSEC_DIR_OUTBOUND);
-	if(sp == NULL) {
+	if (sp == NULL) {
 		return -ENOMEM;
 	}
 	h.policy->sadb_x_policy_id = (u32)sp;
@@ -764,13 +759,14 @@ static void ipsec_dump_tables(int dump_spd)
 	if (dump_spd) {
 		ipsec_spd_dump_log(&db_sets->inbound_spd, "In  ");
 		ipsec_spd_dump_log(&db_sets->outbound_spd, "Out ");
-	} else {
+	}
+	else {
 		ipsec_sad_dump_log(&db_sets->inbound_sad, "In  ");
 		ipsec_sad_dump_log(&db_sets->outbound_sad, "Out ");
 	}
 }
 
-#define CHECK_TIMEOUTS_MS (5*1000)
+#define CHECK_TIMEOUTS_MS (5 * 1000)
 
 static int ipsec_check_timeouts(void *arg)
 {
@@ -779,7 +775,7 @@ static int ipsec_check_timeouts(void *arg)
 	int any_expired = 0;
 	int is_soft;
 	char msgbuf[512];
-	struct sadb_msg* msg = (struct sadb_msg*) msgbuf;
+	struct sadb_msg *msg = (struct sadb_msg *)msgbuf;
 
 
 	db_sets = ipsecdev_dbsget("ipsec0");
@@ -792,16 +788,14 @@ static int ipsec_check_timeouts(void *arg)
 		} while (!sadb_check_timeouts_enabled);
 
 		// NOTE: we're sending one expiration at a time to avoid loops (the user is responsible for sending SADB_DELETE)
-		if (((sa_expired = ipsec_sad_check_timeouts(&db_sets->inbound_sad, &is_soft)) != NULL)
-				|| ((sa_expired = ipsec_sad_check_timeouts(&db_sets->outbound_sad, &is_soft)) != NULL))
-		{
+		if (((sa_expired = ipsec_sad_check_timeouts(&db_sets->inbound_sad, &is_soft)) != NULL) || ((sa_expired = ipsec_sad_check_timeouts(&db_sets->outbound_sad, &is_soft)) != NULL)) {
 			msg->sadb_msg_len = PFKEY_UNIT64(sizeof(msgbuf));
 			sadb_fill_msg_common(msg, sa_expired, (is_soft ? 1 : 2));
 			msg->sadb_msg_type = SADB_EXPIRE;
 			int is_larval = sa_expired->initiator != 0;
 
 			log_debug("SADB_EXPIRE (%s): spi: %x  mode: %d  dst_addr: %x",
-					(is_soft ? "soft" : "hard"), (unsigned)sa_expired->spi, sa_expired->mode, (unsigned)sa_expired->addr.addr);
+				(is_soft ? "soft" : "hard"), (unsigned)sa_expired->spi, sa_expired->mode, (unsigned)sa_expired->addr.addr);
 
 			socketKey_notify(msg);
 
@@ -814,7 +808,6 @@ static int ipsec_check_timeouts(void *arg)
 				ipsec_sad_del_spi(sa_expired->spi, &db_sets->outbound_sad);
 				ipsec_sad_del_spi(sa_expired->spi, &db_sets->inbound_sad);
 			}
-
 		}
 	}
 
@@ -866,27 +859,27 @@ int ipsec_sadbDispatch(struct sadb_msg *msg, struct sadb_msg *reply, const size_
 	reply->sadb_msg_len = reply_len / sizeof(u64);
 
 	switch (msg->sadb_msg_type) {
-		case SADB_GETSPI  :
+		case SADB_GETSPI:
 			log_debug("SADB_GETSPI");
 			err = sadb_getSPI(msg, reply);
 			break;
 
-		case SADB_UPDATE  :
+		case SADB_UPDATE:
 			log_debug("SADB_UPDATE");
 			err = sadb_update(msg, reply);
 			break;
 
-		case SADB_ADD     :
+		case SADB_ADD:
 			log_debug("SADB_ADD");
 			err = sadb_add(msg, reply);
 			break;
 
-		case SADB_DELETE  :
+		case SADB_DELETE:
 			log_debug("SADB_DELETE");
 			err = sadb_del(msg, reply);
 			break;
 
-		case SADB_ACQUIRE :
+		case SADB_ACQUIRE:
 			log_debug("SADB_ACQUIRE");
 			break;
 
@@ -895,11 +888,11 @@ int ipsec_sadbDispatch(struct sadb_msg *msg, struct sadb_msg *reply, const size_
 			err = sadb_register(msg, reply);
 			break;
 
-		case SADB_EXPIRE  :
+		case SADB_EXPIRE:
 			log_debug("SADB_EXPIRE");
 			break;
 
-		case SADB_FLUSH   :
+		case SADB_FLUSH:
 			log_debug("SADB_FLUSH");
 			err = sadb_flush(msg, reply);
 			break;

@@ -48,7 +48,7 @@ int mbuff_feedEx(mbuff_t *mbuff, const void *data, size_t size, void *priv)
 {
 	mbuff_t *buff = mbuff;
 
-	if(mbuff->size != 0) {
+	if (mbuff->size != 0) {
 		buff = mbuff_alloc();
 		if (buff == NULL)
 			return -ENOMEM;
@@ -132,7 +132,8 @@ int mbuff_take(mbuff_t **mbuff, void *data, size_t size)
 mbuff_t *mbuff_last(mbuff_t *mbuff)
 {
 	mbuff_t *it;
-	for (it = mbuff; it->next != NULL; it = it->next);
+	for (it = mbuff; it->next != NULL; it = it->next)
+		;
 	return it;
 }
 
