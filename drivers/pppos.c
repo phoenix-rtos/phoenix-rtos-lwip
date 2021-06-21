@@ -231,7 +231,7 @@ static int at_send_cmd_res(int fd, const char* cmd, int timeout_ms, char *rx_buf
 			serial_close(fd);
 			return -1;
 		} else {
-			rx_buf[off + len + 1] = '\0';
+			rx_buf[off + len] = '\0';
 
 			int res = at_check_result(rx_buf);
 			off += len;
