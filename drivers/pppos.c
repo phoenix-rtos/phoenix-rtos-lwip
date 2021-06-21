@@ -34,6 +34,10 @@ enum {
 	CONN_STATE_CONNECTED,
 };
 
+enum {
+	CFG_FLAG_DEFAULT_UP = 0x01,
+};
+
 typedef struct
 {
 	struct netif *netif;
@@ -47,6 +51,7 @@ typedef struct
 #endif
 	int fd;
 
+	volatile int thread_running;
 	volatile int want_connected;
 	volatile int conn_state;
 	handle_t lock, cond;
@@ -294,7 +299,6 @@ static int at_is_responding(int fd, int timeout_ms)
 {
 	int res;
 	int retry = 5;
-
 	while ((res = at_send_cmd(fd, "AT\r\n", timeout_ms)) != AT_RESULT_OK && retry--);
 
 	if (res != AT_RESULT_OK) {
@@ -456,6 +460,7 @@ static void pppos_mainLoop(void* _state)
 
 	int running = 1;
 
+	state->thread_running = 1;
 	while (running) {
 		mutexLock(state->lock);
 		while (!state->want_connected) {
@@ -660,10 +665,28 @@ static void pppos_statusCallback(struct netif *netif)
 	}
 }
 
+
+static char *cfg_get_next_arg(char *arg)
+{
+	if (arg == NULL || *arg == '\0')
+		return NULL;
+
+	for (; *arg; arg++) {
+		if (*arg == ':') {
+			*arg++ = '\0';
+			break;
+		}
+	}
+
+	return arg;
+}
+
+
 static int pppos_netifInit(struct netif *netif, char *cfg)
 {
 	pppos_priv_t* state;
-
+	int retries, flags = 0;
+	char *next;
 
 	// NOTE: netif->state cannot be used to keep our private state as it is used by LWiP PPP implementation, pass it as *ctx to callbacks
 	state = netif->state;
@@ -672,35 +695,26 @@ static int pppos_netifInit(struct netif *netif, char *cfg)
 	memset(state, 0, sizeof(pppos_priv_t));
 	state->netif = netif;
 	state->serialdev_fn = cfg;
-
-	while (*cfg && *cfg != ':')
-		++cfg;
-
-	if (*cfg != ':') {
-		log_error("APN is not configured");
-		return ERR_ARG;
-	}
-
-	*cfg = 0;
-	cfg++;
+	state->serialat_fn = "/dev/ttyacm1";
+	state->fd = -1;
 
 #if PPPOS_USE_CONFIG_FILE
 	state->config_path = cfg;
 #endif
 
-	while (*cfg && *cfg != ':')
-		++cfg;
+	for (; (next = cfg_get_next_arg(cfg)); cfg = next) {
+		if (!strncmp(cfg, "/dev/", 5)) {
+			state->serialat_fn = cfg;
+			log_info("config device: ", cfg);
+			continue;
+		}
 
-	if (*cfg == ':') {
-		*cfg = 0;
-		cfg++;
-		state->serialat_fn = cfg;
+		if (strcmp(cfg, "up") == 0) {
+			flags |= CFG_FLAG_DEFAULT_UP;
+			log_info("config up: yes");
+			continue;
+		}
 	}
-	else {
-		state->serialat_fn = "/dev/ttyacm1";
-	}
-
-	state->fd = -1;
 
 	mutexCreate(&state->lock);
 	condCreate(&state->cond);
@@ -723,6 +737,21 @@ static int pppos_netifInit(struct netif *netif, char *cfg)
 	}
 
 	beginthread(pppos_mainLoop, 4, (void *)state->main_loop_stack, sizeof(state->main_loop_stack), state);
+
+	for (retries = 3; retries > 0; retries--) {
+		/* wait until thread started */
+		if (!state->thread_running) {
+			sleep(1);
+			continue;
+		}
+
+		if (flags & CFG_FLAG_DEFAULT_UP) {
+			log_info("pppou netif up");
+			netif_set_up(netif);
+		}
+
+		break;
+	}
 
 	return ERR_OK;
 }
