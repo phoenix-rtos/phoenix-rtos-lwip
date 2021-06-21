@@ -6,5 +6,6 @@
 # Copyright 2021 Phoenix Systems
 #
 
-NET_DRIVERS_SUPPORTED := pppou
+NET_DRIVERS_SUPPORTED := pppou pppos
 NET_DRIVERS ?= $(NET_DRIVERS_SUPPORTED)
+PPPOS_MODEM := huawei
