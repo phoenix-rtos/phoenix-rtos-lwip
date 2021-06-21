@@ -37,6 +37,7 @@ enum {
 enum {
 	CFG_FLAG_DEFAULT_UP = 0x01,
 	CFG_FLAG_NO_DEFAULT_ROUTE = 0x02,
+	CFG_FLAG_NO_DNS = 0x04,
 };
 
 typedef struct
@@ -724,6 +725,12 @@ static int pppos_netifInit(struct netif *netif, char *cfg)
 			log_info("config no default route: yes");
 			continue;
 		}
+
+		if (strcmp(cfg, "nodns") == 0) {
+			flags |= CFG_FLAG_NO_DNS;
+			log_info("config no DNS: yes");
+			continue;
+		}
 	}
 
 	mutexCreate(&state->lock);
@@ -746,6 +753,11 @@ static int pppos_netifInit(struct netif *netif, char *cfg)
 		ppp_set_netif_statuscallback(state->ppp, pppos_statusCallback);
 		if (!(flags & CFG_FLAG_NO_DEFAULT_ROUTE))
 			ppp_set_default(state->ppp);
+
+#if LWIP_DNS
+		if (!(flags & CFG_FLAG_NO_DNS))
+			ppp_set_usepeerdns(state->ppp, 1);
+#endif /* LWIP_DNS */
 	}
 
 	beginthread(pppos_mainLoop, 4, (void *)state->main_loop_stack, sizeof(state->main_loop_stack), state);
