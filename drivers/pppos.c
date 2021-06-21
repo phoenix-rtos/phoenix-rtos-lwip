@@ -210,14 +210,17 @@ static const char * at_result_to_str(int res) {
 static int at_send_cmd_res(int fd, const char* cmd, int timeout_ms, char *rx_buf, int rx_bufsize)
 {
 	int max_len = rx_bufsize - 1;
+	char *end;
 
 	if (fd < 0) {
 		log_error("%s: invalid file descriptor!", __func__);
 		return ERR_ARG;
 	}
 
-	log_at("AT Tx: [%s]", cmd);
 	serial_write(fd, (u8_t*)cmd, strlen(cmd));
+	end = strstr(cmd, "\r\n");
+	/* remove newlines for better result printing */
+	log_at("AT Tx: [%*s]", (end != NULL) ? end - cmd : strlen(cmd), cmd);
 
 	// wait for result with optional response text
 	int off = 0;
