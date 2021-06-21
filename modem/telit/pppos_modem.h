@@ -15,6 +15,7 @@
 #include <stddef.h>
 
 #define PPPOS_USE_CONFIG_FILE     1
+#define PPPOS_USE_AUTH            0
 #define PPPOS_DISCONNECT_ON_INIT  1
 #define AT_CONNECT_CMD            "AT+CGDATA=\"PPP\",1\r\n"
 #define AT_INIT_CMDS_TIMEOUT_MS   3000

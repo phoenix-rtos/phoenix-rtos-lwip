@@ -3,8 +3,8 @@
  *
  * PPP over Serial driver
  *
- * Copyright 2018 Phoenix Systems
- * Author: Marek Białowąs
+ * Copyright 2018, 2021 Phoenix Systems
+ * Author: Marek Białowąs, Maciej Purski
  *
  * %LICENSE%
  */
@@ -497,7 +497,6 @@ static void pppos_mainLoop(void* _state)
 		if (!at_is_responding(state->fd, 1000)) {
 			goto fail;
 		}
-
 		const char** at_cmd = at_init_cmds;
 		while (*at_cmd) {
 			if ((res = at_send_cmd(state->fd, *at_cmd, AT_INIT_CMDS_TIMEOUT_MS)) != AT_RESULT_OK) {
@@ -758,6 +757,10 @@ static int pppos_netifInit(struct netif *netif, char *cfg)
 		if (!(flags & CFG_FLAG_NO_DNS))
 			ppp_set_usepeerdns(state->ppp, 1);
 #endif /* LWIP_DNS */
+
+#if PPPOS_USE_AUTH
+		ppp_set_auth(state->ppp, PPPOS_AUTH_TYPE, PPPOS_AUTH_USER, PPPOS_AUTH_PASSWD);
+#endif /* PPPOS_USE_AUTH */
 	}
 
 	beginthread(pppos_mainLoop, 4, (void *)state->main_loop_stack, sizeof(state->main_loop_stack), state);
