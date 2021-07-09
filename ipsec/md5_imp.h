@@ -23,20 +23,21 @@
  * See md5.c for more information.
  */
 
-#ifdef HAVE_OPENSSL
-#include <openssl/md5.h>
-#elif !defined(_MD5_H)
-#define _MD5_H
+#ifndef _MD5_IMP_H_
+#define _MD5_IMP_H_
+
+#include <stdint.h>
+#include <stddef.h>
 
 typedef struct {
-	u32 lo, hi;
-	u32 a, b, c, d;
-	u8 buffer[64];
-	u32 block[16];
+	uint32_t lo, hi;
+	uint32_t a, b, c, d;
+	uint8_t buffer[64];
+	uint32_t block[16];
 } md5_context_t;
 
-extern void md5_init(md5_context_t *ctx);
-extern void md5_update(md5_context_t *ctx, const void *data, size_t size);
-extern void md5_final(u8 *result, md5_context_t *ctx);
+extern void ipsec_md5_init(md5_context_t *ctx);
+extern void ipsec_md5_update(md5_context_t *ctx, const void *data, size_t size);
+extern void ipsec_md5_final(uint8_t *result, md5_context_t *ctx);
 
 #endif

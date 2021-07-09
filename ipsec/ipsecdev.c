@@ -36,45 +36,47 @@
  * All rights reserved.</EM><HR>
  */
 
-#include <ipv4/lwip/inet.h>
-#include <ipv4/lwip/ip4.h>
-#include <lwip/udp.h>
-#include <lwip/tcp_impl.h>
-#include "lwip/mem.h"
-#include "debug.h"
-#include "sa.h"
-#include "sadb.h"
-#include "ipsec.h"
-#include "util.h"
 #include "ipsecdev.h"
+
+#include "debug.h"
+#include "sadb.h"
+
+#include "lwip/ip.h"
+#include "lwip/prot/udp.h"
+#include "lwip/prot/tcp.h"
+
+#include <assert.h>
+#include <string.h>
+#include <sys/threads.h>
+
 
 #define IPSEC_FLAGS_ENABLED 1
 
 struct ipsec_priv {
-	u32 sentbytes;
-	u32 flags;
+	u32_t sentbytes;
+	u32_t flags;
 	struct netif *hw_netif;
 	netif_output_fn hw_output;
 	netif_input_fn hw_input;
 	netif_linkoutput_fn hw_linkoutput;
 	netif_input_fn hw_ip_input;
 	db_set_netif db_sets;
-	mutex_t mutex;
+	handle_t mutex;
 };
 
 
-static void update_ip_csum(u16 *csum, u32 dcsum_folded)
+static u32_t update_ip_csum(u16_t csum, u32_t dcsum_folded)
 {
 	/* RFC 1624 incremental csum update */
-	u32 tmp = (u16) ~*csum + dcsum_folded;
+	u32_t tmp = (u16_t)~csum + dcsum_folded;
 	tmp = (tmp >> 16) + (tmp & 0xFFFF);
 	tmp = (tmp >> 16) + (tmp & 0xFFFF);
-	*csum = ~tmp;
+	return ~tmp;
 }
 
-static void ipsecdev_apply_static_nat(struct ip_hdr *ip, u32 addr, int src)
+static void ipsecdev_apply_static_nat(struct ip_hdr *ip, u32_t addr, int src)
 {
-	u32 dcsum = ~(src ? ip->src.addr : ip->dest.addr) + addr;
+	u32_t dcsum = ~(src ? ip->src.addr : ip->dest.addr) + addr;
 	if (dcsum < addr)
 		++dcsum;  // sum overflowed -> add 1 for U1
 	dcsum = (dcsum >> 16) + (dcsum & 0xFFFF);
@@ -84,15 +86,15 @@ static void ipsecdev_apply_static_nat(struct ip_hdr *ip, u32 addr, int src)
 	else
 		ip->dest.addr = addr;
 
-	update_ip_csum(&ip->_chksum, dcsum);
+	ip->_chksum = update_ip_csum(ip->_chksum, dcsum);
 
 	if (ip->_proto == IP_PROTO_UDP) {
 		struct udp_hdr *udph = (void *)((char *)ip + IPH_HL(ip) * 4);
-		update_ip_csum(&udph->chksum, dcsum);
+		udph->chksum = update_ip_csum(udph->chksum, dcsum);
 	}
 	else if (ip->_proto == IP_PROTO_TCP) {
 		struct tcp_hdr *tcph = (void *)((char *)ip + IPH_HL(ip) * 4);
-		update_ip_csum(&tcph->chksum, dcsum);
+		tcph->chksum = update_ip_csum(tcph->chksum, dcsum);
 	}
 }
 
@@ -112,6 +114,7 @@ static void ipsecdev_apply_static_nat(struct ip_hdr *ip, u32 addr, int src)
  */
 static err_t ipsecdev_ip_input(struct pbuf *p, struct netif *netif)
 {
+	struct netif *ipsecdev = netif_ipsec_data(netif);
 	int retcode;
 	int payload_offset = 0;
 	int payload_size = 0;
@@ -120,28 +123,28 @@ static err_t ipsecdev_ip_input(struct pbuf *p, struct netif *netif)
 	spd_entry_t *spd;
 	struct ip_hdr *iph = (void *)p->payload;
 
-	assert(netif->ipsecdev != NULL);
-	assert(netif->ipsecdev != netif);
-	assert(netif->ipsecdev->ipsecdev == netif->ipsecdev);
+	assert(ipsecdev != NULL);
+	assert(ipsecdev != netif);
+	assert(netif_ipsec_data(ipsecdev) == ipsecdev);
 
-	state = (struct ipsec_priv *)netif->ipsecdev->state;
+	state = (struct ipsec_priv *)ipsecdev->state;
 
 	if ((state->flags & IPSEC_FLAGS_ENABLED) == 0)
 		return state->hw_ip_input(p, netif);
 
-	IPSEC_LOG_TRC(IPSEC_TRACE_ENTER, "ipsecdev_ip_input", "p=%p, netif=%p, state=%p", p, netif, state);
+	IPSEC_LOG_TRC(IPSEC_TRACE_ENTER, "p=%p, netif=%p, state=%p", p, netif, state);
 
 	if (p == NULL || p->payload == NULL) {
-		IPSEC_LOG_DBG("ipsecdev_input", IPSEC_STATUS_DATA_SIZE_ERROR, "Packet has no payload. Can't pass it to higher level protocol stacks.");
+		IPSEC_LOG_DBG(IPSEC_STATUS_DATA_SIZE_ERROR, "Packet has no payload. Can't pass it to higher level protocol stacks.");
 		pbuf_free(p);
-		IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "ipsecdev_input", "return = %d (no payload)", ERR_OK);
-		return EOK;
+		IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "return = %d (no payload)", ERR_OK);
+		return ERR_OK;
 	}
 	if (p->next != NULL) {
-		IPSEC_LOG_DBG("ipsecdev_input", IPSEC_STATUS_DATA_SIZE_ERROR, "can not handle chained pbuf - (packet must be < %d bytes )", PBUF_POOL_BUFSIZE - PBUF_LINK_HLEN - IPSEC_HLEN);
+		IPSEC_LOG_DBG(IPSEC_STATUS_DATA_SIZE_ERROR, "can not handle chained pbuf - (packet must be < %d bytes )", PBUF_POOL_BUFSIZE - PBUF_LINK_HLEN - IPSEC_HLEN);
 		/* in case of error, free pbuf and return ERR_OK as lwIP does */
 		pbuf_free(p);
-		IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "ipsecdev_input", "return = %d (chained)", ERR_OK);
+		IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "return = %d (chained)", ERR_OK);
 		return ERR_OK;
 	}
 
@@ -151,7 +154,7 @@ static err_t ipsecdev_ip_input(struct pbuf *p, struct netif *netif)
 		retcode = ipsec_input(p->payload, p->len, &payload_offset, &payload_size, &state->db_sets);
 
 		if (proto != IP_PROTO_UDP || retcode != IPSEC_STATUS_NO_SA_FOUND)
-			IPSEC_LOG_DBG("ipsecdev_input", retcode, "outer-IP src %08lx dest %08lx proto %u len %u",
+			IPSEC_LOG_DBG(retcode, "outer-IP src %08lx dest %08lx proto %u len %u",
 				lwip_ntohl(iph->src.addr), lwip_ntohl(iph->dest.addr), iph->_proto, p->len);
 
 		if (retcode == IPSEC_STATUS_SUCCESS) {
@@ -161,7 +164,7 @@ static err_t ipsecdev_ip_input(struct pbuf *p, struct netif *netif)
 			p->tot_len = payload_size;
 
 			iph = p->payload;
-			IPSEC_LOG_DBG("ipsecdev_input", IPSEC_STATUS_SUCCESS, "inner-IP src %08lx dest %08lx proto %u len %u",
+			IPSEC_LOG_DBG(IPSEC_STATUS_SUCCESS, "inner-IP src %08lx dest %08lx proto %u len %u",
 				lwip_ntohl(iph->src.addr), lwip_ntohl(iph->dest.addr), iph->_proto, p->len);
 
 			/* check what the policy says about IPsec traffic */
@@ -169,28 +172,28 @@ static err_t ipsecdev_ip_input(struct pbuf *p, struct netif *netif)
 
 			if (!spd || spd->policy != IPSEC_POLICY_IPSEC) {
 				retcode = IPSEC_STATUS_FAILURE;
-				IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "ipsecdev_input", "return = (%d) (no policy; %d+%d)",
+				IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "return = (%d) (no policy; %d+%d)",
 					retcode, payload_offset, payload_size);
 				pbuf_free(p);
 				return retcode;
 			}
 
 			/* change in-tunnel dst-IP if needed (Virtual IP) */
-			if (!ip_addr_isany(&(netif->ipsecdev->ip_addr)) && ip_addr_cmp(&iph->dest, &netif->ipsecdev->ip_addr) && !ip_addr_isany(&netif->ip_addr)) {
-				IPSEC_LOG_DBG("ipsecdev_input", IPSEC_STATUS_SUCCESS, "%s: DNAT after IPsec: %08lx to %08lx",
-					netif->name, lwip_ntohl(iph->dest.addr), lwip_ntohl(netif->ip_addr.addr));
+			if (!ip_addr_isany(&(ipsecdev->ip_addr)) && ip_addr_cmp(&iph->dest, &ipsecdev->ip_addr) && !ip_addr_isany(&netif->ip_addr)) {
+				IPSEC_LOG_DBG(IPSEC_STATUS_SUCCESS, "%2s%u: DNAT after IPsec: %08lx to %08lx",
+					netif->name, netif->num, lwip_ntohl(iph->dest.addr), lwip_ntohl(netif->ip_addr.addr));
 				ipsecdev_apply_static_nat(iph, netif->ip_addr.addr, 0);
 			}
 
 			retcode = state->hw_ip_input(p, netif);
-			IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "ipsecdev_ip_input", "return = (%d) (unpacked; %d+%d)", retcode, payload_offset, payload_size);
+			IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "return = (%d) (unpacked; %d+%d)", retcode, payload_offset, payload_size);
 			return retcode;
 		}
 
 		if (proto != IP_PROTO_UDP || retcode != IPSEC_STATUS_NO_SA_FOUND) {
-			IPSEC_LOG_ERR("ipsecdev_input", retcode, "error on ipsec_input() processing (retcode = %d)", retcode);
+			IPSEC_LOG_ERR(retcode, "error on ipsec_input() processing (retcode = %d)", retcode);
 			pbuf_free(p);
-			IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "ipsecdev_ip_input", "return = %d (dropped on error)", retcode);
+			IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "return = %d (dropped on error)", retcode);
 			return retcode;
 		}
 	}
@@ -198,13 +201,13 @@ static err_t ipsecdev_ip_input(struct pbuf *p, struct netif *netif)
 	/* check what the policy says about non-IPsec traffic */
 	spd = ipsec_spd_lookup(p->payload, &state->db_sets.inbound_spd, IPSEC_MATCH_BOTH);
 
-	IPSEC_LOG_DBG("ipsecdev_input", spd && spd->policy == IPSEC_POLICY_BYPASS ? IPSEC_STATUS_SUCCESS : IPSEC_STATUS_FAILURE,
+	IPSEC_LOG_DBG(spd && spd->policy == IPSEC_POLICY_BYPASS ? IPSEC_STATUS_SUCCESS : IPSEC_STATUS_FAILURE,
 		"IP src %08lx dest %08lx proto %u len %u",
 		lwip_ntohl(iph->src.addr), lwip_ntohl(iph->dest.addr), iph->_proto, p->len);
 
 	if (spd == NULL) {
 		pbuf_free(p);
-		IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "ipsecdev_input", "return = %d (no policy)", ERR_CONN);
+		IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "return = %d (no policy)", ERR_CONN);
 		return ERR_CONN;
 	}
 
@@ -221,12 +224,12 @@ static err_t ipsecdev_ip_input(struct pbuf *p, struct netif *netif)
 			break;
 		default:
 			pbuf_free(p);
-			IPSEC_LOG_ERR("ipsecdev_input", IPSEC_STATUS_FAILURE, ("IPSEC_STATUS_FAILURE: dropping packet"));
-			IPSEC_LOG_AUD("ipsecdev_input", IPSEC_AUDIT_FAILURE, ("unknown Security Policy: dropping packet"));
+			IPSEC_LOG_ERR(IPSEC_STATUS_FAILURE, "IPSEC_STATUS_FAILURE: dropping packet");
+			IPSEC_LOG_AUD(IPSEC_AUDIT_FAILURE, "unknown Security Policy: dropping packet");
 	}
 
 	/* usually return ERR_OK as lwIP does */
-	IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "ipsecdev_ip_input", "return = %d, policy %s", retcode,
+	IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "return = %d, policy %s", retcode,
 		spd->policy == IPSEC_POLICY_IPSEC ? "IPSEC" : spd->policy == IPSEC_POLICY_BYPASS ? "BYPASS" : "DISCARD");
 	return retcode;
 }
@@ -244,8 +247,9 @@ static err_t ipsecdev_ip_input(struct pbuf *p, struct netif *netif)
  * @param  ipaddr  destination IP address
  * @return err_t   status
  */
-static err_t ipsecdev_output(struct netif *netif, struct pbuf *p, struct ip_addr *ipaddr)
+static err_t ipsecdev_output(struct netif *netif, struct pbuf *p, const ip4_addr_t *ipaddr)
 {
+	struct netif *ipsecdev = netif_ipsec_data(netif);
 	struct pbuf *p_cpy = NULL;
 	struct ipsec_priv *state;
 	int payload_size;
@@ -254,68 +258,68 @@ static err_t ipsecdev_output(struct netif *netif, struct pbuf *p, struct ip_addr
 	sad_entry_t *sa;
 	ipsec_status status;
 	struct ip_hdr *ip;
-	struct ip_addr dest_addr;
-	ip_addr_p_t dst;
+	ip4_addr_t dest_addr;
+	ip4_addr_p_t dst;
 	int retcode = ERR_CONN;
 
-	assert(netif->ipsecdev != NULL);
+	assert(ipsecdev != NULL);
 
-	if (netif->ipsecdev == netif) {
+	if (ipsecdev == netif) {
 		// somebody tried to route packet directly via ipsec device, abort!
-		IPSEC_LOG_ERR("ipsecdev_output", IPSEC_STATUS_FAILURE, ("tried to output packet directly via IPSEC virtual device"));
+		IPSEC_LOG_ERR(IPSEC_STATUS_FAILURE, "tried to output packet directly via IPSEC virtual device");
 		return ERR_RTE;
 	}
 
-	assert(netif->ipsecdev->ipsecdev == netif->ipsecdev);
+	assert(netif_ipsec_data(ipsecdev) == ipsecdev);
 
-	state = (struct ipsec_priv *)netif->ipsecdev->state;
+	state = (struct ipsec_priv *)ipsecdev->state;
 
 	if ((state->flags & IPSEC_FLAGS_ENABLED) == 0)
 		return state->hw_output(state->hw_netif, p, ipaddr);
 
-	IPSEC_LOG_TRC(IPSEC_TRACE_ENTER, "ipsecdev_output", "pbuf=%p, netif=%s", p, netif->name);
+	IPSEC_LOG_TRC(IPSEC_TRACE_ENTER, "pbuf=%p, netif=%2s%u", p, netif->name, netif->num);
 
 	if (p->next != NULL) {
 		pbuf_ref(p);
 		p = pbuf_coalesce(p, PBUF_TRANSPORT);
 		if (p->next != NULL) {
 			pbuf_free(p);
-			IPSEC_LOG_DBG("ipsecdev_output", IPSEC_STATUS_DATA_SIZE_ERROR, "can not handle chained pbuf - use pbuf size of %d bytes", 1600 /*XXX*/);
-			IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "ipsecdev_output", "return = %d", ERR_CONN);
+			IPSEC_LOG_DBG(IPSEC_STATUS_DATA_SIZE_ERROR, "can not handle chained pbuf - use pbuf size of %d bytes", 1600 /*XXX*/);
+			IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "return = %d", ERR_CONN);
 			return ERR_CONN;
 		}
 	}
 
 	if (p->ref != 1) {
 		assert(0);
-		IPSEC_LOG_DBG("ipsecdev_output", IPSEC_STATUS_DATA_SIZE_ERROR, "can not handle pbuf->ref != 1 - p->ref == %d", p->ref);
-		IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "ipsecdev_output", "return = %d", ERR_CONN);
+		IPSEC_LOG_DBG(IPSEC_STATUS_DATA_SIZE_ERROR, "can not handle pbuf->ref != 1 - p->ref == %d", p->ref);
+		IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "return = %d", ERR_CONN);
 		return ERR_CONN;
 	}
 
 
 	/** backup of physical destination IP address (inner IP header may become encrypted) */
-	memcpy(&dest_addr, ipaddr, sizeof(struct ip_addr));
+	memcpy(&dest_addr, ipaddr, sizeof(ip4_addr_t));
 
 	/**@todo this static access to the HW device must be replaced by a more flexible method */
 
 	/* RFC conform IPsec processing */
 	ip = (struct ip_hdr *)p->payload;
-	spd = ipsec_spd_lookup(ip, &state->db_sets.outbound_spd, IPSEC_MATCH_DST);
+	spd = ipsec_spd_lookup(p->payload, &state->db_sets.outbound_spd, IPSEC_MATCH_DST);
 	if (spd == NULL) {
-		IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "ipsecdev_output", "return = %d", ERR_CONN);
+		IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "return = %d", ERR_CONN);
 		return ERR_CONN;
 	}
 
-	IPSEC_LOG_DBG("ipsecdev_output", IPSEC_STATUS_SUCCESS, "orig-IP src %08lx dest %08lx proto %u len %u policy %s",
+	IPSEC_LOG_DBG(IPSEC_STATUS_SUCCESS, "orig-IP src %08lx dest %08lx proto %u len %u policy %s",
 		lwip_ntohl(ip->src.addr), lwip_ntohl(ip->dest.addr), ip->_proto, p->len,
 		spd->policy == IPSEC_POLICY_IPSEC ? "IPSEC" : spd->policy == IPSEC_POLICY_BYPASS ? "BYPASS" : "DISCARD");
 
 	/* change in-tunnle src-IP (Virtual IP) */
-	if (spd->policy == IPSEC_POLICY_IPSEC && !ip_addr_isany(&(netif->ipsecdev->ip_addr)) && !ip_addr_cmp(&ip->src, &netif->ipsecdev->ip_addr)) {
-		IPSEC_LOG_DBG("ipsecdev_output", IPSEC_STATUS_SUCCESS, "%s: SNAT before IPsec: %08lx as %08lx",
-			netif->name, lwip_ntohl(ip->src.addr), lwip_ntohl(netif->ipsecdev->ip_addr.addr));
-		ipsecdev_apply_static_nat(ip, netif->ipsecdev->ip_addr.addr, 1);
+	if (spd->policy == IPSEC_POLICY_IPSEC && !ip_addr_isany(&ipsecdev->ip_addr) && !ip_addr_cmp(&ip->src, &ipsecdev->ip_addr)) {
+		IPSEC_LOG_DBG(IPSEC_STATUS_SUCCESS, "%2s%u: SNAT before IPsec: %08lx as %08lx",
+			netif->name, netif->num, lwip_ntohl(ip->src.addr), lwip_ntohl(ipsecdev->ip_addr.addr));
+		ipsecdev_apply_static_nat(ip, ipsecdev->ip_addr.addr, 1);
 	}
 
 	switch (spd->policy) {
@@ -323,7 +327,7 @@ static err_t ipsecdev_output(struct netif *netif, struct pbuf *p, struct ip_addr
 			dst.addr = spd->tunnel_dest ? spd->tunnel_dest : ip->dest.addr;
 			sa = ipsec_sad_lookup(dst, ip->_proto, 0, &state->db_sets.outbound_sad);
 			if (sa == NULL) {
-				main_printf(ATTR_DEBUG, "%s(): no SA for IP 0x%x, proto: %d\n", __func__, (unsigned)dst.addr, (unsigned)ip->_proto);
+				IPSEC_LOG_MSG("no SA for IP 0x%x, proto: %d", (unsigned)dst.addr, (unsigned)ip->_proto);
 				break;
 			}
 
@@ -334,16 +338,17 @@ static err_t ipsecdev_output(struct netif *netif, struct pbuf *p, struct ip_addr
 			 */
 			p_cpy = p;
 			if (sa->proto == IP_PROTO_ESP || p->next != NULL) {
-				// alloc 50 more bytes for ESP trailer and the optional ESP authentication data
-				p_cpy = pbuf_alloc(PBUF_TRANSPORT, p->tot_len + 32 /* possible padding + MACV */, PBUF_RAM);
+				/* FIXME: is 52 + 33 more bytes enough (headers + trailer)? */
+				p_cpy = pbuf_alloc(PBUF_TRANSPORT, p->tot_len + 52 + 33, PBUF_RAM);
 
 				if (p_cpy != NULL) {
-					p_cpy->len = p->tot_len;
-					p_cpy->tot_len = p->tot_len;
-					pbuf_copy(p_cpy, p);
+					p_cpy->len = p->tot_len + 52;
+					p_cpy->tot_len = p->tot_len + 52;
+					memcpy(p_cpy->payload + 52, p->payload, p->tot_len);
+					pbuf_remove_header(p_cpy, 52);
 				}
 				else {
-					IPSEC_LOG_ERR("ipsecdev_output", IPSEC_AUDIT_FAILURE, "can't alloc new pbuf for lwIP ESP TCP workaround!");
+					IPSEC_LOG_ERR(IPSEC_AUDIT_FAILURE, "can't alloc new pbuf for lwIP ESP TCP workaround!");
 				}
 			}
 
@@ -351,12 +356,12 @@ static err_t ipsecdev_output(struct netif *netif, struct pbuf *p, struct ip_addr
 
 			if (status == IPSEC_STATUS_SUCCESS) {
 				/* adjust pbuf structure according to the real packet size */
-				assert(!pbuf_header(p_cpy, -payload_offset));  // failed == packet overflowed and corrupted struct memory
+				pbuf_add_header_force(p_cpy, -payload_offset);
 				p_cpy->len = payload_size;
 				p_cpy->tot_len = payload_size;
 
 				ip = p_cpy->payload;
-				IPSEC_LOG_DBG("ipsecdev_output", IPSEC_STATUS_SUCCESS, "out-IP src %08lx dest %08lx proto %u len %u",
+				IPSEC_LOG_DBG(IPSEC_STATUS_SUCCESS, "out-IP src %08lx dest %08lx proto %u len %u",
 					lwip_ntohl(ip->src.addr), lwip_ntohl(ip->dest.addr), ip->_proto, p_cpy->len);
 
 				retcode = state->hw_output(state->hw_netif, p_cpy, &sa->addr);
@@ -364,7 +369,7 @@ static err_t ipsecdev_output(struct netif *netif, struct pbuf *p, struct ip_addr
 					pbuf_free(p_cpy);
 			}
 			else {
-				IPSEC_LOG_ERR("ipsec_output", status, ("error on ipsec_output() processing"));
+				IPSEC_LOG_ERR(status, "error on ipsec_output() processing");
 				if (sa->proto == IP_PROTO_ESP)
 					pbuf_free(p_cpy);
 				break;
@@ -373,17 +378,17 @@ static err_t ipsecdev_output(struct netif *netif, struct pbuf *p, struct ip_addr
 			retcode = ERR_OK;
 			break;
 		case IPSEC_POLICY_DISCARD:
-			IPSEC_LOG_AUD("ipsecdev_output", IPSEC_AUDIT_DISCARD, ("POLICY_DISCARD: dropping packet"));
+			IPSEC_LOG_AUD(IPSEC_AUDIT_DISCARD, "POLICY_DISCARD: dropping packet");
 			break;
 		case IPSEC_POLICY_BYPASS:
-			IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "ipsecdev_output", "(bypass)");
+			IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "(bypass)");
 			return state->hw_output(state->hw_netif, p, &dest_addr);
 		default:
-			IPSEC_LOG_ERR("ipsecdev_input", IPSEC_STATUS_FAILURE, ("POLICY_DIRCARD: dropping packet"));
-			IPSEC_LOG_AUD("ipsecdev_input", IPSEC_AUDIT_FAILURE, ("unknown Security Policy: dropping packet"));
+			IPSEC_LOG_ERR(IPSEC_STATUS_FAILURE, "POLICY_DIRCARD: dropping packet");
+			IPSEC_LOG_AUD(IPSEC_AUDIT_FAILURE, "unknown Security Policy: dropping packet");
 	}
 
-	IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "ipsecdev_output", "return = %d", retcode);
+	IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "return = %d", retcode);
 	return retcode;
 }
 
@@ -400,28 +405,31 @@ static err_t ipsecdev_output(struct netif *netif, struct pbuf *p, struct ip_addr
  */
 static err_t ipsecdev_netlink_output(struct netif *netif, struct pbuf *p)
 {
-	struct ipsec_priv *state = (struct ipsec_priv *)netif->ipsecdev->state;
+	struct netif *ipsecdev = netif_ipsec_data(netif);
+	struct ipsec_priv *state = (struct ipsec_priv *)ipsecdev->state;
 
 	assert(0);
 	return state->hw_linkoutput(state->hw_netif, p);
 }
 
 
-static int ipsecdev_init(struct netif *netif)
+static err_t ipsecdev_init(struct netif *netif)
 {
 	struct ipsec_priv *state = netif->state;
 
-	netif->flags = NETIF_FLAG_LINK_UP | NETIF_FLAG_BROADCAST; /* device is always connected and supports broadcasts */
+	/* ipsec device supports broadcasts */
+	netif->flags = NETIF_FLAG_BROADCAST;
+
+	memcpy(netif->hwaddr, state->hw_netif->hwaddr, state->hw_netif->hwaddr_len);
 	netif->hwaddr_len = state->hw_netif->hwaddr_len;
-	memcpy(netif->hwaddr, state->hw_netif->hwaddr, netif->hwaddr_len);
 
-
-	netif->ipsecdev = netif;
+	netif_ipsec_data(netif) = netif;
 	netif->output = ipsecdev_output;
 	netif->linkoutput = ipsecdev_netlink_output;
-	strcpy(netif->name, "ipsec");
+	netif->name[0] = 's';
+	netif->name[1] = 'c';
 
-	state->hw_netif->ipsecdev = netif;
+	netif_ipsec_data(state->hw_netif) = netif;
 	state->hw_netif->ip_input = ipsecdev_ip_input;
 	state->hw_netif->output = ipsecdev_output;
 
@@ -432,120 +440,134 @@ static int ipsecdev_init(struct netif *netif)
 
 	ipsec_sadbInitCheckingTimeouts();
 
-	return EOK;
+	return ERR_OK;
 }
 
 
-db_set_netif *ipsecdev_dbsget(char *dev)
+db_set_netif *ipsecdev_dbsget(const char *dev)
 {
 	struct netif *netif;
 
 	if ((netif = netif_find(dev)) == NULL)
 		return NULL;
 
-	if (netif->ipsecdev != netif)
+	if (netif_ipsec_data(netif) != netif)
 		return NULL;
 
 	return &((struct ipsec_priv *)netif->state)->db_sets;
 }
 
 
-void ipsecdev_enable(char *dev)
+void ipsecdev_enable(const char *dev)
 {
 	struct netif *netif;
+	struct netif *ipsecdev;
 	struct ipsec_priv *state;
 
 	if ((netif = netif_find(dev)) == NULL)
 		return;
 
-	assert(netif->ipsecdev == netif);
-	if (netif->ipsecdev != netif)
+	ipsecdev = netif_ipsec_data(netif);
+	assert(ipsecdev == netif);
+	if (ipsecdev != netif)
 		return;
 
-	state = (struct ipsec_priv *)netif->ipsecdev->state;
+	state = (struct ipsec_priv *)ipsecdev->state;
 
-	proc_mutexLock(&state->mutex);
+	mutexLock(state->mutex);
 	state->flags |= IPSEC_FLAGS_ENABLED;
-	proc_mutexUnlock(&state->mutex);
+	mutexUnlock(state->mutex);
 
 	ipsec_sadbStartCheckingTimeouts();
 }
 
 
-void ipsecdev_disable(char *dev)
+void ipsecdev_disable(const char *dev)
 {
 	struct netif *netif;
+	struct netif *ipsecdev;
 	struct ipsec_priv *state;
 
 	if ((netif = netif_find(dev)) == NULL)
 		return;
 
-	assert(netif->ipsecdev == netif);
-	if (netif->ipsecdev != netif)
+	ipsecdev = netif_ipsec_data(netif);
+	assert(ipsecdev == netif);
+	if (ipsecdev != netif)
 		return;
 
-	state = (struct ipsec_priv *)netif->ipsecdev->state;
+	state = (struct ipsec_priv *)ipsecdev->state;
 
-	proc_mutexLock(&state->mutex);
+	mutexLock(state->mutex);
 	state->flags &= ~IPSEC_FLAGS_ENABLED;
-	proc_mutexUnlock(&state->mutex);
+	mutexUnlock(state->mutex);
 
 	ipsec_sadbStopCheckingTimeouts();
 }
 
 
-u32 ipsecdev_getIP(char *dev)
+u32_t ipsecdev_getIP(const char *dev)
 {
 	struct netif *netif;
+	struct netif *ipsecdev;
 	struct ipsec_priv *state;
-	u32 ip;
+	u32_t ip;
 
 	if ((netif = netif_find(dev)) == NULL)
 		return 0;
 
-	assert(netif->ipsecdev == netif);
-	if (netif->ipsecdev != netif)
+	ipsecdev = netif_ipsec_data(netif);
+	assert(ipsecdev == netif);
+	if (ipsecdev != netif)
 		return 0;
 
-	state = (struct ipsec_priv *)netif->ipsecdev->state;
-	proc_mutexLock(&state->mutex);
+	state = (struct ipsec_priv *)ipsecdev->state;
+	mutexLock(state->mutex);
 	ip = state->hw_netif->ip_addr.addr;
-	proc_mutexUnlock(&state->mutex);
+	mutexUnlock(state->mutex);
 	return ip;
 }
 
 
-int ipsecdev_attach(char *basedev)
+int ipsecdev_attach(const char *dev)
 {
 	struct ipsec_priv *priv;
-	struct netif *netif, *base_netif;
+	struct netif *netif, *hw_netif;
 
-
-	if ((base_netif = netif_find(basedev)) == NULL)
-		return -ENODEV;
-
-	if ((priv = vm_kmalloc(sizeof(struct ipsec_priv))) == NULL)
-		return -ENOMEM;
-
-	if ((netif = vm_kmalloc(sizeof(struct netif))) == NULL) {
-		vm_kfree(priv);
-		return -ENOMEM;
+	if ((hw_netif = netif_find(dev)) == NULL) {
+		errno = ENODEV;
+		return -1;
 	}
 
+	if ((priv = calloc(1, sizeof(*priv))) == NULL) {
+		errno = ENOMEM;
+		return -1;
+	}
+
+	if ((netif = calloc(1, sizeof(*netif))) == NULL) {
+		free(priv);
+		errno = ENOMEM;
+		return -1;
+	}
+
+	priv->hw_netif = hw_netif;
+	priv->hw_linkoutput = hw_netif->linkoutput;
+	priv->hw_input = hw_netif->input;
+	priv->hw_ip_input = hw_netif->ip4_input;
+	priv->hw_output = hw_netif->output;
 	ipsec_db_init(&priv->db_sets);
-	priv->sentbytes = 0;
-	priv->flags = 0;
-	proc_mutexCreate(&priv->mutex);
-	priv->hw_netif = base_netif;
-	priv->hw_linkoutput = base_netif->linkoutput;
-	priv->hw_input = base_netif->input;
-	priv->hw_ip_input = base_netif->ip_input;
-	priv->hw_output = base_netif->output;
+	mutexCreate(&priv->mutex);
 
-	if (netif_add(netif, NULL, NULL, NULL, priv, ipsecdev_init, ip_input) == NULL) {
-		vm_kfree(priv);
-		vm_kfree(netif);
-		return -EIO;
+	if (netif_add_noaddr(netif, priv, ipsecdev_init, ip_input) == NULL) {
+		resourceDestroy(priv->mutex);
+		free(priv);
+		free(netif);
+		errno = EIO;
+		return -1;
 	}
-	return EOK;
+
+	/* ipsec device is always connected */
+	netif_set_link_up(netif);
+
+	return 0;
 }

@@ -42,7 +42,8 @@
 
 #ifndef __UTIL_H__
 #define __UTIL_H__
-#include <lwip/ipv4/lwip/ip4.h>
+
+#include <lwip/ip4.h>
 
 
 /** 
@@ -92,7 +93,6 @@ typedef enum ipsec_audit_list {      /** This value is returned if ... */
 } ipsec_audit;
 
 
-void ipsec_print_ip(struct ip_hdr *header);
 void ipsec_dump_buffer(char *, unsigned char *, int, int);
 
 ipsec_audit ipsec_check_replay_window(u32_t seq, u32_t lastSeq, u32_t bitField);

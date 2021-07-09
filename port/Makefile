@@ -9,6 +9,7 @@ LOCAL_CFLAGS := $(addprefix -DHAVE_DRIVER_,$(sort $(NET_DRIVERS)))
 
 ifeq (${LWIP_IPSEC_BUILD},yes)
   LOCAL_CFLAGS += -DLWIP_IPSEC=1 -DLWIP_IPSEC_DEV=\"${LWIP_IPSEC_DEV}\"
+  DEP_LIBS += lwip-ipsec
 else
   LOCAL_CFLAGS += -DLWIP_IPSEC=0
 endif

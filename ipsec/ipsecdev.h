@@ -71,15 +71,15 @@
 #ifndef __IPSECDEV_H__
 #define __IPSECDEV_H__
 
-
 #include "sa.h"
 
-db_set_netif *ipsecdev_dbsget(char *dev);
-void ipsecdev_enable(char *dev);
-void ipsecdev_disable(char *dev);
-u32 ipsecdev_getIP(char *dev);
+#include "lwip/def.h"
 
-int ipsecdev_attach(char *basedev);
 
+db_set_netif *ipsecdev_dbsget(const char *dev);
+void ipsecdev_enable(const char *dev);
+void ipsecdev_disable(const char *dev);
+u32_t ipsecdev_getIP(const char *dev);
+int ipsecdev_attach(const char *dev);
 
 #endif

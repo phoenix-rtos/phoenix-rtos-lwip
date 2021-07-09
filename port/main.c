@@ -22,6 +22,7 @@
 #include "filter.h"
 #include "devs.h"
 #include "wifi-api.h"
+#include "ipsec-api.h"
 
 
 static void mainLoop(void)
@@ -124,6 +125,10 @@ int main(int argc, char **argv)
 	/* printf("netsrv: %zu interface%s\n", have_intfs, have_intfs == 1 ? "" : "s"); */
 	if (!have_intfs)
 		exit(1);
+
+#if LWIP_IPSEC
+	ipsecdev_attach(LWIP_IPSEC_DEV);
+#endif
 
 	mainLoop();
 

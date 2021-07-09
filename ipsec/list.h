@@ -1,4 +1,11 @@
-/* %LICENSE% */
+/*
+ * Phoenix-RTOS --- LwIP port
+ *
+ * Copyright 2015 Phoenix Systems
+ * Author: Michal Wojcikowski
+ *
+ * %LICENSE%
+ */
 
 #ifndef LIB_LIST_H_
 #define LIB_LIST_H_

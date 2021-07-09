@@ -41,10 +41,12 @@
  *</EM><HR>
  */
 
-#include <string.h>
+#include "md5.h"
 
-#include <main/md5.h>
 #include "debug.h"
+#include "md5_imp.h"
+
+#include <string.h>
 
 
 /**
@@ -66,7 +68,7 @@ void hmac_md5(unsigned char *text, int text_len, unsigned char *key, int key_len
 	unsigned char tk[16];     /* L=16 for MD5 (RFC 2141, 2. Definition of HMAC) */
 	int i;
 
-	IPSEC_LOG_TRC(IPSEC_TRACE_ENTER, "hmac_md5", "text=%p, text_len=%d, key=%p, key_len=%d, digest=%p",
+	IPSEC_LOG_TRC(IPSEC_TRACE_ENTER, "text=%p, text_len=%d, key=%p, key_len=%d, digest=%p",
 		text, text_len, key, key_len, digest);
 
 
@@ -75,9 +77,9 @@ void hmac_md5(unsigned char *text, int text_len, unsigned char *key, int key_len
 
 		md5_context_t tctx;
 
-		md5_init(&tctx);
-		md5_update(&tctx, key, key_len);
-		md5_final(tk, &tctx);
+		ipsec_md5_init(&tctx);
+		ipsec_md5_update(&tctx, key, key_len);
+		ipsec_md5_final(tk, &tctx);
 
 		key = tk;
 		key_len = 16;
@@ -107,20 +109,20 @@ void hmac_md5(unsigned char *text, int text_len, unsigned char *key, int key_len
 	/*
      * perform inner MD5
      */
-	md5_init(&context);                   /* init context for 1st
+	ipsec_md5_init(&context);                   /* init context for 1st
                                           * pass */
-	md5_update(&context, k_ipad, 64);     /* start with inner pad */
-	md5_update(&context, text, text_len); /* then text of datagram */
-	md5_final(digest, &context);          /* finish up 1st pass */
+	ipsec_md5_update(&context, k_ipad, 64);     /* start with inner pad */
+	ipsec_md5_update(&context, text, text_len); /* then text of datagram */
+	ipsec_md5_final(digest, &context);          /* finish up 1st pass */
 	/*
      * perform outer MD5
      */
-	md5_init(&context);               /* init context for 2nd
+	ipsec_md5_init(&context);               /* init context for 2nd
                                           * pass */
-	md5_update(&context, k_opad, 64); /* start with outer pad */
-	md5_update(&context, digest, 16); /* then results of 1st
+	ipsec_md5_update(&context, k_opad, 64); /* start with outer pad */
+	ipsec_md5_update(&context, digest, 16); /* then results of 1st
                                           * hash */
-	md5_final(digest, &context);      /* finish up 2nd pass */
+	ipsec_md5_final(digest, &context);      /* finish up 2nd pass */
 
-	IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "hmac_md5", "void");
+	IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "void");
 }

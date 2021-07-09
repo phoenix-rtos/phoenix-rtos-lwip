@@ -11,12 +11,17 @@
   @file sha256.c
   LTC_SHA256 by Tom St Denis
 */
-#include <phoenix/errno.h>
-#include <hal/if.h>
-#include <main/if.h>
+#include "sha256.h"
+
+#include <stdint.h>
+#include <stddef.h>
+#include <string.h>
+#include <errno.h>
+#include <sys/minmax.h>
+#include <endian.h>
 
 
-#if defined(ENDIAN_BIG)
+#if __BYTE_ORDER == __BIG_ENDIAN
 
 #define STORE32H(x, y) \
 	do { \
@@ -28,10 +33,10 @@
 
 #define LOAD32H(x, y) \
 	do { \
-		x = ((u32)((y)[0] & 255) << 24) | \
-			((u32)((y)[1] & 255) << 16) | \
-			((u32)((y)[2] & 255) << 8) | \
-			((u32)((y)[3] & 255)); \
+		x = ((uint32_t)((y)[0] & 255) << 24) | \
+			((uint32_t)((y)[1] & 255) << 16) | \
+			((uint32_t)((y)[2] & 255) << 8) | \
+			((uint32_t)((y)[3] & 255)); \
 	} while (0)
 
 #define STORE64H(x, y) \
@@ -46,26 +51,26 @@
 		(y)[7] = (unsigned char)((x)&255); \
 	} while (0)
 
-#else /* if defined(ENDIAN_LITTLE) */
+#else /* #if __BYTE_ORDER == __LITTLE_ENDIAN */
 
 #ifdef LTC_HAVE_BSWAP_BUILTIN
 
 #define STORE32H(x, y) \
 	do { \
-		u32 __t = __builtin_bswap32((x)); \
-		hal_memcpy((y), &__t, 4); \
+		uint32_t __t = __builtin_bswap32((x)); \
+		memcpy((y), &__t, 4); \
 	} while (0)
 
 #define LOAD32H(x, y) \
 	do { \
-		hal_memcpy(&(x), (y), 4); \
+		memcpy(&(x), (y), 4); \
 		(x) = __builtin_bswap32((x)); \
 	} while (0)
 
 #define STORE64H(x, y) \
 	do { \
-		u64 __t = __builtin_bswap64((x)); \
-		hal_memcpy((y), &__t, 8); \
+		uint64_t __t = __builtin_bswap64((x)); \
+		memcpy((y), &__t, 8); \
 	} while (0)
 
 #else
@@ -80,10 +85,10 @@
 
 #define LOAD32H(x, y) \
 	do { \
-		x = ((u32)((y)[0] & 255) << 24) | \
-			((u32)((y)[1] & 255) << 16) | \
-			((u32)((y)[2] & 255) << 8) | \
-			((u32)((y)[3] & 255)); \
+		x = ((uint32_t)((y)[0] & 255) << 24) | \
+			((uint32_t)((y)[1] & 255) << 16) | \
+			((uint32_t)((y)[2] & 255) << 8) | \
+			((uint32_t)((y)[3] & 255)); \
 	} while (0)
 
 #define STORE64H(x, y) \
@@ -105,7 +110,7 @@
 /* Various logical functions */
 #define Ch(x, y, z)  (z ^ (x & (y ^ z)))
 #define Maj(x, y, z) (((x | y) & z) | (x & y))
-#define RORc(x, y)   (((((u32)(x)&0xFFFFFFFFUL) >> (u32)((y)&31)) | ((u32)(x) << (u32)((32 - ((y)&31)) & 31))) & 0xFFFFFFFFUL)
+#define RORc(x, y)   (((((uint32_t)(x)&0xFFFFFFFFUL) >> (uint32_t)((y)&31)) | ((uint32_t)(x) << (uint32_t)((32 - ((y)&31)) & 31))) & 0xFFFFFFFFUL)
 #define S(x, n)      RORc((x), (n))
 #define R(x, n)      (((x)&0xFFFFFFFFUL) >> (n))
 #define Sigma0(x)    (S(x, 2) ^ S(x, 13) ^ S(x, 22))
@@ -115,9 +120,9 @@
 
 
 struct sha256_state {
-	u64 length;
-	u32 state[8], curlen;
-	u8 buf[64];
+	uint64_t length;
+	uint32_t state[8], curlen;
+	uint8_t buf[64];
 };
 
 typedef struct Hash_state {
@@ -127,7 +132,7 @@ typedef struct Hash_state {
 /* compress 512-bits */
 static int sha256_compress(hash_state *md, unsigned char *buf)
 {
-	u32 S[8], W[64], t0, t1;
+	uint32_t S[8], W[64], t0, t1;
 	int i;
 
 	/* copy state into S */
@@ -232,7 +237,7 @@ static int sha256_compress(hash_state *md, unsigned char *buf)
    @param md   The hash state you wish to initialize
    @return EOK if successful
 */
-int sha256_init(hash_state *md)
+static int sha256_init(hash_state *md)
 {
 	md->sha256.curlen = 0;
 	md->sha256.length = 0;
@@ -254,7 +259,7 @@ int sha256_init(hash_state *md)
    @param inlen  The length of the data (octets)
    @return EOK if successful
 */
-int sha256_update(hash_state *md, const u8 *in, size_t inlen)
+static int sha256_update(hash_state *md, const uint8_t *in, size_t inlen)
 {
 	unsigned long n;
 	int err;
@@ -276,7 +281,7 @@ int sha256_update(hash_state *md, const u8 *in, size_t inlen)
 		}
 		else {
 			n = min(inlen, (64 - md->sha256.curlen));
-			hal_memcpy(md->sha256.buf + md->sha256.curlen, in, (size_t)n);
+			memcpy(md->sha256.buf + md->sha256.curlen, in, (size_t)n);
 			md->sha256.curlen += n;
 			in += n;
 			inlen -= n;
@@ -298,7 +303,7 @@ int sha256_update(hash_state *md, const u8 *in, size_t inlen)
    @param out [out] The destination of the hash (32 bytes)
    @return EOK if successful
 */
-int sha256_final(hash_state *md, u8 *out)
+static int sha256_final(hash_state *md, uint8_t *out)
 {
 	int i;
 
@@ -323,7 +328,7 @@ int sha256_final(hash_state *md, u8 *out)
 		md->sha256.curlen = 0;
 	}
 
-	/* pad upto 56 bytes of zeroes */
+	/* pad up to 56 bytes of zeroes */
 	while (md->sha256.curlen < 56) {
 		md->sha256.buf[md->sha256.curlen++] = (unsigned char)0;
 	}
@@ -339,6 +344,7 @@ int sha256_final(hash_state *md, u8 *out)
 	return EOK;
 }
 
+#if 0
 /**
   Self-test the hash
   @return EOK if successful, CRYPT_NOP if self-tests have been disabled
@@ -367,15 +373,15 @@ int sha256_test(void)
 
 	for (i = 0; i < (int)(sizeof(tests) / sizeof(tests[0])); i++) {
 		sha256_init(&md);
-		sha256_update(&md, (unsigned char *)tests[i].msg, (unsigned long)main_strlen(tests[i].msg));
+		sha256_update(&md, (unsigned char *)tests[i].msg, (unsigned long)strlen(tests[i].msg));
 		sha256_final(&md, tmp);
-		if (main_memcmp(tmp, tests[i].hash, sizeof(tests[i].hash)) != 0) {
+		if (memcmp(tmp, tests[i].hash, sizeof(tests[i].hash)) != 0) {
 			return -1;
 		}
 	}
 	return EOK;
 }
-
+#endif
 
 void hmac_sha256(const unsigned char *text, int text_len, const unsigned char *key, int key_len, unsigned char *digest)
 {
@@ -407,8 +413,8 @@ void hmac_sha256(const unsigned char *text, int text_len, const unsigned char *k
      */
 
 	/* start out by storing key in pads */
-	hal_memset(k_ipad, 0x36, sizeof(k_ipad));
-	hal_memset(k_opad, 0x5c, sizeof(k_opad));
+	memset(k_ipad, 0x36, sizeof(k_ipad));
+	memset(k_opad, 0x5c, sizeof(k_opad));
 
 	/* XOR key with ipad and opad values */
 	for (i = 0; i < key_len; i++) {
@@ -431,6 +437,7 @@ void hmac_sha256(const unsigned char *text, int text_len, const unsigned char *k
 	sha256_final(&context, digest);      /* finish up 2nd pass */
 }
 
+#if 0
 int hmac_sha256_test(void)
 {
 	static const struct {
@@ -454,14 +461,11 @@ int hmac_sha256_test(void)
 	unsigned char mac[32];
 
 	for (i = 0; i < (int)(sizeof(tests) / sizeof(tests[0])); i++) {
-		hmac_sha256((const u8 *)tests[i].msg, strlen(tests[i].msg), tests[i].key, 32, mac);
-		if (main_memcmp(mac, tests[i].hash, sizeof(tests[i].hash)) != 0) {
+		hmac_sha256((const uint8_t *)tests[i].msg, strlen(tests[i].msg), tests[i].key, 32, mac);
+		if (memcmp(mac, tests[i].hash, sizeof(tests[i].hash)) != 0) {
 			return -1;
 		}
 	}
 	return EOK;
 }
-
-/* ref:         HEAD -> develop */
-/* git commit:  1725b87098f1350340e174a71b60bb84ae29ed9a */
-/* commit time: 2017-06-22 16:01:14 +0200 */
+#endif

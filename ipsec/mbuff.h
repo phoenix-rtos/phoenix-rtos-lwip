@@ -1,16 +1,17 @@
 /*
- * Phoenix-RTOS
- * Copyright Phoenix Systems
+ * Phoenix-RTOS --- LwIP port
  *
- * This file is a part of Phoenix-RTOS.
+ * Copyright 2016 Phoenix Systems
+ * Author: Kuba Sejdak
  *
  * %LICENSE%
  */
 
-#ifndef MBUFF_H
-#define MBUFF_H
+#ifndef _MBUFF_H_
+#define _MBUFF_H_
 
-#include <phoenix/types.h>
+#include <stddef.h>
+
 
 typedef struct _mbuff_t {
 	struct _mbuff_t *next;

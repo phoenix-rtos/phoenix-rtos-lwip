@@ -43,6 +43,7 @@
 
 #include "netif.h"
 #include "route.h"
+#include "ipsec-api.h"
 
 #define SOCKTHREAD_PRIO 4
 #define SOCKTHREAD_STACKSZ (4 * _PAGE_SIZE)
@@ -61,6 +62,11 @@ struct poll_state {
 
 
 static int wrap_socket(uint32_t *port, int sock, int flags);
+
+
+#if LWIP_IPSEC
+static int wrap_key_socket(uint32_t *port, int sock, int flags);
+#endif /* LWIP_IPSEC */
 
 
 static ssize_t map_errno(ssize_t ret)
@@ -663,6 +669,50 @@ static int socket_op(msg_t *msg, int sock)
 	polls.socket = sock;
 	salen = sizeof(smo->sockname.addr);
 
+#if LWIP_IPSEC
+	if (is_key_sockets_fd(sock)) {
+		switch (msg->type) {
+			case sockmSend:
+				smo->ret = map_errno(key_sockets_send(sock, msg->i.data, msg->i.size, smi->send.flags));
+				break;
+			case sockmRecv:
+				smo->ret = map_errno(key_sockets_recv(sock, msg->o.data, msg->o.size, smi->send.flags));
+				break;
+			case sockmGetOpt:
+				smo->ret = -EINVAL;
+				break;
+			case sockmSetOpt:
+				smo->ret = -EINVAL;
+				break;
+			case mtRead:
+				msg->o.io.err = map_errno(key_sockets_recv(sock, msg->o.data, msg->o.size, 0));
+				break;
+			case mtWrite:
+				msg->o.io.err = map_errno(key_sockets_send(sock, msg->i.data, msg->i.size, 0));
+				break;
+			case mtGetAttr:
+				if (msg->i.attr.type != atPollStatus) {
+					msg->o.attr.err = -EINVAL;
+					break;
+				}
+				msg->o.attr.val = key_sockets_poll(sock, msg->i.attr.val, 0);
+				msg->o.attr.err = (msg->o.attr.val < 0) ? msg->o.attr.val : EOK;
+				break;
+			case mtClose:
+				msg->o.io.err = map_errno(key_sockets_close(sock));
+				return 1;
+			case sockmGetSockName:
+				smo->ret = -EINVAL;
+				break;
+			default:
+				smo->ret = -EINVAL;
+				break;
+		}
+
+		return 0;
+	}
+#endif /* LWIP_IPSEC */
+
 	switch (msg->type) {
 	case sockmConnect:
 		smo->ret = map_errno(lwip_connect(sock, sa_convert_sys_to_lwip(smi->send.addr, smi->send.addrlen), smi->send.addrlen));
@@ -713,10 +763,20 @@ static int socket_op(msg_t *msg, int sock)
 		smo->ret = map_errno(lwip_fcntl(sock, F_SETFL, smi->send.flags));
 		break;
 	case sockmGetOpt:
+		if (smi->opt.optname == IP_IPSEC_POLICY) {
+			/* TODO: IP_IPSEC_POLICY */
+			smo->ret = 0;
+			break;
+		}
 		salen = msg->o.size;
 		smo->ret = lwip_getsockopt(sock, smi->opt.level, smi->opt.optname, msg->o.data, &salen) < 0 ? -errno : salen;
 		break;
 	case sockmSetOpt:
+		if (smi->opt.optname == IP_IPSEC_POLICY) {
+			/* TODO: IP_IPSEC_POLICY */
+			smo->ret = 0;
+			break;
+		}
 		smo->ret = map_errno(lwip_setsockopt(sock, smi->opt.level, smi->opt.optname, msg->i.data, msg->i.size));
 		break;
 	case sockmShutdown:
@@ -815,6 +875,43 @@ static int wrap_socket(uint32_t *port, int sock, int flags)
 
 	return EOK;
 }
+
+
+#if LWIP_IPSEC
+static int wrap_key_socket(uint32_t *port, int sock, int flags)
+{
+	struct sock_start *ss;
+	int err;
+
+	/* no flags are supported by AF_KEY socket */
+
+	ss = malloc(sizeof(*ss));
+	if (!ss) {
+		key_sockets_close(sock);
+		return -ENOMEM;
+	}
+
+	ss->sock = sock;
+
+	if ((err = portCreate(&ss->port)) < 0) {
+		key_sockets_close(sock);
+		free(ss);
+		return err;
+	}
+
+	*port = ss->port;
+
+	if ((err = sys_thread_opt_new("socket", socket_thread, ss, SOCKTHREAD_STACKSZ, SOCKTHREAD_PRIO, NULL))) {
+		portDestroy(ss->port);
+		key_sockets_close(ss->sock);
+		free(ss);
+		return err;
+	}
+
+	return EOK;
+}
+#endif /* LWIP_IPSEC */
+
 
 static int do_getnameinfo(const struct sockaddr *sa, socklen_t addrlen, char *host, socklen_t hostsz, char *serv, socklen_t servsz, int flags)
 {
@@ -1017,7 +1114,7 @@ static void socketsrv_thread(void *arg)
 	size_t sz;
 	msg_t msg;
 	uint32_t port;
-	int err, sock;
+	int err, sock, type;
 #if LWIP_DNS
 	struct addrinfo hint = { 0 };
 	char *node, *serv;
@@ -1031,8 +1128,22 @@ static void socketsrv_thread(void *arg)
 
 		switch (msg.type) {
 		case sockmSocket:
-			sock = smi->socket.type & ~(SOCK_NONBLOCK|SOCK_CLOEXEC);
-			if ((sock = lwip_socket(smi->socket.domain, sock, smi->socket.protocol)) < 0)
+			type = smi->socket.type & ~(SOCK_NONBLOCK | SOCK_CLOEXEC);
+			if (smi->socket.domain == AF_KEY) {
+#if LWIP_IPSEC
+				if ((sock = key_sockets_socket(smi->socket.domain, type, smi->socket.protocol)) < 0) {
+					msg.o.lookup.err = -errno;
+				}
+				else {
+					msg.o.lookup.err = wrap_key_socket(&msg.o.lookup.dev.port, sock, smi->socket.type);
+					msg.o.lookup.fil = msg.o.lookup.dev;
+				}
+#else
+				msg.o.lookup.err = -EINVAL;
+#endif /* LWIP_IPSEC */
+				break;
+			}
+			if ((sock = lwip_socket(smi->socket.domain, type, smi->socket.protocol)) < 0)
 				msg.o.lookup.err = -errno;
 			else {
 				msg.o.lookup.err = wrap_socket(&msg.o.lookup.dev.port, sock, smi->socket.type);
@@ -1094,6 +1205,10 @@ void init_lwip_sockets(void)
 {
 	oid_t oid = { 0 };
 	int err;
+
+#if LWIP_IPSEC
+	key_sockets_init();
+#endif /* LWIP_IPSEC */
 
 	if ((err = portCreate(&oid.port)) < 0)
 		errout(err, "portCreate(socketsrv)");

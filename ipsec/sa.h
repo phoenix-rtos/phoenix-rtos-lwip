@@ -1,13 +1,23 @@
+/*
+ * Phoenix-RTOS --- LwIP port
+ *
+ * Copyright 2016 Phoenix Systems
+ * Author: Jacek Popko, Kuba Sejdak, Michal Miroslaw, Marek Bialowas
+ *
+ * %LICENSE%
+ */
+
 #ifndef __SA_H__
 #define __SA_H__
 
-#include <lib/stdint.h>
-#include <lib/list.h>
-#include <phoenix/pfkeyv2.h>
-#include <lwip/def.h>
-#include <proc/if.h>
-#include "util.h"
 #include "ipsec.h"
+#include "list.h"
+#include "util.h"
+
+#include "lwip/def.h"
+
+#include <sys/threads.h>
+#include <netinet/udp.h>
 
 
 #define IPSEC_NR_NETIFS (1) /**< Defines the number of network interfaces. This is used to reserve space for db_netif_struct's */
@@ -34,14 +44,14 @@ typedef struct sad_entry_s {
 	u8_t auth_alg;                       /**< authentication algorithm */
 	u8_t authkey[IPSEC_MAX_AUTHKEY_LEN]; /**< authentication key */
 	u8_t iv[16];                         /**< initialization vector for CBC mode */
-	void *initiator;                     /**< pointer to thread which created larval SA */
+	pthread_t initiator;                 /**< pointer to thread which created larval SA */
 	struct {
-		u32 curr_add_time;
-		u32 curr_use_time;
-		u32 soft_add_expires_seconds;
-		u32 soft_use_expires_seconds;
-		u32 hard_add_expires_seconds;
-		u32 hard_use_expires_seconds;
+		u32_t curr_add_time;
+		u32_t curr_use_time;
+		u32_t soft_add_expires_seconds;
+		u32_t soft_use_expires_seconds;
+		u32_t hard_add_expires_seconds;
+		u32_t hard_use_expires_seconds;
 	} lifetime; /**< lifetime of the SA (must be dropped if HARD lifetime runs out, EXPIRY notification has to be sent in case of SOFT limit expire) */
 } sad_entry_t;
 
@@ -64,12 +74,12 @@ typedef struct spd_entry_s {
  */
 typedef struct spd_table_s {
 	spd_entry_t *first;
-	mutex_t mutex;
+	handle_t mutex;
 } spd_table;
 
 typedef struct sad_table_s {
 	sad_entry_t *first;
-	mutex_t mutex;
+	handle_t mutex;
 } sad_table;
 
 typedef struct db_set_netif_s {
@@ -136,14 +146,14 @@ ipsec_status ipsec_spd_add_sa(spd_entry_t *entry, sad_entry_t *sa);
  * are only checked if the protocol is TCP or UDP.
  * An entry which has a value of 0 is the same as the '*' which means everything.
  *
- * @param	header	Pointer to an IP packet which is checked
+ * @param	payload	Pointer to an IP packet which is checked
  * @param 	table	Pointer to the SPD inbound/outbound table
  * @param 	flags	Match address flag
  * @return 	Pointer to the matching SPD entry
  * @return 	NULL if no entry matched
  * @todo port checking should be implemnted also
  */
-spd_entry_t *ipsec_spd_lookup(struct ip_hdr *header, spd_table *table, unsigned flags);
+spd_entry_t *ipsec_spd_lookup(void *payload, spd_table *table, unsigned flags);
 
 #define IPSEC_MATCH_BOTH 0
 #define IPSEC_MATCH_DST  1
@@ -206,13 +216,13 @@ void ipsec_sad_del_spi(u32_t spi, sad_table *table);
  * @return pointer to the SA entry if one matched
  * @return NULL if no matching entry was found
  */
-sad_entry_t *ipsec_sad_lookup(ip_addr_p_t dest, u8_t proto, u32_t spi, sad_table *table);
+sad_entry_t *ipsec_sad_lookup(ip4_addr_p_t dest, u8_t proto, u32_t spi, sad_table *table);
 sad_entry_t *ipsec_sad_lookup_natt(struct ip_hdr *ip, sad_table *table);
 
 /* returns SOFT/HARD-timeouted entry if any in given table */
 sad_entry_t *ipsec_sad_check_timeouts(sad_table *table, int *is_soft);
 
-u32_t ipsec_sad_get_spi(struct ip_hdr *header);
+u32_t ipsec_sad_get_spi(void *payload);
 
 ipsec_status ipsec_spd_flush(spd_table *table, spd_entry_t *def_entry);
 void ipsec_spd_dump_log(spd_table *table, const char *pfx);

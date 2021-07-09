@@ -53,59 +53,9 @@
  * All rights reserved.</EM><HR>
  */
 
-#include <string.h>
-#include <ipv4/lwip/inet.h>
-#include <lwip/ip.h>
-
 #include "ipsec.h"
 #include "util.h"
 #include "debug.h"
-
-/**
- * Prints the header of an IP packet
- *
- * @param header pointer to an IP header
- * @return void
- */
-void ipsec_print_ip(struct ip_hdr *header)
-{
-	char log_message[IPSEC_LOG_MESSAGE_SIZE + 1];
-	char port[4 + 1];
-	char src[15 + 1];
-	char dest[15 + 1];
-	u16_t len;
-
-	strcpy(src, inet_ntoa(header->src));
-	strcpy(dest, inet_ntoa(header->dest));
-
-	len = lwip_ntohs(header->_len);
-
-	switch (IPH_PROTO(header)) {
-		case IP_PROTO_TCP:
-			strcpy(port, " TCP");
-			break;
-		case IP_PROTO_UDP:
-			strcpy(port, " UDP");
-			break;
-		case IP_PROTO_AH:
-			strcpy(port, "  AH");
-			break;
-		case IP_PROTO_ESP:
-			strcpy(port, " ESP");
-			break;
-		case IP_PROTO_ICMP:
-			strcpy(port, "ICMP");
-			break;
-		default:
-			strcpy(port, "????");
-	}
-
-	main_snprintf(log_message, IPSEC_LOG_MESSAGE_SIZE, "src: %15s dest: %15s protocol: %3s size: %d", src, dest, port, len);
-	main_printf(ATTR_INFO, "          %s\n", log_message);
-
-	return;
-}
-
 
 #ifdef IPSEC_TRACE
 int __ipsec_trace_indication = 0;      /**< dummy variable to avoid compiler warnings */
@@ -124,47 +74,45 @@ int __ipsec_trace_indication__pos = 0; /**< dummy variable to avoid compiler war
  */
 void ipsec_dump_buffer(char *prefix, unsigned char *data, int offs, int length)
 {
+#define HEXFMT_1  " %02x"
+#define HEXFMT_4  HEXFMT_1 HEXFMT_1 HEXFMT_1 HEXFMT_1
+#define HEXFMT_16 HEXFMT_4 HEXFMT_4 HEXFMT_1 HEXFMT_1
+#define TXTFMT_1  " %c"
+#define TXTFMT_4  TXTFMT_1 TXTFMT_1 TXTFMT_1 TXTFMT_1
+#define TXTFMT_16 TXTFMT_4 TXTFMT_4 TXTFMT_4 TXTFMT_4
+#define HEX_1(i)  ptr[i]
+#define HEX_4(i)  HEX_1(i), HEX_1(i + 1), HEX_1(i + 2), HEX_1(i + 3)
+#define HEX_16(i) HEX_4(i), HEX_4(i + 4), HEX_4(i + 8), HEX_4(i + 12)
+#define TXT_1(i)  (ptr[i] < 32 ? '.' : ptr[i])
+#define TXT_4(i)  TXT_1(i), TXT_1(i + 1), TXT_1(i + 2), TXT_1(i + 3)
+#define TXT_16(i) TXT_4(i), TXT_4(i + 4), TXT_4(i + 8), TXT_4(i + 12)
 	unsigned char *ptr;
-	unsigned char *tmp_ptr;
-	int i;
+	unsigned int i, r;
+	char hex_buf[46];
+	char txt_buf[31];
+	char *buf_ptr;
 
-	main_printf(ATTR_INFO, "%sDumping %d bytes from address 0x%p using an offset of %d bytes\n", prefix, length, data, offs);
+	IPSEC_LOG_MSG("%sDumping %d bytes from address 0x%p using an offset of %d bytes", prefix, length, data, offs);
 	if (length == 0) {
-		main_printf(ATTR_INFO, "%s => nothing to dump\n", prefix);
+		IPSEC_LOG_MSG("%s => nothing to dump", prefix);
 		return;
 	}
 
-	for (ptr = (data + offs); ptr < (data + offs + length); ptr++) {
-		if (((ptr - (data + offs)) % 16) == 0)
-			main_printf(ATTR_INFO, "%s%p:", prefix, ptr);
-		main_printf(ATTR_INFO, " %02x", *ptr);
-		if (((ptr - (data + offs)) % 16) == 15) {
-			main_printf(ATTR_INFO, " :");
-			for (tmp_ptr = (ptr - 15); tmp_ptr < ptr; tmp_ptr++) {
-				if (*tmp_ptr < 32)
-					main_printf(ATTR_INFO, ".");
-				else
-					main_printf(ATTR_INFO, "%c", *tmp_ptr);
-			}
-			main_printf(ATTR_INFO, "\n");
-		}
+	for (ptr = (data + offs); ptr < (data + offs + length); ptr += 16) {
+		IPSEC_LOG_MSG("%s%p:" HEXFMT_16 " :" TXTFMT_16, prefix, ptr, HEX_16(0), TXT_16(0));
 	}
 
-	if ((length % 16) > 0) {
-		for (i = 0; i < (16 - (length % 16)); i++) {
-			main_printf(ATTR_INFO, "   ");
-		}
-
-		main_printf(ATTR_INFO, " :");
-		for (tmp_ptr = ((data + offs + length) - (length % 16)); tmp_ptr < (data + offs + length); tmp_ptr++) {
-			if (*tmp_ptr < 32)
-				main_printf(ATTR_INFO, ".");
-			else
-				main_printf(ATTR_INFO, "%c", *tmp_ptr);
-		}
+	r = length % 16;
+	if (r > 0) {
+		ptr -= r;
+		buf_ptr = hex_buf;
+		for (i = 0; i < r; ++i)
+			buf_ptr += sprintf(buf_ptr, HEXFMT_1, ptr[i]);
+		buf_ptr = txt_buf;
+		for (i = 0; i < r; ++i)
+			buf_ptr += sprintf(buf_ptr, TXTFMT_1, ptr[i]);
+		IPSEC_LOG_MSG("%s%p:%s :%s", prefix, ptr, hex_buf, txt_buf);
 	}
-
-	main_printf(ATTR_INFO, "\n");
 }
 
 

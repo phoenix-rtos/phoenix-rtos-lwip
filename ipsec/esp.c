@@ -58,23 +58,20 @@
  *</EM><HR>
  */
 
-#include <string.h>
-#include <ipv4/lwip/ip4.h>
-#include <lwip/inet_chksum.h>
-#include <lwip/udp.h>
+#include "esp.h"
 
-
-#include "ipsec.h"
-#include "util.h"
-#include "debug.h"
-
-#include "sa.h"
-#include "des.h"
 #include "aes.h"
+#include "debug.h"
+#include "des.h"
 #include "md5.h"
 #include "sha1.h"
 #include "sha256.h"
-#include "esp.h"
+
+#include "lwip/udp.h"
+#include "lwip/inet_chksum.h"
+
+#include <string.h>
+#include <time.h>
 
 
 u32_t ipsec_esp_bitmap = 0;  /**< save session state to detect replays - must be 32 bits. 
@@ -105,7 +102,7 @@ ipsec_status ipsec_esp_decapsulate(struct ip_hdr *packet, int *offset, int *len,
 	int payload_len;
 	struct ip_hdr *new_ip_packet;
 	esp_packet *esp_header;
-	u8 cbc_iv[16];
+	u8_t cbc_iv[16];
 	unsigned char digest[IPSEC_MAX_AUTHKEY_LEN];
 
 
@@ -116,7 +113,7 @@ ipsec_status ipsec_esp_decapsulate(struct ip_hdr *packet, int *offset, int *len,
 	else if (sa->natt_mode == UDP_ENCAP_ESPINUDP_NON_IKE)
 		payload_offset += sizeof(struct udp_hdr) + 8;
 	payload_len = lwip_ntohs(packet->_len) - payload_offset;
-	esp_header = (esp_packet *)((u8 *)packet + payload_offset - IPSEC_ESP_HDR_SIZE);
+	esp_header = (esp_packet *)((u8_t *)packet + payload_offset - IPSEC_ESP_HDR_SIZE);
 
 	if (sa->auth_alg != SADB_AALG_NONE) {
 
@@ -124,7 +121,7 @@ ipsec_status ipsec_esp_decapsulate(struct ip_hdr *packet, int *offset, int *len,
 		/* This check prevents useless ICV calculation if the Sequence Number is obviously wrong  */
 		ret_val = ipsec_check_replay_window(lwip_ntohl(esp_header->sequence), ipsec_esp_lastSeq, ipsec_esp_bitmap);
 		if (ret_val != IPSEC_AUDIT_SUCCESS) {
-			IPSEC_LOG_AUD("ipsec_esp_decapsulate", IPSEC_AUDIT_SEQ_MISMATCH, "packet rejected by anti-replay check (lastSeq=%08lx, seq=%08lx, window size=%d)", ipsec_esp_lastSeq, lwip_ntohl(esp_header->sequence), IPSEC_SEQ_MAX_WINDOW);
+			IPSEC_LOG_AUD(IPSEC_AUDIT_SEQ_MISMATCH, "packet rejected by anti-replay check (lastSeq=%08x, seq=%08x, window size=%d)", ipsec_esp_lastSeq, lwip_ntohl(esp_header->sequence), IPSEC_SEQ_MAX_WINDOW);
 			return ret_val;
 		}
 
@@ -147,15 +144,15 @@ ipsec_status ipsec_esp_decapsulate(struct ip_hdr *packet, int *offset, int *len,
 				ret_val = IPSEC_STATUS_SUCCESS;
 				break;
 			default:
-				IPSEC_LOG_ERR("ipsec_esp_decapsulate", IPSEC_STATUS_FAILURE, ("unknown HASH algorithm for this ESP"));
-				IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "ipsec_esp_decapsulate", "return = %d", IPSEC_STATUS_FAILURE);
+				IPSEC_LOG_ERR(IPSEC_STATUS_FAILURE, "unknown HASH algorithm for this ESP");
+				IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "return = %d", IPSEC_STATUS_FAILURE);
 				return IPSEC_STATUS_FAILURE;
 		}
 
 		/* compare ICV */
 		if (memcmp(((char *)esp_header) + IPSEC_ESP_HDR_SIZE + payload_len - IPSEC_AUTH_ICV, digest, IPSEC_AUTH_ICV) != 0) {
-			IPSEC_LOG_ERR("ipsec_esp_decapsulate", IPSEC_STATUS_FAILURE, ("ESP ICV does not match"));
-			IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "ipsec_esp_decapsulate", "return = %d", IPSEC_STATUS_FAILURE);
+			IPSEC_LOG_ERR(IPSEC_STATUS_FAILURE, "ESP ICV does not match");
+			IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "return = %d", IPSEC_STATUS_FAILURE);
 			return IPSEC_STATUS_FAILURE;
 		}
 
@@ -165,7 +162,7 @@ ipsec_status ipsec_esp_decapsulate(struct ip_hdr *packet, int *offset, int *len,
 		/* post-ICV calculation anti-replay check (this call will update the global sequence number window) */
 		ret_val = ipsec_update_replay_window(lwip_ntohl(esp_header->sequence), (u32_t *)&ipsec_esp_lastSeq, (u32_t *)&ipsec_esp_bitmap);
 		if (ret_val != IPSEC_AUDIT_SUCCESS) {
-			IPSEC_LOG_AUD("ipsec_esp_decapsulate", IPSEC_AUDIT_SEQ_MISMATCH, "packet rejected by anti-replay update (lastSeq=%08lx, seq=%08lx, window size=%d)", ipsec_esp_lastSeq, lwip_ntohl(esp_header->sequence), IPSEC_SEQ_MAX_WINDOW);
+			IPSEC_LOG_AUD(IPSEC_AUDIT_SEQ_MISMATCH, "packet rejected by anti-replay update (lastSeq=%08x, seq=%08x, window size=%d)", ipsec_esp_lastSeq, lwip_ntohl(esp_header->sequence), IPSEC_SEQ_MAX_WINDOW);
 			return ret_val;
 		}
 	}
@@ -181,26 +178,26 @@ ipsec_status ipsec_esp_decapsulate(struct ip_hdr *packet, int *offset, int *len,
 			(unsigned char *)sa->enckey, cbc_iv,
 			IPSEC_CIPHER_DECRYPT, ((unsigned char *)packet) + payload_offset + IPSEC_ESP_IV_SIZE);
 		*offset = payload_offset + IPSEC_ESP_IV_SIZE;
-		new_ip_packet = (struct ip_hdr *)((u8 *)packet + payload_offset + IPSEC_ESP_IV_SIZE);
+		new_ip_packet = (struct ip_hdr *)((u8_t *)packet + payload_offset + IPSEC_ESP_IV_SIZE);
 	}
 	else /* if (sa->enc_alg == SADB_X_EALG_AES) */ {
 		/* copy IV from ESP payload */
 		memcpy(cbc_iv, ((char *)packet) + payload_offset, 16);
 
 		/* decrypt ESP packet */
-		ipsec_cipher_aes((u8 *)packet + payload_offset + 16, payload_len - 16,
+		ipsec_cipher_aes((u8_t *)packet + payload_offset + 16, payload_len - 16,
 			sa->enckey, sa->enckey_len, cbc_iv,
-			IPSEC_CIPHER_DECRYPT | AES_CBC, (u8 *)packet + payload_offset + 16);
+			IPSEC_CIPHER_DECRYPT | AES_CBC, (u8_t *)packet + payload_offset + 16);
 		*offset = payload_offset + 16;
-		new_ip_packet = (struct ip_hdr *)((u8 *)packet + payload_offset + 16);
+		new_ip_packet = (struct ip_hdr *)((u8_t *)packet + payload_offset + 16);
 	}
 
 
 	local_len = lwip_ntohs(new_ip_packet->_len);
 
 	if (local_len < IPSEC_MIN_IPHDR_SIZE) {
-		IPSEC_LOG_ERR("ipsec_esp_decapsulate", IPSEC_STATUS_FAILURE, ("decapsulated strange packet"));
-		IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "ipsec_esp_decapsulate", "return = %d", IPSEC_STATUS_BAD_PACKET);
+		IPSEC_LOG_ERR(IPSEC_STATUS_FAILURE, "decapsulated strange packet");
+		IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "return = %d", IPSEC_STATUS_BAD_PACKET);
 		return IPSEC_STATUS_BAD_PACKET;
 	}
 	*len = local_len;
@@ -229,7 +226,6 @@ ipsec_status ipsec_esp_encapsulate(struct ip_hdr *packet, int *offset, int *len,
 	int inner_len;
 	int payload_offset;
 	int payload_len;
-	int encap_len;
 	u8_t padd_len;
 	char *pos;
 	u8_t padd;
@@ -250,20 +246,9 @@ ipsec_status ipsec_esp_encapsulate(struct ip_hdr *packet, int *offset, int *len,
 	// packet->ttl--;
 	// packet->chksum = ip_chksum(packet, sizeof(ip_header));
 	if (packet->_ttl == 0) {
-		IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "ipsec_esp_encapsulate", "return = %d", IPSEC_STATUS_TTL_EXPIRED);
+		IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "return = %d", IPSEC_STATUS_TTL_EXPIRED);
 		return IPSEC_STATUS_TTL_EXPIRED;
 	}
-
-	/* add padding if needed */
-	padd_len = IPSEC_ESP_PADDING - ((inner_len + 2) & (IPSEC_ESP_PADDING - 1));
-	pos = (char *)packet + inner_len;
-	for (padd = 1; padd <= padd_len; *pos++ = padd++)
-		;
-	/* append padding length and next protocol field to the payload */
-	*pos++ = padd_len;
-	/* in tunnel mode the next protocol field is always IP */
-	*pos = 0x04;
-
 
 	/* encapsulate the packet according the SA */
 	if (sa->enc_alg == SADB_EALG_3DESCBC) {
@@ -285,16 +270,15 @@ ipsec_status ipsec_esp_encapsulate(struct ip_hdr *packet, int *offset, int *len,
 		memcpy(cbc_iv, sa->iv, IPSEC_ESP_IV_SIZE);
 
 		/* encrypt ESP packet */
-		cipher_3des_cbc((u8 *)packet, inner_len + padd_len + 2, sa->enckey, cbc_iv, IPSEC_CIPHER_ENCRYPT, (u8 *)packet);
+		cipher_3des_cbc((u8_t *)packet, inner_len + padd_len + 2, sa->enckey, cbc_iv, IPSEC_CIPHER_ENCRYPT, (u8_t *)packet);
 		/* insert IV in front of packet */
 		memcpy(((char *)packet) - IPSEC_ESP_IV_SIZE, iv, IPSEC_ESP_IV_SIZE);
 	}
 	else /* if (sa->enc_alg == SADB_X_EALG_AES) */ {
-		char iv[21];
-		cycles_t seed;
+		uint8_t iv[21];
+		clock_t seed = clock();
 
-		hal_cpuGetCycles(&seed);
-		sha1_hash(iv, (char *)&seed, sizeof(seed));
+		sha1_hash(iv, (uint8_t *)&seed, sizeof(seed));
 
 		/* add padding if needed */
 		padd_len = 16 - ((inner_len + 2) & (16 - 1));
@@ -310,9 +294,9 @@ ipsec_status ipsec_esp_encapsulate(struct ip_hdr *packet, int *offset, int *len,
 		new_esp_header = (ipsec_esp_header *)(((char *)packet) - 16 - IPSEC_ESP_HDR_SIZE);
 		payload_len = inner_len + IPSEC_ESP_HDR_SIZE + 16 + padd_len + 2;
 		/* add padding if needed */
-		ipsec_cipher_aes((u8 *)packet, inner_len + padd_len + 2, sa->enckey, sa->enckey_len, (u8 *)iv,
-			IPSEC_CIPHER_ENCRYPT | AES_CBC, (u8 *)packet);
-		/* insert IV in fron of packet */
+		ipsec_cipher_aes((u8_t *)packet, inner_len + padd_len + 2, sa->enckey, sa->enckey_len, (u8_t *)iv,
+			IPSEC_CIPHER_ENCRYPT | AES_CBC, (u8_t *)packet);
+		/* insert IV in front of packet */
 		memcpy(((char *)packet) - 16, iv, 16);
 	}
 
@@ -360,8 +344,8 @@ ipsec_status ipsec_esp_encapsulate(struct ip_hdr *packet, int *offset, int *len,
 				ret_val = IPSEC_STATUS_SUCCESS;
 				break;
 			default:
-				IPSEC_LOG_ERR("ipsec_esp_encapsulate", IPSEC_STATUS_FAILURE, ("unknown HASH algorithm for this ESP"));
-				IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "ipsec_esp_encapsulate", "return = %d", IPSEC_STATUS_FAILURE);
+				IPSEC_LOG_ERR(IPSEC_STATUS_FAILURE, "unknown HASH algorithm for this ESP");
+				IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "return = %d", IPSEC_STATUS_FAILURE);
 				return IPSEC_STATUS_FAILURE;
 		}
 
@@ -401,5 +385,5 @@ ipsec_status ipsec_esp_encapsulate(struct ip_hdr *packet, int *offset, int *len,
 	/* set checksum */
 	IPH_CHKSUM_SET(new_ip_header, inet_chksum(new_ip_header, IP_HLEN));
 
-	return IPSEC_STATUS_SUCCESS;
+	return ret_val;
 }

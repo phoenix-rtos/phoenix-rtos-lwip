@@ -42,7 +42,10 @@
 #ifndef __IPSEC_H__
 #define __IPSEC_H__
 
-#include <lwip/ip4_addr.h>
+#include <phoenix/ipsec.h>
+
+#include "lwip/ip_addr.h"
+
 
 #define IPSEC_HLEN (PBUF_IP_HLEN + 28 + PBUF_TRANSPORT_HLEN) /**< Add room for an other IP header and AH(28 bytes with HMAC-xxx-96)/ESP(8 bytes) data */
 
@@ -70,8 +73,8 @@ struct db_set_netif_s;
  *
  * This function is called by the ipsec device driver when a packet arrives having AH or ESP in the
  * protocol field. A SA lookup gets the appropriate SA which is then passed to the packet processing
- * funciton ipsec_ah_check() or ipsec_esp_decapsulate(). After successfully processing an IPsec packet
- * an check together with an SPD lookup verifies if the packet was processed acording the right SA.
+ * function ipsec_ah_check() or ipsec_esp_decapsulate(). After successfully processing an IPsec packet
+ * an check together with an SPD lookup verifies if the packet was processed according the right SA.
  *
  * @param  packet         pointer used to access the intercepted original packet
  * @param  packet_size    length of the intercepted packet

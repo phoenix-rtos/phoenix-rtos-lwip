@@ -43,7 +43,9 @@
 #define __IPSEC_DEBUG_H__
 
 #include "util.h"
-#include <main/if.h>
+
+#include <syslog.h>
+
 
 /*! \brief If IPSEC_ERROR is defined, severe configuration errors and <br>
  *         not manageable states such as running out of memory are logged. <br>
@@ -77,71 +79,42 @@
 #define IPSEC_TABLES /**< turns on logging for any kind of tables */
 
 
-/*! \brief This macro defines a standard log message size, which can be used for concatenation of log messages (smain_printf(ATTR_INFO, ), etc) */
-#define IPSEC_LOG_MESSAGE_SIZE (128)
-
-
 /* @def When error logging is activated (IPSEC_ERROR), then we define a logging function for it. Otherwise nothing is printed */
 #ifdef IPSEC_ERROR
-#define IPSEC_LOG_ERR(__function_name__, __code__, ...) \
-	{ \
-		main_printf(ATTR_INFO, "ERR %s: %d : ", __function_name__, __code__); \
-		main_printf(ATTR_INFO, __VA_ARGS__); \
-		main_printf(ATTR_INFO, "\n"); \
-	}
+#define IPSEC_LOG_ERR(code, fmt, ...) syslog(LOG_ERR, "%s: %d : " fmt "\n", __func__, code, ##__VA_ARGS__)
 #else
-#define IPSEC_LOG_ERR(__function_name__, __code__, ...)
+#define IPSEC_LOG_ERR(code, fmt, ...)
 #endif
 
 
 /* @def When debug messages are turned on (IPSEC_DEBUG), then we define a logging function for it. Otherwise nothing is printed. */
 #ifdef IPSEC_DEBUG
-#define IPSEC_LOG_DBG(__function_name__, __code__, ...) \
-	{ \
-		main_printf(ATTR_INFO, "DBG %s: %d : ", __function_name__, __code__); \
-		main_printf(ATTR_INFO, __VA_ARGS__); \
-		main_printf(ATTR_INFO, "\n"); \
-	}
+#define IPSEC_LOG_DBG(code, fmt, ...) syslog(LOG_DEBUG, "%s: %d : " fmt "\n", __func__, code, ##__VA_ARGS__)
 #else
-#define IPSEC_LOG_DBG(__function_name__, __code__, ...)
+#define IPSEC_LOG_DBG(code, fmt, ...)
 #endif
 
 /* @def When informative messages are turned on (IPSEC_MESSAGE), then we define a logging function for it. Otherwise nothing is printed. */
 #ifdef IPSEC_MESSAGE
-#define IPSEC_LOG_MSG(__function_name__, ...) \
-	{ \
-		main_printf(ATTR_INFO, "MSG %s: ", __function_name__); \
-		main_printf(ATTR_INFO, __VA_ARGS__); \
-		main_printf(ATTR_INFO, "\n"); \
-	}
+#define IPSEC_LOG_MSG(fmt, ...) syslog(LOG_INFO, "%s : " fmt "\n", __func__, ##__VA_ARGS__)
 #else
-#define IPSEC_LOG_MSG(__function_name__, ...)
+#define IPSEC_LOG_MSG(fmt, ...)
 #endif
 
 /* @def When informative audit messages are turned on (IPSEC_AUDIT), then we define a logging function for it. Otherwise nothing is printed. */
 #ifdef IPSEC_AUDIT
-#define IPSEC_LOG_AUD(__function_name__, __code__, ...) \
-	{ \
-		main_printf(ATTR_INFO, "AUD %s: %d : ", __function_name__, __code__); \
-		main_printf(ATTR_INFO, __VA_ARGS__); \
-		main_printf(ATTR_INFO, "\n"); \
-	}
+#define IPSEC_LOG_AUD(code, fmt, ...) syslog(LOG_INFO, "%s: %d : " fmt "\n", __func__, code, ##__VA_ARGS__)
 #else
-#define IPSEC_LOG_AUD(__function_name__, __code__, __message__)
+#define IPSEC_LOG_AUD(code, fmt, ...)
 #endif
 
 /* @def When test messages are turned on (IPSEC_TEST), then we define a logging function for it. Otherwise nothing is printed. */
 #ifdef IPSEC_TEST
-#define IPSEC_LOG_TST(__function_name__, __code__, __message__) \
-	{ \
-		main_printf(ATTR_INFO, "TST %s: %s : ", __function_name__, __code__); \
-		main_printf(ATTR_INFO, __message__); \
-		main_printf(ATTR_INFO, "\n"); \
-	}
-#define IPSEC_LOG_TST_NOMSG(__function_name__, __code__) main_printf(ATTR_INFO, "TST %s: %s : ", __function_name__, __code__)
+#define IPSEC_LOG_TST(code, fmt, ...) syslog(LOG_INFO, "%s: %d : " fmt "\n", __func__, code, ##__VA_ARGS__)
+#define IPSEC_LOG_TST_NOMSG(code)     syslog(LOG_INFO, "%s: %d\n", __func__, code)
 #else
-#define IPSEC_LOG_TST(__function_name__, __code__, __message__)
-#define IPSEC_LOG_TST_NOMSG(__function_name__, __code__)
+#define IPSEC_LOG_TST(code, fmt, ...)
+#define IPSEC_LOG_TST_NOMSG(code)
 #endif
 
 
@@ -154,28 +127,19 @@ extern int __ipsec_trace_indication;      /* variable used inside debug macros *
 extern int __ipsec_trace_indication__pos; /* variable used inside debug macros */
 
 /* the useless (__ipsec_trace_indication < 0) test is only here to avoid compiler warnings */
-#define IPSEC_LOG_TRC(__action__, __function_name__, ...) \
-	{ \
-		if (__action__ == IPSEC_TRACE_ENTER || (__ipsec_trace_indication < 0)) { \
+#define IPSEC_LOG_TRC(action, fmt, ...) \
+	do { \
+		if (action == IPSEC_TRACE_ENTER || (__ipsec_trace_indication < 0)) { \
 			__ipsec_trace_indication++; \
-			for (__ipsec_trace_indication__pos = 0; __ipsec_trace_indication__pos < __ipsec_trace_indication; __ipsec_trace_indication__pos++) { \
-				main_printf(ATTR_INFO, "  "); \
-			} \
-			main_printf(ATTR_INFO, "ENTER  %s(", __function_name__); \
+			syslog(LOG_DEBUG, "%*sENTER %s(" fmt ")\n", __ipsec_trace_indication, "", __func__, ##__VA_ARGS__); \
 		} \
 		else { \
-			for (__ipsec_trace_indication__pos = 0; __ipsec_trace_indication__pos < __ipsec_trace_indication; __ipsec_trace_indication__pos++) { \
-				main_printf(ATTR_INFO, "  "); \
-			} \
 			__ipsec_trace_indication--; \
-			main_printf(ATTR_INFO, "RETURN %s(", __function_name__); \
+			syslog(LOG_DEBUG, "%*sRETURN %s(" fmt ")\n", __ipsec_trace_indication, "", __func__, ##__VA_ARGS__); \
 		} \
-		main_printf(ATTR_INFO, __VA_ARGS__); \
-		main_printf(ATTR_INFO, ")\n"); \
-	}
-#define IPSEC_LOG_TST_NOMSG(__function_name__, __code__) main_printf(ATTR_INFO, "TST %s: %s : ", __function_name__, __code__)
+	} while (0)
 #else
-#define IPSEC_LOG_TRC(__action__, __function_name__, ...)
+#define IPSEC_LOG_TRC(action, fmt, ...)
 #endif
 
 /* @def When buffer dumping is turned on (IPSEC_DUMP_BUFFERS), then we define a dump function for it. Otherwise nothing is printed. */
