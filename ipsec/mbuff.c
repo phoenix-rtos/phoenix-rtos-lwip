@@ -1,21 +1,24 @@
 /*
- * Phoenix-RTOS
- * Copyright Phoenix Systems
+ * Phoenix-RTOS --- LwIP port
  *
- * This file is a part of Phoenix-RTOS.
+ * Copyright 2016 Phoenix Systems
+ * Author: Kuba Sejdak, Marek Bialowas
  *
  * %LICENSE%
  */
 
 #include "mbuff.h"
 
-#include <main/std.h>
-#include <phoenix/errno.h>
-#include <vm/if.h>
+#include <assert.h>
+#include <errno.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/minmax.h>
+
 
 mbuff_t *mbuff_alloc(void)
 {
-	mbuff_t *mbuff = vm_kmalloc_from(sizeof(mbuff_t), KMALLOC_AREA_MBUFF);
+	mbuff_t *mbuff = malloc(sizeof(mbuff_t));
 	if (mbuff == NULL)
 		return NULL;
 
@@ -37,10 +40,10 @@ void mbuff_free(mbuff_t *mbuff)
 		mbuff_t *to_remove = it;
 		it = it->next;
 
-		vm_kfree_from(to_remove->data, KMALLOC_AREA_MBUFF);
-		vm_kfree_from(to_remove->ancillary, KMALLOC_AREA_ANCILLARY);
-		vm_kfree_from(to_remove->priv, KMALLOC_AREA_MBUFF);
-		vm_kfree_from(to_remove, KMALLOC_AREA_MBUFF);
+		free(to_remove->data);
+		free(to_remove->ancillary);
+		free(to_remove->priv);
+		free(to_remove);
 	}
 }
 
@@ -54,15 +57,15 @@ int mbuff_feedEx(mbuff_t *mbuff, const void *data, size_t size, void *priv)
 			return -ENOMEM;
 	}
 
-	buff->data = vm_kmalloc_from(size, KMALLOC_AREA_MBUFF);
+	buff->data = malloc(size);
 	if (buff->data == NULL) {
 		if (buff != mbuff)
-			vm_kfree_from(buff, KMALLOC_AREA_MBUFF);
+			free(buff);
 
 		return -ENOMEM;
 	}
 
-	hal_memcpy(buff->data, data, size);
+	memcpy(buff->data, data, size);
 	buff->size = size;
 	buff->total_size = size;
 	buff->priv = priv;
@@ -86,7 +89,7 @@ int mbuff_peekEx(mbuff_t *mbuff, void *data, size_t size, void **ancillary, size
 		it = (it == NULL) ? mbuff : it->next;
 
 		int read_size = min(it->size, (to_read - offset));
-		hal_memcpy(data + offset, it->data, read_size);
+		memcpy(data + offset, it->data, read_size);
 		offset += read_size;
 
 		if (it->ancillary != NULL) {
@@ -95,7 +98,7 @@ int mbuff_peekEx(mbuff_t *mbuff, void *data, size_t size, void **ancillary, size
 				*ancillary_size = it->ancillary_size;
 			}
 			else
-				vm_kfree_from(it->ancillary, KMALLOC_AREA_ANCILLARY);
+				free(it->ancillary);
 
 			it->ancillary = NULL;
 			it->ancillary_size = 0;

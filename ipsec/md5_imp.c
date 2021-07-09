@@ -35,11 +35,10 @@
  * compile-time configuration.
  */
 
-#ifndef HAVE_OPENSSL
+#include "md5_imp.h"
 
 #include <string.h>
 
-#include "md5.h"
 
 /*
  * The basic MD5 functions.
@@ -79,16 +78,16 @@
  */
 #if defined(__i386__) || defined(__x86_64__) || defined(__vax__)
 #define SET(n) \
-	(*(u32 *)&ptr[(n)*4])
+	(*(uint32_t *)&ptr[(n)*4])
 #define GET(n) \
 	SET(n)
 #else
 #define SET(n) \
 	(ctx->block[(n)] = \
-			(u32)ptr[(n)*4] | \
-			((u32)ptr[(n)*4 + 1] << 8) | \
-			((u32)ptr[(n)*4 + 2] << 16) | \
-			((u32)ptr[(n)*4 + 3] << 24))
+			(uint32_t)ptr[(n)*4] | \
+			((uint32_t)ptr[(n)*4 + 1] << 8) | \
+			((uint32_t)ptr[(n)*4 + 2] << 16) | \
+			((uint32_t)ptr[(n)*4 + 3] << 24))
 #define GET(n) \
 	(ctx->block[(n)])
 #endif
@@ -100,8 +99,8 @@
 static const void *body(md5_context_t *ctx, const void *data, unsigned long size)
 {
 	const unsigned char *ptr;
-	u32 a, b, c, d;
-	u32 saved_a, saved_b, saved_c, saved_d;
+	uint32_t a, b, c, d;
+	uint32_t saved_a, saved_b, saved_c, saved_d;
 
 	ptr = (const unsigned char *)data;
 
@@ -204,7 +203,7 @@ static const void *body(md5_context_t *ctx, const void *data, unsigned long size
 	return ptr;
 }
 
-void md5_init(md5_context_t *ctx)
+void ipsec_md5_init(md5_context_t *ctx)
 {
 	ctx->a = 0x67452301;
 	ctx->b = 0xefcdab89;
@@ -215,9 +214,9 @@ void md5_init(md5_context_t *ctx)
 	ctx->hi = 0;
 }
 
-void md5_update(md5_context_t *ctx, const void *data, size_t size)
+void ipsec_md5_update(md5_context_t *ctx, const void *data, size_t size)
 {
-	u32 saved_lo;
+	uint32_t saved_lo;
 	unsigned long used, available;
 
 	saved_lo = ctx->lo;
@@ -255,7 +254,7 @@ void md5_update(md5_context_t *ctx, const void *data, size_t size)
 	(dst)[2] = (unsigned char)((src) >> 16); \
 	(dst)[3] = (unsigned char)((src) >> 24);
 
-void md5_final(u8 *result, md5_context_t *ctx)
+void ipsec_md5_final(uint8_t *result, md5_context_t *ctx)
 {
 	unsigned long used, available;
 
@@ -287,5 +286,3 @@ void md5_final(u8 *result, md5_context_t *ctx)
 
 	memset(ctx, 0, sizeof(*ctx));
 }
-
-#endif

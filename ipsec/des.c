@@ -1852,32 +1852,31 @@ void cipher_3des_cbc(unsigned char *text, int text_len,
 	DES_key_schedule ks1, ks2, ks3;
 
 	IPSEC_LOG_TRC(IPSEC_TRACE_ENTER,
-		"cipher_3des_cbc",
-		("text=%p, text_len=%d, key=%p, iv=%p, mode=%d, output=%p",
-			(void *)text, text_len, (void *)key, (void *)iv, mode, (void *)output));
+		"text=%p, text_len=%d, key=%p, iv=%p, mode=%d, output=%p",
+		(void *)text, text_len, (void *)key, (void *)iv, mode, (void *)output);
 
 	ret_val = DES_set_key_unchecked((const_DES_cblock *)(key + 0 * 8), &ks1);
 	if (ret_val != 0) {
-		IPSEC_LOG_ERR("ipsec_esp_decapsulate", IPSEC_STATUS_BAD_KEY, "DES_set_key_checked(&cbc1_key,&ks1) could not set 1st 3DES key - ret_val = %d\n", ret_val);
-		IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "cipher_3des_cbc", "void");
+		IPSEC_LOG_ERR(IPSEC_STATUS_BAD_KEY, "DES_set_key_checked(&cbc1_key,&ks1) could not set 1st 3DES key - ret_val = %d", ret_val);
+		IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "void");
 		return;
 	}
 
 	ret_val = DES_set_key_unchecked((const_DES_cblock *)(key + 1 * 8), &ks2);
 	if (ret_val != 0) {
-		IPSEC_LOG_ERR("ipsec_esp_decapsulate", IPSEC_STATUS_BAD_KEY, "DES_set_key_checked(&cbc2_key,&ks2) could not set 2nd 3DES key - ret_val = %d\n", ret_val);
-		IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "cipher_3des_cbc", "void");
+		IPSEC_LOG_ERR(IPSEC_STATUS_BAD_KEY, "DES_set_key_checked(&cbc2_key,&ks2) could not set 2nd 3DES key - ret_val = %d", ret_val);
+		IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "void");
 		return;
 	}
 
 	ret_val = DES_set_key_unchecked((const_DES_cblock *)(key + 2 * 8), &ks3);
 	if (ret_val != 0) {
-		IPSEC_LOG_ERR("ipsec_esp_decapsulate", IPSEC_STATUS_BAD_KEY, "DES_set_key_checked(&cbc3_key,&ks3) could not set 3rd 3DES key - ret_val = %d\n", ret_val);
-		IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "cipher_3des_cbc", "void");
+		IPSEC_LOG_ERR(IPSEC_STATUS_BAD_KEY, "DES_set_key_checked(&cbc3_key,&ks3) could not set 3rd 3DES key - ret_val = %d", ret_val);
+		IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "void");
 		return;
 	}
 
 	DES_ede3_cbc_encrypt(text, output, text_len, (DES_key_schedule *)&ks1, (DES_key_schedule *)&ks2, (DES_key_schedule *)&ks3, (DES_cblock *)iv, mode);
 
-	IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "cipher_3des_cbc", "void");
+	IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "void");
 }

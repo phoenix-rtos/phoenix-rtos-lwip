@@ -42,6 +42,10 @@ include wi-fi/whd/Makefile
 include wi-fi/lwip/Makefile
 endif
 
+ifeq (${LWIP_IPSEC_BUILD},yes)
+include ipsec/Makefile
+endif
+
 include drivers/Makefile
 include port/Makefile
 

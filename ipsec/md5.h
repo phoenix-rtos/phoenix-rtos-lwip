@@ -43,12 +43,6 @@
 #ifndef __MD5_H__
 #define __MD5_H__
 
-#include <lwip/def.h>
-
-#define MD5_LONG u32_t
-
-
-#define MD5_DIGEST_LENGTH 16
 
 void hmac_md5(unsigned char *, int, unsigned char *, int, unsigned char *);
 

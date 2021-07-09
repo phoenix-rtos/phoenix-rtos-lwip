@@ -43,8 +43,10 @@
 #ifndef __AH_H__
 #define __AH_H__
 
+#include "ipsec.h"
 #include "sa.h"
-#include "util.h"
+
+#include "lwip/def.h"
 
 
 #define IPSEC_AH_HDR_SIZE (12) /**< AH header size without ICV */
