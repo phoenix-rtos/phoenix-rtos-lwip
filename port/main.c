@@ -16,6 +16,7 @@
 #include <lwipopts.h>
 
 #include <sys/msg.h>
+#include <sys/minmax.h>
 #include <posix/utils.h>
 
 #include <lwip/sockets.h>
@@ -33,42 +34,75 @@
 #include "filter.h"
 
 
+#define DEV_ROUTE_ID       0
+#define DEV_IFSTATUS_ID    1
+#define DEV_PF_ID          2
+#define DEV_LINKMONITOR_ID 3
+
+
 #define SNPRINTF_APPEND(fmt, ...) do { \
-		write = snprintf(buffer, size, fmt, ##__VA_ARGS__); \
-		if (offset > write) { \
-			offset -= write; \
-			write = 0; \
-		} else if (write > size) { \
-			return -ERANGE; \
-		} else if (offset) { \
-			write -= offset; \
-			memmove(buffer, buffer + offset, write); \
-			offset = 0; \
+		if (!overflow) { \
+			int n = snprintf(buf, size, fmt, ##__VA_ARGS__); \
+			if (n >= size) \
+				overflow = 1; \
+			else { \
+				size -= n; \
+				buf += n; \
+			} \
 		} \
-		size -= write; \
-		buffer += write; \
 	} while (0)
 
 
-#ifdef LWIP_LINKMONITOR_DEV
 static struct {
-	int disconnected;
-	int reconnected;
-	int last_link;
-} main_common;
+	struct {
+		int busy;
+		char buf[1024];
+		int len;
+	} route;
+	struct {
+		int busy;
+		char buf[512];
+		int len;
+	} ifstatus;
+#if LWIP_EXT_PF
+	struct {
+		int busy;
+	} pf;
 #endif
+#ifdef LWIP_LINKMONITOR_DEV
+	struct {
+		int busy;
+		int disconnected;
+		int reconnected;
+		int last_link;
+		char buf[64];
+		int len;
+	} linkmonitor;
+#endif
+} main_common;
 
 
-static int writeRoutes(char *buffer, size_t bufSize, size_t offset)
+static int route_open(int flags)
 {
 	rt_entry_t *entry;
 	struct netif *netif;
-	size_t write, size = bufSize;
+	char *buf;
+	size_t size;
+	int overflow = 0;
 
+	if (flags & (O_WRONLY | O_RDWR))
+		return -EACCES;
+
+	if (main_common.route.busy)
+		return -EBUSY;
+
+	mutexLock(rt_table.lock);
+
+	buf = main_common.route.buf;
+	size = sizeof(main_common.route.buf);
 
 	SNPRINTF_APPEND("Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT\n");
 
-	/* FIXME: route table locking */
 	if ((entry = rt_table.entries) != NULL) {
 		do {
 			SNPRINTF_APPEND("%2s%u\t%08X\t%08X\t%04X\t%d\t%u\t%d\t%08X\t%d\t%u\t%u\n",
@@ -102,16 +136,58 @@ static int writeRoutes(char *buffer, size_t bufSize, size_t offset)
 			0, 0); /* Window, IRTT */
 	}
 
-	return bufSize - size;
+	mutexUnlock(rt_table.lock);
+
+	if (overflow)
+		return -EFBIG;
+
+	main_common.route.busy = 1;
+	main_common.route.len = buf - main_common.route.buf;
+
+	return 0;
 }
 
 
-static int writeStatus(char *buffer, size_t bufSize, size_t offset)
+static int route_close(void)
+{
+	if (!main_common.route.busy)
+		return -EBADF;
+	main_common.route.busy = 0;
+	return 0;
+}
+
+
+static int route_read(char *data, size_t size, size_t offset)
+{
+	int read;
+
+	if (offset > main_common.route.len)
+		return -ERANGE;
+
+	read = min(size, main_common.route.len - offset);
+	memcpy(data, main_common.route.buf + offset, read);
+
+	return read;
+}
+
+
+static int ifstatus_open(int flags)
 {
 	struct netif *netif;
-	size_t write, size = bufSize;
 	netif_driver_t *drv;
 	unsigned int i;
+	char *buf;
+	size_t size;
+	int overflow = 0;
+
+	if (flags & (O_WRONLY | O_RDWR))
+		return -EACCES;
+
+	if (main_common.ifstatus.busy)
+		return -EBUSY;
+
+	buf = main_common.ifstatus.buf;
+	size = sizeof(main_common.ifstatus.buf);
 
 	for (netif = netif_list; netif != NULL; netif = netif->next) {
 		SNPRINTF_APPEND("%2s%d_up=%u\n", netif->name, netif->num, netif_is_up(netif));
@@ -140,33 +216,102 @@ static int writeStatus(char *buffer, size_t bufSize, size_t offset)
 		SNPRINTF_APPEND("dns_%u=%s\n", i, inet_ntoa(*dns_getserver(i)));
 #endif
 
-	return bufSize - size;
+	if (overflow)
+		return -EFBIG;
+
+	main_common.ifstatus.busy = 1;
+	main_common.ifstatus.len = buf - main_common.ifstatus.buf;
+
+	return 0;
+}
+
+
+static int ifstatus_close(void)
+{
+	if (!main_common.ifstatus.busy)
+		return -EBADF;
+	main_common.ifstatus.busy = 0;
+	return 0;
+}
+
+
+static int ifstatus_read(char *data, size_t size, size_t offset)
+{
+	int read;
+
+	if (offset > main_common.ifstatus.len)
+		return -ERANGE;
+
+	read = min(size, main_common.ifstatus.len - offset);
+	memcpy(data, main_common.ifstatus.buf + offset, read);
+
+	return read;
 }
 
 
 #ifdef LWIP_LINKMONITOR_DEV
-static int write_linkmonitor(char *buffer, size_t bufSize, size_t offset)
+static int linkmonitor_open(int flags)
 {
 	struct netif *netif;
-	size_t write, size = bufSize;
+	char *buf;
+	size_t size;
+	int overflow = 0;
+
+	if (flags & (O_WRONLY | O_RDWR))
+		return -EACCES;
+
+	if (main_common.linkmonitor.busy)
+		return -EBUSY;
 
 	netif = netif_find(LWIP_LINKMONITOR_DEV);
 	if (!netif)
 		return -EINVAL;
 
-	/* initialize link status on first read */
-	if (main_common.last_link == -1)
-		main_common.last_link = netif_is_link_up(netif);
+	/* initialize link status on first open */
+	if (main_common.linkmonitor.last_link == -1)
+		main_common.linkmonitor.last_link = netif_is_link_up(netif);
 
-	SNPRINTF_APPEND("link=%u\n", main_common.last_link);
-	SNPRINTF_APPEND("disconnected=%u\n", main_common.disconnected);
-	SNPRINTF_APPEND("reconnected=%u\n", main_common.reconnected);
+	buf = main_common.linkmonitor.buf;
+	size = sizeof(main_common.linkmonitor.buf);
 
-	/* clear disconnected/reconnected flags on every read */
-	main_common.disconnected = 0;
-	main_common.reconnected = 0;
+	SNPRINTF_APPEND("link=%u\n", main_common.linkmonitor.last_link);
+	SNPRINTF_APPEND("disconnected=%u\n", main_common.linkmonitor.disconnected);
+	SNPRINTF_APPEND("reconnected=%u\n", main_common.linkmonitor.reconnected);
 
-	return bufSize - size;
+	if (overflow)
+		return -EFBIG;
+
+	/* clear disconnected/reconnected flags on every open */
+	main_common.linkmonitor.disconnected = 0;
+	main_common.linkmonitor.reconnected = 0;
+
+	main_common.linkmonitor.busy = 1;
+	main_common.linkmonitor.len = buf - main_common.linkmonitor.buf;
+
+	return 0;
+}
+
+
+static int linkmonitor_close(void)
+{
+	if (!main_common.linkmonitor.busy)
+		return -EBADF;
+	main_common.linkmonitor.busy = 0;
+	return 0;
+}
+
+
+static int linkmonitor_read(char *data, size_t size, size_t offset)
+{
+	int read;
+
+	if (offset > main_common.linkmonitor.len)
+		return -ERANGE;
+
+	read = min(size, main_common.linkmonitor.len - offset);
+	memcpy(data, main_common.linkmonitor.buf + offset, read);
+
+	return read;
 }
 
 
@@ -175,26 +320,26 @@ static void linkmonitor_callback(struct netif *netif)
 	uint8_t link = netif_is_link_up(netif);
 
 	/* link monitoring starts on first read */
-	if (main_common.last_link == -1)
+	if (main_common.linkmonitor.last_link == -1)
 		return;
 
-	if (!link && main_common.last_link)
-		main_common.disconnected = 1;
+	if (!link && main_common.linkmonitor.last_link)
+		main_common.linkmonitor.disconnected = 1;
 
-	if (link && !main_common.last_link)
-		main_common.reconnected = 1;
+	if (link && !main_common.linkmonitor.last_link)
+		main_common.linkmonitor.reconnected = 1;
 
-	main_common.last_link = link;
+	main_common.linkmonitor.last_link = link;
 }
 
 
-static void linkmonitor(const char *dev)
+static void linkmonitor_init(const char *dev)
 {
 	struct netif *netif;
 
-	main_common.disconnected = 0;
-	main_common.reconnected = 0;
-	main_common.last_link = -1;
+	main_common.linkmonitor.disconnected = 0;
+	main_common.linkmonitor.reconnected = 0;
+	main_common.linkmonitor.last_link = -1;
 
 	if ((netif = netif_find(dev)))
 		netif_set_link_callback(netif, linkmonitor_callback);
@@ -203,11 +348,34 @@ static void linkmonitor(const char *dev)
 
 
 #if LWIP_EXT_PF
-static int readPf(void *buffer, size_t size, size_t offset)
+static int pf_open(int flags)
 {
-	pfrule_array_t *input = (pfrule_array_t *)buffer;
+	if (flags & (O_RDONLY | O_RDWR))
+		return -EACCES;
 
-	if (buffer == NULL || !size || size != input->len * sizeof(pfrule_t) + sizeof(pfrule_array_t))
+	if (main_common.pf.busy)
+		return -EBUSY;
+
+	main_common.pf.busy = 1;
+
+	return 0;
+}
+
+
+static int pf_close(void)
+{
+	if (!main_common.pf.busy)
+		return -EBADF;
+	main_common.pf.busy = 0;
+	return 0;
+}
+
+
+static int pf_write(char *data, size_t size)
+{
+	pfrule_array_t *input = (pfrule_array_t *)data;
+
+	if (input == NULL || !size || size != input->len * sizeof(pfrule_t) + sizeof(pfrule_array_t))
 		return -EINVAL;
 
 	return pf_rulesUpdate(input);
@@ -215,93 +383,159 @@ static int readPf(void *buffer, size_t size, size_t offset)
 #endif
 
 
-static void mainLoop(void)
+static int dev_init(unsigned int port)
 {
-	msg_t msg = {0};
-	unsigned long int rid;
-	unsigned port;
-	oid_t route_oid = {0, 0};
-	oid_t status_oid = {0, 1};
+	oid_t route_oid = { port, DEV_ROUTE_ID };
+	oid_t ifstatus_oid = { port, DEV_IFSTATUS_ID };
 #if LWIP_EXT_PF
-	oid_t pf_oid = {0, 2};
+	oid_t pf_oid = { port, DEV_PF_ID };
 #endif
 #ifdef LWIP_LINKMONITOR_DEV
-	oid_t linkmonitor_oid = { 0, 3 };
-#endif
-
-	if (portCreate(&port) < 0) {
-		printf("phoenix-rtos-lwip: can't create port\n");
-		return;
-	}
-
-	route_oid.port = port;
-	status_oid.port = port;
-#if LWIP_EXT_PF
-	pf_oid.port = port;
-#endif
-#ifdef LWIP_LINKMONITOR_DEV
-	linkmonitor_oid.port = port;
+	oid_t linkmonitor_oid = { port, DEV_LINKMONITOR_ID };
 #endif
 
 	if (create_dev(&route_oid, "/dev/route") < 0) {
 		printf("phoenix-rtos-lwip: can't create /dev/route\n");
-		return;
+		return -1;
 	}
 
-	if (create_dev(&status_oid, "/dev/ifstatus") < 0) {
+	if (create_dev(&ifstatus_oid, "/dev/ifstatus") < 0) {
 		printf("phoenix-rtos-lwip: can't create /dev/ifstatus\n");
-		return;
+		return -1;
 	}
 
 #if LWIP_EXT_PF
 	if (create_dev(&pf_oid, "/dev/pf") < 0) {
 		printf("phoenix-rtos-lwip: can't create /dev/pf\n");
-		return;
+		return -1;
 	}
 #endif
 
 #ifdef LWIP_LINKMONITOR_DEV
 	if (create_dev(&linkmonitor_oid, "/dev/linkmonitor") < 0) {
 		printf("phoenix-rtos-lwip: can't create /dev/linkmonitor\n");
-		return;
+		return -1;
 	}
 #endif
+
+	return 0;
+}
+
+
+static int dev_open(id_t id, int flags)
+{
+	switch (id) {
+		case DEV_ROUTE_ID:
+			return route_open(flags);
+		case DEV_IFSTATUS_ID:
+			return ifstatus_open(flags);
+#if LWIP_EXT_PF
+		case DEV_PF_ID:
+			return pf_open(flags);
+#endif
+#ifdef LWIP_LINKMONITOR_DEV
+		case DEV_LINKMONITOR_ID:
+			return linkmonitor_open(flags);
+#endif
+	}
+	return -ENOENT;
+}
+
+static int dev_close(id_t id)
+{
+	switch (id) {
+		case DEV_ROUTE_ID:
+			return route_close();
+		case DEV_IFSTATUS_ID:
+			return ifstatus_close();
+#if LWIP_EXT_PF
+		case DEV_PF_ID:
+			return pf_close();
+#endif
+#ifdef LWIP_LINKMONITOR_DEV
+		case DEV_LINKMONITOR_ID:
+			return linkmonitor_close();
+#endif
+	}
+	return -ENOENT;
+}
+
+
+static int dev_read(id_t id, void *data, size_t size, size_t offset)
+{
+	switch (id) {
+		case DEV_ROUTE_ID:
+			return route_read(data, size, offset);
+		case DEV_IFSTATUS_ID:
+			return ifstatus_read(data, size, offset);
+#if LWIP_EXT_PF
+		case DEV_PF_ID:
+			return -EACCES;
+#endif
+#ifdef LWIP_LINKMONITOR_DEV
+		case DEV_LINKMONITOR_ID:
+			return linkmonitor_read(data, size, offset);
+#endif
+	}
+	return -ENOENT;
+}
+
+
+static int dev_write(id_t id, void *data, size_t size, size_t offset)
+{
+	switch (id) {
+		case DEV_ROUTE_ID:
+		case DEV_IFSTATUS_ID:
+#ifdef LWIP_LINKMONITOR_DEV
+		case DEV_LINKMONITOR_ID:
+#endif
+			return -EACCES;
+#if LWIP_EXT_PF
+		case DEV_PF_ID:
+			return pf_write(data, size);
+#endif
+	}
+	return -ENOENT;
+}
+
+
+static void mainLoop(void)
+{
+	msg_t msg = { 0 };
+	unsigned long int rid;
+	unsigned port;
+
+	if (portCreate(&port) < 0) {
+		printf("phoenix-rtos-lwip: can't create port\n");
+		return;
+	}
+
+	if (dev_init(port) < 0)
+		return;
 
 	for (;;) {
 		if (msgRecv(port, &msg, &rid) < 0)
 			continue;
 
 		switch (msg.type) {
-		case mtRead:
-				if (msg.i.io.oid.id == route_oid.id) {
-					mutexLock(rt_table.lock);
-					msg.o.io.err = writeRoutes(msg.o.data, msg.o.size, msg.i.io.offs);
-					mutexUnlock(rt_table.lock);
-				}
-				else if (msg.i.io.oid.id == status_oid.id)
-					msg.o.io.err = writeStatus(msg.o.data, msg.o.size, msg.i.io.offs);
-#ifdef LWIP_LINKMONITOR_DEV
-				else if (msg.i.io.oid.id == linkmonitor_oid.id)
-					msg.o.io.err = write_linkmonitor(msg.o.data, msg.o.size, msg.i.io.offs);
-#endif
-				else
-					msg.o.io.err = -EINVAL;
-			break;
+			case mtOpen:
+				msg.o.io.err = dev_open(msg.i.openclose.oid.id, msg.i.openclose.flags);
+				break;
 
-		case mtWrite:
-#if LWIP_EXT_PF
-				if (msg.i.io.oid.id == pf_oid.id) {
-					msg.o.io.err = readPf(msg.i.data, msg.i.size, msg.i.io.offs);
-				}
-				else
-#endif
-				{
-					msg.o.io.err = -EINVAL;
-				}
-			break;
+			case mtClose:
+				msg.o.io.err = dev_close(msg.i.openclose.oid.id);
+				break;
 
-		default:
-			break;
+			case mtRead:
+				msg.o.io.err = dev_read(msg.i.openclose.oid.id, msg.o.data, msg.o.size, msg.i.io.offs);
+				break;
+
+			case mtWrite:
+				msg.o.io.err = dev_write(msg.i.openclose.oid.id, msg.i.data, msg.i.size, msg.i.io.offs);
+				break;
+
+			default:
+				break;
 		}
 
 		msgRespond(port, &msg, rid);
@@ -363,7 +597,7 @@ int main(int argc, char **argv)
 		exit(1);
 
 #ifdef LWIP_LINKMONITOR_DEV
-	linkmonitor(LWIP_LINKMONITOR_DEV);
+	linkmonitor_init(LWIP_LINKMONITOR_DEV);
 #endif
 
 	mainLoop();
