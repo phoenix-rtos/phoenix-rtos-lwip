@@ -41,6 +41,9 @@ struct rt_table {
 extern struct rt_table rt_table;
 
 
+void route_init(void);
+
+
 int route_add(struct netif *netif, struct rtentry *rt);
 
 

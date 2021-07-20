@@ -13,8 +13,4 @@ else
   LOCAL_CFLAGS += -DLWIP_IPSEC=0
 endif
 
-ifneq (${LWIP_LINKMONITOR_DEV},)
-  LOCAL_CFLAGS += -DLWIP_LINKMONITOR_DEV=\"${LWIP_LINKMONITOR_DEV}\"
-endif
-
 include $(binary.mk)

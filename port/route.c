@@ -204,6 +204,12 @@ static ip4_addr_t *_route_get_gw(struct netif *netif, const ip4_addr_t *dest)
 }
 
  
+void route_init(void)
+{
+	mutexCreate(&rt_table.lock);
+}
+
+
 int route_add(struct netif *netif, struct rtentry *rt)
 {
 	int res;
