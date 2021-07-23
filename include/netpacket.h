@@ -35,6 +35,6 @@ err_t netpacket_sendto(struct netpacket_pcb *pcb, struct pbuf *p, u8_t *dst_addr
 int netpacket_input(struct pbuf *p, struct netif *netif);
 void netpacket_linkoutput(struct netif *netif, struct pbuf *p);
 
-#endif /* PHOENIX_NETPACKET_H_ */
+#endif /* LWIP_NETPACKET */
 
-#endif
+#endif /* PHOENIX_NETPACKET_H_ */
