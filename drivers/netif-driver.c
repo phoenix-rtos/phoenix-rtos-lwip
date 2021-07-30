@@ -90,7 +90,7 @@ static err_t netif_dev_init(struct netif *netif)
 		netif->name[1] = 'n';
 	}
 
-	if (strcmp(storage->drv->name, "tun")) {
+	if (strcmp(storage->drv->name, "tun") && strcmp(storage->drv->name, "g3plc")) {
 		netif->output = etharp_output;
 #if LWIP_IPV6
 		netif->output_ip6 = ethip6_output;

@@ -37,7 +37,7 @@
 
 /** Debug level for 6LoWPAN in general */
 #ifndef LWIP_LOWPAN6_DEBUG
-#define LWIP_LOWPAN6_DEBUG               LWIP_DBG_ON
+#define LWIP_LOWPAN6_DEBUG               LWIP_DBG_OFF
 #endif
 
 /** LWIP_LOWPAN6_IP_COMPRESSED_DEBUG: enable compressed IP frame
@@ -50,7 +50,7 @@
 /** LWIP_LOWPAN6_DECOMPRESSION_DEBUG: enable decompression debug output
  */
 #ifndef LWIP_LOWPAN6_DECOMPRESSION_DEBUG
-#define LWIP_LOWPAN6_DECOMPRESSION_DEBUG      LWIP_DBG_OFF
+#define LWIP_LOWPAN6_DECOMPRESSION_DEBUG      LWIP_DBG_ON
 #endif
 
 /** LWIP_RFC7668_IP_UNCOMPRESSED_DEBUG: enable decompressed IP frame

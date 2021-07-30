@@ -10,6 +10,7 @@
  */
 
 #include "lbp_g3.h"
+#include "loadng_g3.h"
 #include "lwip/pbuf.h"
 #include "lwip/sys.h"
 #include <string.h>
@@ -33,7 +34,7 @@
                                       lbp_g3_attr_flg(LBP_G3_ATTR_GMK) | \
                                       lbp_g3_attr_flg(LBP_G3_ATTR_GMK_ACTIVATION))
 
-static struct g3_scan_entry scan_table[LBP_G3_SCAN_TABLE_SIZE];
+static struct g3plc_scan_entry scan_table[LBP_G3_SCAN_TABLE_SIZE];
 
 /* LBP Type and Message codes */
 enum lbp_g3_msg_type {
@@ -163,8 +164,6 @@ lbp_g3_msg_init(u8_t msg_type, const u8_t *lbd_addr, u16_t payload_size)
   return p;
 }
 
-static err_t
-lbp_g3_output(struct netif *netif, struct pbuf *p, struct lowpan6_link_addr *dst);
 
 /**
  * Starts the joining procedure using the given LBA. It sets
@@ -179,6 +178,7 @@ lbp_g3_join(struct netif *netif, u16_t pan_id, u16_t lba)
   struct pbuf *p;
   err_t ret;
 
+  LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_JOIN: devtype DEVICE\n"));
   /* Set PAN ID in MAC and in ADP */
   if (lowpan6_g3_set_pan_id(netif, pan_id) != ERR_OK) {
     LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_join: Can't set PAN ID\n"));
@@ -213,6 +213,7 @@ lbp_g3_discovery(struct netif *netif, u8_t duration)
   lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
   unsigned i;
 
+  fprintf(stderr, "lbp_g3_discovery: start\n");
   if (ctx->state == LBP_G3_STATE_SCANNING) {
     return ERR_INPROGRESS;
   }
@@ -221,7 +222,7 @@ lbp_g3_discovery(struct netif *netif, u8_t duration)
     scan_table[i].valid = 0;
   }
 
-  if (g3_mlme_scan_request(scan_table, LBP_G3_SCAN_TABLE_SIZE, duration) < 0) {
+  if (g3plc_scan_request(scan_table, LBP_G3_SCAN_TABLE_SIZE, duration) < 0) {
     return ERR_VAL;
   }
   ctx->state = LBP_G3_STATE_SCANNING;
@@ -239,6 +240,8 @@ err_t
 lbp_g3_start(struct netif *netif, u8_t scan_duration)
 {
   lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
+
+  fprintf(stderr, "lbp_g3: START\n");
 
   if (lbp_g3_discovery(netif, scan_duration) < 0) {
     return ERR_VAL;
@@ -441,6 +444,8 @@ lbp_g3_handle_accepted(struct netif *netif, struct pbuf *p, struct lowpan6_link_
 
       ctx->state = LBP_G3_STATE_IDLE;
       if (lowpan6_g3_set_short_addr(netif, ctx->short_address >> 8, ctx->short_address & 0xFF) < 0) {
+        /* XXX */
+
         LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_handle_accepted: Can't set short address!\n"));
         ctx->state = LBP_G3_STATE_ERROR;
         return ERR_VAL;
@@ -448,6 +453,25 @@ lbp_g3_handle_accepted(struct netif *netif, struct pbuf *p, struct lowpan6_link_
 
       ctx->connected = 1;
       lowpan6_g3_set_device_role(netif, LOWPAN6_G3_ROLE_LBA);
+      /* ip6addr = { .addr = { 0xfe800000UL,  */
+
+      ip6_addr_t ip6addr = { 0 };
+
+      /* IP6_ADDR(ip6addr, 0xfe800000UL, 0x0000781dUL, 0x00fffe00, 0); */
+      /* fe80:0000:0000:0000:781d:00ff:fe00:0009 */
+      LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_handle_accepted: %02x %02x\n", (u8_t)(ctx->short_address >> 8), (u8_t)(ctx->short_address & 0xFF)));
+
+      IP6_ADDR_PART(&ip6addr, 0, 0xfe, 0x80, 0x00, 0x00);
+      IP6_ADDR_PART(&ip6addr, 1, 0x00, 0x00, 0x00, 0x00);
+      IP6_ADDR_PART(&ip6addr, 2, 0x78, 0x1d, 0x00, 0xff);
+      IP6_ADDR_PART(&ip6addr, 3, 0xfe, 0x00, (ctx->short_address >> 8), (ctx->short_address & 0xFF));
+
+      LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_handle_accepted: %08x %08x %08x %08x\n", (u32_t)ip6addr.addr[0], (u32_t)ip6addr.addr[1], (u32_t)ip6addr.addr[2], (u32_t)ip6addr.addr[3]));
+      netif_set_link_up(netif);
+      netif_set_up(netif);
+      netif_ip6_addr_set(netif, 0, &ip6addr);
+	  netif_ip6_addr_set_state(netif, 0, IP6_ADDR_PREFERRED);
+      /* netif_set_up(netif); */
     } else {
       LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_handle_accepted: Rekeying succeeded.\n"));
       ctx->state = LBP_G3_STATE_IDLE;
@@ -621,10 +645,8 @@ lbp_g3_leave(struct netif *netif)
   pbuf_free(p);
 
   if (ret == ERR_OK) {
-    lowpan6_g3_set_short_addr(netif, 0xFF, 0xFF);
-    ctx->state = LBP_G3_STATE_IDLE;
-    ctx->connected = 0;
-    /* TODO: reset device */
+    // g3plc_mac_reset();
+    // lowpan6_g3_reset(netif);
   }
 
   return ret;
@@ -647,10 +669,11 @@ lbp_g3_handle_lbs_kick(struct netif *netif, struct pbuf *pbuf)
   lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
 
   LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_handle_lbs_kick: Received LBS kick msg!\n"));
-  lowpan6_g3_set_short_addr(netif, 0xFF, 0xFF);
-  ctx->state = LBP_G3_STATE_IDLE;
-  ctx->connected = 0;
+
   /* TODO: reset device */
+  // lowpan6_g3_set_short_addr(netif, 0xFF, 0xFF);
+  // ctx->state = LBP_G3_STATE_IDLE;
+  // ctx->connected = 0;
 
   return ERR_OK;
 }
@@ -688,6 +711,54 @@ lbp_g3_handle_challenge(struct netif *netif, struct pbuf *p, struct lowpan6_link
     return ERR_VAL;
   }
 
+  switch (ctx->state) {
+    case LBP_G3_STATE_JOINING:
+      if (eap_t_subfield == ps_eap_psk__message1) {
+        ret = lbp_g3_handle_msg1(netif, origin, lbd_addr, eap_data_len, eap_data, eap_id);
+        if (ret == ERR_OK)
+          ctx->state = LBP_G3_STATE_WAIT_MSG3;
+      } else {
+        LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_handle_challenge: Expected EAP-PSK msg1, got: %x\n", eap_t_subfield));
+        ret = ERR_VAL;
+      }
+      break;
+
+    case LBP_G3_STATE_WAIT_MSG3:
+      if (eap_t_subfield == ps_eap_psk__message3) {
+        ret = lbp_g3_handle_msg3(netif, origin, lbd_addr, eap_data_len, eap_data, eap_id, lbp_payload);
+        if (ret == ERR_OK)
+          ctx->state = LBP_G3_STATE_WAIT_ACCEPT;
+      } else {
+        LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_handle_challenge: Expected EAP-PSK msg3, got: %x\n", eap_t_subfield));
+        ret = ERR_VAL;
+      }
+      break;
+
+    case LBP_G3_STATE_IDLE:
+      if (eap_t_subfield == ps_eap_psk__message1) {
+        /* Begin rekeying */
+        ctx->is_rekeying = 1;
+        ret = lbp_g3_handle_msg1(netif, origin, lbd_addr, eap_data_len, eap_data, eap_id);
+        if (ret == ERR_OK)
+          ctx->state = LBP_G3_STATE_WAIT_MSG3;
+      } else {
+        LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_handle_challenge: Expected EAP-PSK msg1, got: %x\n", eap_t_subfield));
+        ret = ERR_VAL;
+      }
+      break;
+
+    default:
+      LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_handle_challenge: Unexpected challenge message.\n"));
+      ret = ERR_VAL;
+      break;
+  }
+
+  /* if (ret != ERR_OK) */
+    /* ctx->state = LBP_G3_STATE_ERROR; */ /* XXXX */
+
+  return ret;
+
+#if 0
   if (ctx->state == LBP_G3_STATE_JOINING) {
     if (eap_t_subfield == ps_eap_psk__message1) {
       ret = lbp_g3_handle_msg1(netif, origin, lbd_addr, eap_data_len, eap_data, eap_id);
@@ -724,8 +795,109 @@ lbp_g3_handle_challenge(struct netif *netif, struct pbuf *p, struct lowpan6_link
 
   if (ret != ERR_OK)
     ctx->state = LBP_G3_STATE_ERROR;
+#endif
 
+#if 0
+#if 1
+  switch (ctx->state) {
+    case LBP_G3_STATE_JOINING:
+      if (eap_t_subfield == ps_eap_psk__message1) {
+        ret = lbp_g3_handle_msg1(netif, origin, lbd_addr, eap_data_len, eap_data, eap_id);
+        if (ret == ERR_OK)
+          ctx->state = LBP_G3_STATE_WAIT_MSG3;
+      } else {
+        LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_handle_challenge: Expected EAP-PSK msg1, got: %x\n", eap_t_subfield));
+        ret = ERR_VAL;
+      }
+      break;
+
+    case LBP_G3_STATE_WAIT_MSG3:
+      if (eap_t_subfield == ps_eap_psk__message1) {
+        LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_handle_challenge: Expected EAP-PSK msg3, but message1 received\n"));
+        ret = lbp_g3_handle_msg1(netif, origin, lbd_addr, eap_data_len, eap_data, eap_id);
+        if (ret == ERR_OK)
+          ctx->state = LBP_G3_STATE_WAIT_MSG3;
+      } else {
+
+        if (eap_t_subfield == ps_eap_psk__message3) {
+          ret = lbp_g3_handle_msg3(netif, origin, lbd_addr, eap_data_len, eap_data, eap_id, lbp_payload);
+          if (ret == ERR_OK)
+            ctx->state = LBP_G3_STATE_WAIT_ACCEPT;
+        } else {
+          LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_handle_challenge: Expected EAP-PSK msg3, got: %x\n", eap_t_subfield));
+          ret = ERR_VAL;
+        }
+      }
+      break;
+
+    case LBP_G3_STATE_IDLE:
+      if (eap_t_subfield == ps_eap_psk__message1) {
+        /* Begin rekeying */
+        ctx->is_rekeying = 1;
+        ret = lbp_g3_handle_msg1(netif, origin, lbd_addr, eap_data_len, eap_data, eap_id);
+        if (ret == ERR_OK)
+          ctx->state = LBP_G3_STATE_WAIT_MSG3;
+      } else {
+        LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_handle_challenge: Expected EAP-PSK msg1, got: %x\n", eap_t_subfield));
+        ret = ERR_VAL;
+      }
+      break;
+
+    default:
+      if (eap_t_subfield == ps_eap_psk__message1) {
+        ret = lbp_g3_handle_msg1(netif, origin, lbd_addr, eap_data_len, eap_data, eap_id);
+        if (ret == ERR_OK)
+          ctx->state = LBP_G3_STATE_WAIT_MSG3;
+      } else {
+        LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_handle_challenge: Unexpected challenge message.\n"));
+        ret = ERR_VAL;
+      }
+      break;
+  }
+
+
+#else
+  if (ctx->state == LBP_G3_STATE_JOINING) {
+    if (eap_t_subfield == ps_eap_psk__message1) {
+      ret = lbp_g3_handle_msg1(netif, origin, lbd_addr, eap_data_len, eap_data, eap_id);
+      if (ret == ERR_OK)
+        ctx->state = LBP_G3_STATE_WAIT_MSG3;
+    } else {
+      LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_handle_challenge: Expected EAP-PSK msg1, got: %x\n", eap_t_subfield));
+      ret = ERR_VAL;
+    }
+  } else if (ctx->state == LBP_G3_STATE_WAIT_MSG3) {
+    if (eap_t_subfield == ps_eap_psk__message3) {
+      ret = lbp_g3_handle_msg3(netif, origin, lbd_addr, eap_data_len, eap_data, eap_id, lbp_payload);
+      if (ret == ERR_OK)
+        ctx->state = LBP_G3_STATE_WAIT_ACCEPT;
+    } else {
+      LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_handle_challenge: Expected EAP-PSK msg3, got: %x\n", eap_t_subfield));
+      ret = ERR_VAL;
+    }
+  } else if (ctx->state == LBP_G3_STATE_IDLE) {
+    if (eap_t_subfield == ps_eap_psk__message1) {
+      /* Begin rekeying */
+      ctx->is_rekeying = 1;
+      ret = lbp_g3_handle_msg1(netif, origin, lbd_addr, eap_data_len, eap_data, eap_id);
+      if (ret == ERR_OK)
+        ctx->state = LBP_G3_STATE_WAIT_MSG3;
+    } else {
+      LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_handle_challenge: Expected EAP-PSK msg1, got: %x\n", eap_t_subfield));
+      ret = ERR_VAL;
+    }
+  } else {
+    LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_handle_challenge: Unexpected challenge message.\n"));
+    ret = ERR_VAL;
+  }
+#endif
+
+
+  if (ret != ERR_OK)
+    ctx->state = LBP_G3_STATE_ERROR;
   return ret;
+#endif
+
 }
 
 #if LBP_G3_PAN_COORDINATOR
@@ -803,10 +975,29 @@ lbp_g3_lbs_network_start(struct netif *netif)
 {
   lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
 
-  if (g3_network_start(ctx->pan_id) < 0) {
+  fprintf(stderr, "lbp_g3_lbs_network_start pan_id: %04x\n", ctx->pan_id);
+  if (g3plc_network_start(ctx->pan_id) < 0) {
     LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_network_start: Can't start network\n"));
     return ERR_VAL;
   }
+
+  ip6_addr_t ip6addr = { 0 };
+
+  /* IP6_ADDR(ip6addr, 0xfe800000UL, 0x0000781dUL, 0x00fffe00, 0); */
+  /* fe80:0000:0000:0000:781d:00ff:fe00:0009 */
+  LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_network start short addr: %02x %02x\n", (u8_t)(ctx->short_address >> 8), (u8_t)(ctx->short_address & 0xFF)));
+  /* TODO: DONT HARDCODE PAN ID */
+  IP6_ADDR_PART(&ip6addr, 0, 0xfe, 0x80, 0x00, 0x00);
+  IP6_ADDR_PART(&ip6addr, 1, 0x00, 0x00, 0x00, 0x00);
+  IP6_ADDR_PART(&ip6addr, 2, 0x78, 0x1d, 0x00, 0xff);
+  IP6_ADDR_PART(&ip6addr, 3, 0xfe, 0x00, (ctx->short_address >> 8), (ctx->short_address & 0xFF));
+
+  LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_network start ip6 addr: %08x %08x %08x %08x\n", (u32_t)ip6addr.addr[0], (u32_t)ip6addr.addr[1], (u32_t)ip6addr.addr[2], (u32_t)ip6addr.addr[3]));
+
+  netif_set_up(netif);
+  netif_set_link_up(netif);
+  netif_ip6_addr_set(netif, 0, &ip6addr);
+	netif_ip6_addr_set_state(netif, 0, IP6_ADDR_PREFERRED);
 
   ctx->state = LBP_G3_STATE_IDLE;
   ctx->connected = 1;
@@ -880,12 +1071,25 @@ lbp_g3_lbs_gen_msg1(struct netif *netif, u8_t *lbd_addr, struct lowpan6_link_add
 {
   struct pbuf *reply;
   err_t ret;
+  int i;
 
+  LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_lbs_get_msg1 enter\n"));
   reply = lbp_g3_msg_init(LBP_G3_MSG_CHALLENGE, lbd_addr,
                           ps_eap_psk_len__message1);
   if (reply == NULL) {
+    LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_lbs_get_msg1 reply is NULL\n"));
     return ERR_MEM;
   }
+
+  LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_lbs generating msg1 challenge:\n----------\n\n"));
+  LWIP_DEBUGF(LBP_G3_DEBUG, ("RAND_S: "));
+  for (i = 0; i < 16; i++)
+    LWIP_DEBUGF(LBP_G3_DEBUG, ("%02X ", lbp_data.eap_ctx.rand_s.data[i]));
+  LWIP_DEBUGF(LBP_G3_DEBUG, ("\nNAI_S: "));
+
+  for (i = 0; i < lbp_data.eap_ctx.nai_s.length; i++)
+    LWIP_DEBUGF(LBP_G3_DEBUG, ("%02X ", lbp_data.eap_ctx.nai_s.data[i]));
+  LWIP_DEBUGF(LBP_G3_DEBUG, ("\n"));
 
   /* TODO: since we are starting a new session, we should generate a new RAND_S */
   if (ps_eap_psk_create_message1(lbp_g3_msg_payload(reply), ps_eap_psk_len__message1,
@@ -918,22 +1122,11 @@ lbp_g3_lbs_gen_msg1(struct netif *netif, u8_t *lbd_addr, struct lowpan6_link_add
  * @param short_address 16-bit short address in machine byte order.
  */
 err_t
-lbp_g3_lbs_pan_start(struct netif *netif, u8_t scan_duration, u16_t pan_id, u16_t short_address)
+lbp_g3_lbs_pan_start(struct netif *netif, u8_t scan_duration)
 {
   lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
 
-  lowpan6_g3_set_device_type(LOWPAN6_G3_DEVTYPE_COORD);
-
-  if (lowpan6_g3_set_pan_id(netif, pan_id) != ERR_OK) {
-    LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_join: Can't set PAN ID\n"));
-    return ERR_VAL;
-  }
-
-  if (lowpan6_g3_set_short_addr(netif, short_address >> 8, short_address & 0xFF) != ERR_OK) {
-    LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_join: Can't set the short address\n"));
-    return ERR_VAL;
-  }
-
+  fprintf(stderr, "lbp_g3: PAN start\n");
   if (scan_duration > 0) {
     if (lbp_g3_discovery(netif, scan_duration) < 0) {
       return ERR_VAL;
@@ -998,7 +1191,7 @@ err_t lbp_g3_lbs_rekey(struct netif *netif, u8_t gmk_id)
 
   for (i = 0; i < LBP_G3_PAN_DEVINFO_TABLE_SIZE; i++) {
     if (device_table[i].dev_state == LBP_G3_LBS_DEV_ACCEPTED) {
-      lowpan6_link_addr_set_u16(&dst, device_table[i].short_addr);
+      lowpan6_link_addr_set_u16(&dst, lwip_htons(device_table[i].short_addr));
       if (lbp_g3_lbs_gen_msg1(netif, device_table[i].ext_addr, &dst) < 0) {
         LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_lbs_rekey: Rekeying initiation failed!\n"));
         return ERR_VAL;
@@ -1034,6 +1227,13 @@ lbp_g3_lbs_handle_lbd_kick(struct netif *netif, struct pbuf *p, struct lowpan6_l
                           lwip_ntohs(lowpan6_link_addr_to_u16(origin)), lowpan6_link_addr_to_u64(lbd_addr)));
 
   return ERR_VAL;
+}
+
+void
+lbp_g3_set_id(uint8_t *id, size_t len)
+{
+    MEMCPY(lbp_data.eap_ctx.nai_s.data, id, len);
+    lbp_data.eap_ctx.nai_s.length = len;
 }
 
 /**
@@ -1121,7 +1321,7 @@ lbp_g3_lbs_handle_rekey_update(struct netif *netif)
       }
       lbp_g3_param_encode(lbp_g3_msg_payload(p), LBP_G3_ATTR_GMK_ACTIVATION,
                           LBP_G3_LIB_PSI, 1, &ctx->rekey_gmk);
-      lowpan6_link_addr_set_u16(&dest, device_table[i].short_addr);
+      lowpan6_link_addr_set_u16(&dest, lwip_htons(device_table[i].short_addr));
       lbp_g3_output(netif, p, &dest);
       device_table[i].dev_state = LBP_G3_LBS_DEV_ACCEPTED;
       pbuf_free(p);
@@ -1401,6 +1601,48 @@ err:
 #endif /* LBP_G3_PAN_COORDINATOR */
 
 
+static void lbp_g3_scan_finished(struct netif *netif)
+{
+  lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
+  int i;
+  int best_idx;
+
+      LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_discovery_confirm: SCAN FINISHED\n"));
+  if (ctx->device_type == LOWPAN6_G3_DEVTYPE_DEVICE) {
+    /* Choose the best LBA and start joining */
+        LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_scan_finished: devtype DEVICE\n"));
+    if (!scan_table[0].valid) {
+      ctx->state = LBP_G3_STATE_IDLE; /* Scan finished */
+      LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_discovery_confirm: No devices found!\n"));
+      return;
+    }
+
+    best_idx = 0;
+    for (i = 1; i < LBP_G3_SCAN_TABLE_SIZE; i++) {
+      if (!scan_table[i].valid)
+        break;
+      if (scan_table[i].rc_coord < scan_table[best_idx].rc_coord ||
+         (scan_table[i].rc_coord == scan_table[best_idx].rc_coord && scan_table[i].lqi > scan_table[best_idx].lqi)) {
+        best_idx = i;
+      }
+    }
+    lbp_g3_join(netif, scan_table[best_idx].pan_id, scan_table[best_idx].lba);
+  }
+#if LBP_G3_PAN_COORDINATOR
+  else if (ctx->device_type == LOWPAN6_G3_DEVTYPE_COORD) {
+    fprintf(stderr, "lbp_g3_discovery_confirm DEVTYPE COORD\n");
+    if (!scan_table[0].valid) {
+      /* If there is no PAN operating in the area, start a new one */
+      lbp_g3_lbs_network_start(netif);
+    } else {
+      /* TODO: inform upper layer using a callback? */
+      LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_discovery_confirm: Don't start a network. As there is already a PAN.\n"));
+    }
+  }
+#endif
+  memset(scan_table, sizeof(scan_table), 0);
+}
+
 /**
  * Function called by a lower layer once the
  * scanning is completed. If the receiver is a PAN device,
@@ -1411,7 +1653,6 @@ void lbp_g3_discovery_confirm(struct netif *netif, u8_t status)
 {
   lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
   unsigned i;
-  int best_idx;
 
   if (ctx->state != LBP_G3_STATE_SCANNING) {
     return;
@@ -1437,40 +1678,12 @@ void lbp_g3_discovery_confirm(struct netif *netif, u8_t status)
    */
   if (ctx->connected) {
     ctx->state = LBP_G3_STATE_IDLE;
-    return;
   }
-
-  if (ctx->device_type == LOWPAN6_G3_DEVTYPE_DEVICE) {
-    /* Choose the best LBA and start joining */
-    if (!scan_table[0].valid) {
-      ctx->state = LBP_G3_STATE_IDLE; /* Scan finished */
-      LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_discovery_confirm: No devices found!\n"));
-      return;
-    }
-
-    best_idx = 0;
-    for (i = 1; i < LBP_G3_SCAN_TABLE_SIZE; i++) {
-      if (!scan_table[i].valid)
-        break;
-      if (scan_table[i].rc_coord < scan_table[best_idx].rc_coord ||
-         (scan_table[i].rc_coord == scan_table[best_idx].rc_coord && scan_table[i].lqi > scan_table[best_idx].lqi)) {
-        best_idx = i;
-      }
-    }
-    lbp_g3_join(netif, scan_table[best_idx].pan_id, scan_table[best_idx].lba);
+  else {
+    /* TODO: it should be called under a lock */
+    LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_discovery_confirm: change state to SCAN_FINISHED\n"));
+    ctx->state = LBP_G3_STATE_SCAN_FINISHED;
   }
-#if LBP_G3_PAN_COORDINATOR
-  else if (ctx->device_type == LOWPAN6_G3_DEVTYPE_COORD) {
-    if (!scan_table[0].valid) {
-      /* If there is no PAN operating in the area, start a new one */
-      lbp_g3_lbs_network_start(netif);
-    } else {
-      /* TODO: inform upper layer using a callback? */
-      LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_discovery_confirm: Don't start a network. As there is already a PAN.\n"));
-    }
-  }
-#endif
-  /* TODO: clear scan table */
 }
 
 /* Timer function called every second by lowpan6_g3_tmr() */
@@ -1480,19 +1693,33 @@ lbp_g3_tmr(void *arg)
   struct netif *netif = (struct netif *) arg;
   lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
 
+  if (ctx->state == LBP_G3_STATE_SCAN_FINISHED)
+    lbp_g3_scan_finished(netif);
+
   if (ctx->device_type == LOWPAN6_G3_DEVTYPE_DEVICE) {
-    if (ctx->state != LBP_G3_STATE_IDLE && ctx->state != LBP_G3_STATE_ERROR
-        && !ctx->connected) {
+    if (ctx->connected)
+      return;
+
+    /* Bootstrapping in progress */
+    if (ctx->state != LBP_G3_STATE_IDLE && ctx->state != LBP_G3_STATE_ERROR) {
       if (--ctx->join_timeout == 0) {
-        ctx->state = LBP_G3_STATE_ERROR;
+        /* ctx->state = LBP_G3_STATE_ERROR; */ /* XXX */
         LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_tmr: Bootstrapping failed due to timeout.\n"));
       }
     }
+
+    /* Bootstrapping not started yet or finished with an error */
+    if (!ctx->noauto && (ctx->state == LBP_G3_STATE_IDLE || ctx->state == LBP_G3_STATE_ERROR))
+      lbp_g3_start(netif, 15);
   }
 #if LBP_G3_PAN_COORDINATOR
   else if (ctx->device_type == LOWPAN6_G3_DEVTYPE_COORD) {
     u32_t now = sys_now();
     unsigned i;
+
+    /* TODO: don't hardcode discovery scan time */
+    if (!ctx->connected && !ctx->noauto && (ctx->state == LBP_G3_STATE_IDLE || ctx->state == LBP_G3_STATE_ERROR))
+      lbp_g3_lbs_pan_start(netif, 3);
 
     for (i = 0; i < LBP_G3_SCAN_TABLE_SIZE; i++) {
       if (device_table[i].dev_state == LBP_G3_LBS_DEV_JOINING
@@ -1535,7 +1762,7 @@ lbp_g3_lba_route_msg(struct netif *netif, struct pbuf *p, struct lowpan6_link_ad
   return ERR_VAL;
 }
 
-static err_t
+err_t
 lbp_g3_output(struct netif *netif, struct pbuf *p, struct lowpan6_link_addr *dst)
 {
   lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
@@ -1565,9 +1792,9 @@ lbp_g3_output(struct netif *netif, struct pbuf *p, struct lowpan6_link_addr *dst
    */
   if (dst->addr_len == 2 && src->addr_len == 2) {
     if (lowpan6_g3_routing_table_route(dst, &next) < 0) {
-      LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_output: Destination unknown!\n"));
-      /* TODO: route discovery? */
-      return ERR_VAL;
+      LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_output: Destination unknown starting route discovery!\n"));
+      return loadng_g3_route_disc(netif, p, &ctx->short_mac_addr,
+                                  dst, 0, ctx->max_hops);
     }
 
     if (!lowpan6_link_addr_cmp(dst, &next)) {
@@ -1577,7 +1804,8 @@ lbp_g3_output(struct netif *netif, struct pbuf *p, struct lowpan6_link_addr *dst
     }
   }
 
-  return g3_mcps_data_request(p, src, dst, security_level,
+  LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_output: lbp_g3_output: %02X%02X\n", dst->addr[0], dst->addr[1]));
+  return g3plc_output(netif, p, src, dst, security_level,
                               ctx->pan_id, 0, ctx->active_key_index);
 }
 
@@ -1589,6 +1817,7 @@ lbp_g3_input(struct netif *netif, struct pbuf *p, struct lowpan6_link_addr *orig
   u8_t *lbd_addr;
   err_t ret = ERR_OK;
 
+    LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_input\n"));
   if (p->tot_len < LBP_G3_HEADER_LEN) {
     LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_input: Packet too short, discarding\n"));
     return ERR_VAL;
@@ -1600,6 +1829,7 @@ lbp_g3_input(struct netif *netif, struct pbuf *p, struct lowpan6_link_addr *orig
   if (ctx->device_type == LOWPAN6_G3_DEVTYPE_DEVICE) {
     if (memcmp(ctx->extended_mac_addr.addr, lbd_addr, 8)) {
       /* Frame not for us */
+          LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_input: Frame not for us\n"));
       if (ctx->role_of_device == LOWPAN6_G3_ROLE_LBA) {
         ret = lbp_g3_lba_route_msg(netif, p, origin);
       } else {
@@ -1612,13 +1842,18 @@ lbp_g3_input(struct netif *netif, struct pbuf *p, struct lowpan6_link_addr *orig
        */
       if ((!ctx->connected && lowpan6_link_addr_cmp(origin, &ctx->lba_address)) ||
           (ctx->connected && lowpan6_link_addr_cmp(origin, &ctx->coord_short_address))) {
+          LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_input: ctx->state: %02X!\n", ctx->state));
         if (msg_code == LBP_G3_MSG_CHALLENGE) {
+          LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_input: LBD received challenge msg_type: %02X!\n", msg_code));
           ret = lbp_g3_handle_challenge(netif, p, origin);
         } else if (msg_code == LBP_G3_MSG_ACCEPTED) {
+          LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_input: LBD received accepted msg_type: %02X!\n", msg_code));
           ret = lbp_g3_handle_accepted(netif, p, origin);
         } else if (msg_code == LBP_G3_MSG_DECLINE) {
+          LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_input: LBD received decline msg_type: %02X!\n", msg_code));
           ret = lbp_g3_handle_decline(netif, p);
         } else if (msg_code == LBP_G3_MSG_LBS_KICK) {
+          LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_input: LBD received kick msg_type: %02X!\n", msg_code));
           ret = lbp_g3_handle_lbs_kick(netif, p);
         } else {
           LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_input: LBD received an unexpected msg_type: %02X!\n", msg_code));
@@ -1662,13 +1897,24 @@ lbp_g3_init(struct netif *netif, const u8_t *psk, const u8_t *rand, const u8_t *
   ctx = (lowpan6_g3_data_t *) netif->state;
   ps_eap_psk_init(&lbp_data.eap_ctx, (ps_eap_psk_key_t *) psk);
   if (ctx->device_type == LOWPAN6_G3_DEVTYPE_COORD) {
-    MEMCPY(&lbp_data.eap_ctx.rand_s.data, rand, PS_EAP_PSK_RAND_LENGTH);
-    MEMCPY(&lbp_data.eap_ctx.nai_s.data, id, id_len);
+    LWIP_DEBUGF(LBP_G3_DEBUG, ("LBP_G3_INIT SET DEVTYPE\n\n"));
+    MEMCPY(lbp_data.eap_ctx.rand_s.data, rand, PS_EAP_PSK_RAND_LENGTH);
+    MEMCPY(lbp_data.eap_ctx.nai_s.data, id, id_len);
     lbp_data.eap_ctx.nai_s.length = id_len;
   } else {
-    MEMCPY(&lbp_data.eap_ctx.rand_p.data, rand, PS_EAP_PSK_RAND_LENGTH);
+    MEMCPY(lbp_data.eap_ctx.rand_p.data, rand, PS_EAP_PSK_RAND_LENGTH);
     ps_eap_psk_tek_init(&lbp_data.eap_ctx, &lbp_data.eap_ctx.rand_p);
-    MEMCPY(&lbp_data.nai_p.data, id, id_len);
+    MEMCPY(lbp_data.nai_p.data, id, id_len);
     lbp_data.nai_p.length = id_len;
   }
+  int i;
+  LWIP_DEBUGF(LBP_G3_DEBUG, ("LBP_G3_INIT:\n----------\n"));
+  LWIP_DEBUGF(LBP_G3_DEBUG, ("RAND_S: "));
+  for (i = 0; i < 16; i++)
+    LWIP_DEBUGF(LBP_G3_DEBUG, ("%02X ", lbp_data.eap_ctx.rand_s.data[i]));
+  LWIP_DEBUGF(LBP_G3_DEBUG, ("\nNAI_S: "));
+
+  for (i = 0; i < lbp_data.eap_ctx.nai_s.length; i++)
+    LWIP_DEBUGF(LBP_G3_DEBUG, ("%02X ", lbp_data.eap_ctx.nai_s.data[i]));
+  LWIP_DEBUGF(LBP_G3_DEBUG, ("\n"));
 }

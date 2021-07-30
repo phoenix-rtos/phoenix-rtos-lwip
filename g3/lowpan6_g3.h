@@ -65,7 +65,7 @@
 #include "lwip/ip_addr.h"
 #include "lwip/netif.h"
 
-#include "g3_adp.h"
+#include "g3plc.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -83,6 +83,9 @@ extern "C" {
 #define PBUF_G3_MESH 5
 
 #define LOWPAN6_BROADCAST_SHORT_ADDR  0xFFFF
+
+#define lowpan6_g3_contains_lbp(buf) (((buf)[0] == LOWPAN6_HEADER_ESC && (buf)[1] == LOWPAN6_CMD_LBP) || \
+                                      (((buf)[0] & 0xC) == LOWPAN6_HEADER_MESH && (buf)[5] == LOWPAN6_HEADER_ESC && (buf)[6] == LOWPAN6_CMD_LBP))
 
 /* Returns address in network order ready to serialize */
 #define lowpan6_link_addr_to_u16(link_addr) (lwip_htons(((link_addr)->addr[0] << 8) | ((link_addr)->addr[1])))
@@ -191,6 +194,7 @@ typedef struct {
   u16_t join_timeout;
   u8_t bandplan;
   u8_t rekey_gmk;
+  u8_t noauto;
 
   u8_t security_level;
   struct lowpan6_link_addr coord_short_address;
@@ -237,12 +241,16 @@ typedef struct {
   u8_t max_tones; /* This should be taken from PHY layer */
 } lowpan6_g3_data_t;
 
-void lowpan6_g3_tmr(void *arg);
+void lowpan6_g3_tmr_start(struct netif *netif);
 err_t lowpan6_g3_output(struct netif *netif, struct pbuf *q, const ip6_addr_t *ip6addr);
 err_t lowpan6_g3_encapsulate(struct netif *netif, struct pbuf *p, const struct lowpan6_link_addr *src,
                              const struct lowpan6_link_addr *dst, const struct lowpan6_link_addr *final_dest);
-err_t lowpan6_g3_input(struct pbuf *p, struct netif *netif, struct lowpan6_link_addr *src, struct lowpan6_link_addr *dest, struct g3_mcps_data_indication *indication);
+err_t
+lowpan6_g3_tcpip_input(u8_t *buf, size_t len, struct netif *inp, struct lowpan6_link_addr *src, struct lowpan6_link_addr *dst,
+                       struct g3plc_mcps_indication *indication);
+
 err_t lowpan6_g3_if_init(struct netif *netif);
+err_t lowpan6_g3_reset(struct netif *netif);
 err_t lowpan6_g3_status_handle(struct netif *netif, struct pbuf *p, struct lowpan6_link_addr *dest, u8_t status);
 unsigned int lowpan6_g3_add_mesh_header(u8_t *buffer, u8_t hops_left, const struct lowpan6_link_addr *originator,
                                         const struct lowpan6_link_addr *final_dest);
@@ -261,6 +269,7 @@ err_t lowpan6_g3_set_pan_id(struct netif *netif, u16_t pan_id);
 err_t lowpan6_g3_set_short_addr(struct netif *netif, u8_t addr_high, u8_t addr_low);
 err_t lowpan6_g3_set_gmk(struct netif *netif, const u8_t *gmk, u8_t id);
 err_t lowpan6_g3_set_device_role(struct netif *netif, u8_t role);
+void lowpan6_g3_set_noauto(struct netif *netif, u8_t val);
 
 #if LWIP_G3_ADP_TEST
 void lowpan6_g3_set_coord_address(u8_t addr_high, u8_t addr_low);
