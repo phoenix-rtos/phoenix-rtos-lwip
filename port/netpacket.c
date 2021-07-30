@@ -18,9 +18,7 @@
 
 #include <net/ethernet.h>
 
-
 static struct netpacket_pcb *netpacket_pcbs;
-
 
 struct netpacket_pcb *netpacket_new(struct netconn *conn, u16_t proto)
 {
@@ -40,7 +38,6 @@ struct netpacket_pcb *netpacket_new(struct netconn *conn, u16_t proto)
 
 	return pcb;
 }
-
 
 void netpacket_remove(struct netpacket_pcb *pcb)
 {
@@ -63,7 +60,6 @@ void netpacket_remove(struct netpacket_pcb *pcb)
 	memp_free(MEMP_NETPACKET_PCB, pcb);
 }
 
-
 err_t netpacket_bind_netif(struct netpacket_pcb *pcb, struct netif *netif)
 {
 	LWIP_ASSERT_CORE_LOCKED();
@@ -77,12 +73,10 @@ err_t netpacket_bind_netif(struct netpacket_pcb *pcb, struct netif *netif)
 	}
 }
 
-
 err_t netpacket_send(struct netpacket_pcb *pcb, struct pbuf *p)
 {
 	return netpacket_sendto(pcb, p, NULL, 0);
 }
-
 
 err_t netpacket_sendto(struct netpacket_pcb *pcb, struct pbuf *p, u8_t *dst_addr, u8_t dst_addr_len)
 {
@@ -121,7 +115,6 @@ err_t netpacket_sendto(struct netpacket_pcb *pcb, struct pbuf *p, u8_t *dst_addr
 	return ret;
 }
 
-
 static void netpacket_recv(struct netpacket_pcb *pcb, struct pbuf *p, struct eth_addr *src_addr)
 {
 	struct pbuf *q;
@@ -146,9 +139,6 @@ static void netpacket_recv(struct netpacket_pcb *pcb, struct pbuf *p, struct eth
 				return;
 			}
 
-			/* copy packet type flags */
-			q->flags = p->flags & (PBUF_FLAG_MCASTLOOP | PBUF_FLAG_LLMCAST | PBUF_FLAG_HOST | PBUF_FLAG_OTHERHOST);
-
 			buf->p = q;
 			buf->ptr = q;
 			SMEMCPY(buf->netpacket_hwaddr, src_addr, sizeof(struct eth_addr));
@@ -160,16 +150,16 @@ static void netpacket_recv(struct netpacket_pcb *pcb, struct pbuf *p, struct eth
 				netbuf_delete(buf);
 				return;
 			}
-
+			else {
 #if LWIP_SO_RCVBUF
-			SYS_ARCH_INC(conn->recv_avail, len);
-#endif
-			/* Register event with callback */
-			API_EVENT(conn, NETCONN_EVT_RCVPLUS, len);
+				SYS_ARCH_INC(conn->recv_avail, len);
+#endif /* LWIP_SO_RCVBUF */
+				/* Register event with callback */
+				API_EVENT(conn, NETCONN_EVT_RCVPLUS, len);
+			}
 		}
 	}
 }
-
 
 int netpacket_input(struct pbuf *p, struct netif *netif)
 {
@@ -185,41 +175,28 @@ int netpacket_input(struct pbuf *p, struct netif *netif)
 		if (netif_get_index(pcb->netif) != netif_get_index(netif))
 			continue;
 
-		if ((pcb->protocol != ETH_P_ALL) && (pcb->protocol != type))
+		if ((pcb->protocol != ETHERTYPE_ALL) && (pcb->protocol != type))
 			continue;
 
 		struct eth_addr src_addr;
 		SMEMCPY(&src_addr, &ethhdr->src.addr, sizeof(struct eth_addr));
 
 		if (pcb->type == SOCK_DGRAM) {
-			/* remove ethernet header */
-			pbuf_remove_header(p, sizeof(struct eth_hdr));
-		}
-		else {
-#if ETH_PAD_SIZE
-			/* remove ethernet header padding */
-			pbuf_remove_header(p, ETH_PAD_SIZE);
-#endif
+			/* remove ethernet header from pbuf */
+			pbuf_header(p, -(s16_t)sizeof(struct eth_hdr));
 		}
 
 		netpacket_recv(pcb, p, &src_addr);
 
 		if (pcb->type == SOCK_DGRAM) {
-			/* restore ethernet header */
-			pbuf_add_header_force(p, sizeof(struct eth_hdr));
-		}
-		else {
-#if ETH_PAD_SIZE
-			/* restore ethernet header padding */
-			pbuf_add_header_force(p, ETH_PAD_SIZE);
-#endif
+			/* restore ethernet header to pbuf */
+			pbuf_header(p, sizeof(struct eth_hdr));
 		}
 	}
 
 	/* never filter out by packet type */
 	return 1;
 }
-
 
 void netpacket_linkoutput(struct netif *netif, struct pbuf *p)
 {
@@ -235,7 +212,7 @@ void netpacket_linkoutput(struct netif *netif, struct pbuf *p)
 		if (netif_get_index(pcb->netif) != netif_get_index(netif))
 			continue;
 
-		if ((pcb->protocol != ETH_P_ALL) && (pcb->protocol != type))
+		if ((pcb->protocol != ETHERTYPE_ALL) && (pcb->protocol != type))
 			continue;
 
 		struct eth_addr src_addr;

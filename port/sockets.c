@@ -43,6 +43,7 @@
 
 #include "netif.h"
 #include "route.h"
+#define AF_PACKET 17
 
 #define SOCKTHREAD_PRIO 4
 #define SOCKTHREAD_STACKSZ (4 * _PAGE_SIZE)

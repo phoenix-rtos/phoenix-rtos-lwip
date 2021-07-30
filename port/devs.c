@@ -230,7 +230,7 @@ static int ifstatus_open(int flags)
 			SNPRINTF_APPEND("%2s%d_ptp=%s\n", netif->name, netif->num, inet_ntoa(netif->gw));
 		}
 
-		if (strncmp("lo", netif->name, sizeof(netif->name)) && (drv = netif_driver(netif)) && drv->media != NULL)
+		if (strcmp("lo", netif->name) && (drv = netif_driver(netif)) && drv->media != NULL)
 			SNPRINTF_APPEND("%2s%d_media=%s\n", netif->name, netif->num, drv->media(netif));
 	}
 

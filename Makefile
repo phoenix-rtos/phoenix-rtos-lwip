@@ -23,6 +23,7 @@ LWIP_SRCS := $(filter-out $(addprefix $(LWIPDIR)/,$(LWIP_EXCLUDE)),$(LWIPNOAPPSF
 
 # G3-PLC modifications to core LwIP
 ifeq (${LWIP_G3_BUILD}, yes)
+CFLAGS := $(CFLAGS) -I./g3/
 include g3/Makefile
 endif
 

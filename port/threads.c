@@ -79,7 +79,7 @@ static void thread_register(thread_data_t *ts)
 static void thread_waittid_thr(void *arg)
 {
 	thread_data_t *data, s;
-	priority(3);
+	priority(4);
 
 	for (;;) {
 		while ((s.tid = threadJoin(0)) == -EINTR)
