@@ -9,6 +9,8 @@
  * %LICENSE%
  */
 
+#include "lowpan6_g3.h"
+#include "lbp_g3.h"
 #include "loadng_g3.h"
 #include "lwip/def.h"
 #include "lwip/arch.h"
@@ -229,7 +231,7 @@ enum loadng_g3_route_flags {
 #if LOADNG_G3_DEBUG
 static void loadng_g3_routing_entry_debug(struct lowpan6_g3_routing_entry *entry);
 #else
-#define lodng_g3_routing_entry_debug(p)
+#define loadng_g3_routing_entry_debug(p)
 #endif
 
 static struct loadng_g3_rreq_entry rreq_table[LOADNG_G3_RREQ_TABLE_SIZE];
@@ -331,7 +333,7 @@ loadng_g3_link_cost_composite(struct netif *netif, u16_t max_dir)
  * as a parameter or approximated using the forward cost.
  */
 static u16_t
-loadng_g3_link_cost(struct netif *netif, struct g3_mcps_data_indication *indication, struct g3_mac_nb_entry *nb)
+loadng_g3_link_cost(struct netif *netif, struct g3plc_mcps_indication *indication, struct g3plc_mac_nb_entry *nb)
 {
   lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
   u16_t cost_fwd, cost_rev;
@@ -713,7 +715,7 @@ loadng_g3_routing_table_update(struct netif *netif, struct loadng_g3_route_msg *
  */
 static err_t
 loadng_g3_rlc_start(struct netif *netif, struct pbuf *p, u16_t previous_hop, u8_t metric_type,
-                    u8_t msg_type, struct g3_mcps_data_indication *indication)
+                    u8_t msg_type, struct g3plc_mcps_indication *indication)
 {
   lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
   struct lowpan6_link_addr dest;
@@ -851,7 +853,7 @@ loadng_g3_path_discovery_confirm(struct netif *netif, struct pbuf *p)
  * and appends a new msg with a hop field.
  */
 static struct pbuf *
-loadng_g3_hop_append(struct netif *netif, struct pbuf *p, u8_t path_metric_type, struct g3_mcps_data_indication *indication)
+loadng_g3_hop_append(struct netif *netif, struct pbuf *p, u8_t path_metric_type, struct g3plc_mcps_indication *indication)
 {
   lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
   struct pbuf *q;
@@ -879,7 +881,7 @@ loadng_g3_hop_append(struct netif *netif, struct pbuf *p, u8_t path_metric_type,
 }
 
 static err_t
-loadng_g3_prep_process(struct netif *netif, struct pbuf *p, u16_t previous_hop, struct g3_mcps_data_indication *indication)
+loadng_g3_prep_process(struct netif *netif, struct pbuf *p, u16_t previous_hop, struct g3plc_mcps_indication *indication)
 {
   lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
   struct loadng_g3_prep_msg *prep;
@@ -977,7 +979,7 @@ loadng_g3_path_discovery(struct netif *netif, struct lowpan6_link_addr *dst, u8_
 }
 
 static err_t
-loadng_g3_preq_process(struct netif *netif, struct pbuf *p, u16_t previous_hop, struct g3_mcps_data_indication *indication)
+loadng_g3_preq_process(struct netif *netif, struct pbuf *p, u16_t previous_hop, struct g3plc_mcps_indication *indication)
 {
   lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
   struct loadng_g3_preq_msg *preq;
@@ -1132,9 +1134,16 @@ loadng_g3_rrep_process(struct netif *netif, struct pbuf *p, u16_t src, int hop_c
         /* Free all nodes. If routing entry was found, send pbufs */
         while (rreq_table[i].q) {
           tmp = rreq_table[i].q;
-          if (r_entry)
-            lowpan6_g3_encapsulate(rreq_table[i].netif, tmp->p,
-                                   &ctx->short_mac_addr, &dest, &final_dest);
+          if (r_entry) {
+            if (lowpan6_g3_contains_lbp((char *)tmp->p->payload)) {
+              lbp_g3_output(rreq_table[i].netif, tmp->p, &final_dest);
+            }
+            else {
+              lowpan6_g3_encapsulate(rreq_table[i].netif, tmp->p,
+                                     &ctx->short_mac_addr, &dest, &final_dest);
+            }
+
+          }
           rreq_table[i].q = tmp->next;
           pbuf_free(tmp->p);
           mem_free(tmp);
@@ -1164,7 +1173,7 @@ loadng_g3_rrep_process(struct netif *netif, struct pbuf *p, u16_t src, int hop_c
 }
 
 static err_t
-loadng_g3_rreq_rrep_process(struct netif *netif, struct pbuf *p, u8_t msg_type, struct lowpan6_link_addr *src, struct g3_mcps_data_indication *indication)
+loadng_g3_rreq_rrep_process(struct netif *netif, struct pbuf *p, u8_t msg_type, struct lowpan6_link_addr *src, struct g3plc_mcps_indication *indication)
 {
   lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
   struct loadng_g3_route_msg *msg;
@@ -1173,9 +1182,10 @@ loadng_g3_rreq_rrep_process(struct netif *netif, struct pbuf *p, u8_t msg_type, 
   u8_t weak_link_count;
   int hop_count, hop_limit;
   struct lowpan6_g3_routing_entry *r_entry;
-  struct g3_mac_nb_entry nb_entry;
+  struct g3plc_mac_nb_entry nb_entry;
   int nb_valid;
 
+  LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3: src %02X%02X len: %d\n", src->addr[0], src->addr[1], src->addr_len));
   previous_hop = lowpan6_link_addr_to_u16(src);
   LWIP_ERROR("loadng_g3_rreq_rrep_process: msg too short\n",
              p->len >= sizeof(struct loadng_g3_route_msg), return ERR_VAL;);
@@ -1198,7 +1208,7 @@ loadng_g3_rreq_rrep_process(struct netif *netif, struct pbuf *p, u8_t msg_type, 
 
   /* Discard msg if it came from a blacklisted device */
   if (msg_type == LOADNG_G3_MSG_TYPE_RREQ && lowpan6_g3_blacklist_table_lookup(previous_hop) != NULL) {
-    LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3: Discarding RREP msg received from a blacklisted device: %04X.\n",
+    LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3: Discarding RREQ msg received from a blacklisted device: %04X.\n",
                                lwip_ntohs(previous_hop)));
     return ERR_OK;
   }
@@ -1209,7 +1219,7 @@ loadng_g3_rreq_rrep_process(struct netif *netif, struct pbuf *p, u8_t msg_type, 
                             lwip_ntohs(msg->originator), lwip_ntohs(msg->destination)));
 
   /* Check if we need RLC mechanism to calculate link cost */
-  if ((nb_valid = g3_mac_nb_table_lookup_sync(src, &nb_entry)) < 0 && ctx->enable_rlc) {
+  if ((nb_valid = g3plc_mac_nb_table_lookup_sync(src, &nb_entry)) < 0 && ctx->enable_rlc) {
     return loadng_g3_rlc_start(netif, p, previous_hop, msg->metric_type, msg_type, indication);
   }
 
@@ -1285,7 +1295,7 @@ loadng_g3_rlc_rreq_rrep_reprocess(struct netif *netif, struct pbuf *p, u8_t msg_
 }
 
 static err_t
-loadng_g3_rlcrep_process(struct netif *netif, struct pbuf *p, u16_t previous_hop, struct g3_mcps_data_indication *indication)
+loadng_g3_rlcrep_process(struct netif *netif, struct pbuf *p, u16_t previous_hop, struct g3plc_mcps_indication *indication)
 {
   lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
   struct loadng_g3_rlcrep_msg *rlcrep;
@@ -1331,7 +1341,7 @@ loadng_g3_rlcrep_process(struct netif *netif, struct pbuf *p, u16_t previous_hop
 }
 
 static err_t
-loadng_g3_rlcreq_process(struct netif *netif, struct pbuf *p, struct g3_mcps_data_indication *indication)
+loadng_g3_rlcreq_process(struct netif *netif, struct pbuf *p, struct g3plc_mcps_indication *indication)
 {
   lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
   struct loadng_g3_rlcreq_msg *rlcreq;
@@ -1450,9 +1460,12 @@ loadng_g3_tmr(void)
 
   /* Update RREQ table */
   for (i = 0; i < LOADNG_G3_RREQ_TABLE_SIZE; i++) {
+    if (rreq_table[i].state == LOADNG_G3_RREQ_STATE_EMPTY)
+		continue;
+
     /* TODO: do we need more fair transmission? */
     ctx = (lowpan6_g3_data_t *) rreq_table[i].netif->state;
-    if (rreq_table[i].state == LOADNG_G3_RREP_STATE_WAITING &&
+    if (rreq_table[i].state == LOADNG_G3_RREQ_STATE_WAITING &&
         now - last_rreq_time > ctx->rreq_wait) {
       /* Send a scheduled RREQ */
       rreq_table[i].state = LOADNG_G3_RREQ_STATE_PENDING;
@@ -1513,6 +1526,9 @@ loadng_g3_tmr(void)
 
   /* Update RLCREQ table */
   for (i = 0; i < LOADNG_G3_RLC_TABLE_SIZE; i++) {
+    if (rlc_table[i].state == LOADNG_G3_RLC_STATE_EMPTY)
+		continue;
+
     ctx = (lowpan6_g3_data_t *) rlc_table[i].netif->state;
     if (rlc_table[i].state == LOADNG_G3_RLC_STATE_PENDING) {
       rlc_table[i].valid_time--;
@@ -1585,7 +1601,7 @@ loadng_g3_status_handle(struct netif *netif, struct pbuf *p, struct lowpan6_link
   msg_type = *(u8_t *) (p->payload + 2);
   if (msg_type == LOADNG_G3_MSG_TYPE_RREP) {
     /* A successful sending of RREP sets the route as bidirectional */
-    if (status == g3_mac_status_success) {
+    if (status == g3plc_mac_status_success) {
       msg = loadng_g3_pbuf_msg_cast(p, struct loadng_g3_route_msg *);
       rentry = lowpan6_g3_routing_table_lookup(msg->destination, 0);
       if (rentry != NULL) {
@@ -1593,7 +1609,7 @@ loadng_g3_status_handle(struct netif *netif, struct pbuf *p, struct lowpan6_link
                                    lwip_ntohs(msg->destination)));
         rentry->is_bidirectional = 1;
       }
-    } else if (status == g3_mac_status_no_ack || status == g3_mac_status_transaction_expires) {
+    } else if (status == g3plc_mac_status_no_ack || status == g3plc_mac_status_transaction_expires) {
       /* On failure, update blacklist table */
       bentry = lowpan6_g3_blacklist_table_lookup(dst_short);
       if (bentry == NULL) {
@@ -1605,7 +1621,7 @@ loadng_g3_status_handle(struct netif *netif, struct pbuf *p, struct lowpan6_link
   } else if (msg_type == LOADNG_G3_MSG_TYPE_RREQ) {
     msg = loadng_g3_pbuf_msg_cast(p, struct loadng_g3_route_msg *);
     if ((msg->flags & LOADNG_G3_RREQ_FL_UNICAST) &&
-        (status == g3_mac_status_no_ack || status == g3_mac_status_transaction_expires)) {
+        (status == g3plc_mac_status_no_ack || status == g3plc_mac_status_transaction_expires)) {
       /* A unicast RREQ failed, so let's try broadcast */
       for (i = 0; i < LOADNG_G3_RREQ_TABLE_SIZE; i++) {
         if (rreq_table[i].state != LOADNG_G3_RREQ_STATE_EMPTY &&
@@ -1636,8 +1652,8 @@ loadng_g3_output(struct netif *netif, struct pbuf *p, u16_t short_dest)
   struct lowpan6_link_addr dest;
 
   lowpan6_link_addr_set_u16(&dest, short_dest);
-
-  return g3_mcps_data_request(p, &ctx->short_mac_addr, &dest, ctx->security_level,
+  LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3_output: addr %02X%02X\n", dest.addr[0], dest.addr[1]));
+  return g3plc_output(netif, p, &ctx->short_mac_addr, &dest, ctx->security_level,
                               ctx->pan_id, 0, ctx->active_key_index);
 }
 
@@ -1645,7 +1661,7 @@ loadng_g3_output(struct netif *netif, struct pbuf *p, u16_t short_dest)
  * LOADng input function called by lowpan6_g3_input function.
  */
 err_t
-loadng_g3_input(struct netif *netif, struct pbuf *p, struct lowpan6_link_addr *src, struct g3_mcps_data_indication *indication)
+loadng_g3_input(struct netif *netif, struct pbuf *p, struct lowpan6_link_addr *src, struct g3plc_mcps_indication *indication)
 {
   u16_t previous_hop;
   u8_t msg_type;

@@ -17,12 +17,6 @@
 #include <stdlib.h>
 #include <errno.h>
 
-#include <lwipopts.h>
-
-#ifndef WAITTID_THREAD_PRIO
-#define WAITTID_THREAD_PRIO 3
-#endif
-
 
 typedef struct {
 	rbnode_t linkage;
@@ -39,7 +33,6 @@ static struct {
 	char collector_stack[512] __attribute__((aligned(8)));
 	rbtree_t threads;
 	handle_t lock;
-	handle_t join_cond;
 } global;
 
 
@@ -85,9 +78,10 @@ static void thread_register(thread_data_t *ts)
 static void thread_waittid_thr(void *arg)
 {
 	thread_data_t *data, s;
+	priority(4);
 
 	for (;;) {
-		while ((s.tid = threadJoin(-1, 0)) == -EINTR)
+		while ((s.tid = threadJoin(0)) == -EINTR)
 			;
 
 		mutexLock(global.lock);
@@ -200,14 +194,9 @@ void init_lwip_threads(void)
 
 	err = mutexCreate(&global.lock);
 	if (err)
-		errout(err, "mutexCreate(lock)");
-
-	err = condCreate(&global.join_cond);
-	if (err) {
 		resourceDestroy(global.lock);
-		errout(err, "condCreate(join_cond)");
-	}
+	errout(err, "mutexCreate(thread.start_sem)");
 
 	lib_rbInit(&global.threads, thread_cmp, NULL);
-	beginthreadex(thread_waittid_thr, WAITTID_THREAD_PRIO, global.collector_stack, sizeof(global.collector_stack), NULL, NULL);
+	beginthreadex(thread_waittid_thr, 4, global.collector_stack, sizeof(global.collector_stack), NULL, NULL);
 }
