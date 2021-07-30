@@ -69,10 +69,10 @@
 #include "lwip/snmp.h"
 
 #include "ps_eap_psk_g3plc.h"
+#include "g3plc.h"
 #include <string.h>
 
 #define LOWPAN6_BROADCAST_ADDR  0x8001
-#define lowpan6_g3_contains_lbp(buf) ((buf)[0] == LOWPAN6_HEADER_ESC && (buf)[1] == LOWPAN6_CMD_LBP)
 
 enum lowpan6_header_size {
   LOWPAN6_HEADER_SZ_IP6 = 1,
@@ -104,7 +104,10 @@ struct lowpan6_g3_mesh_hdr {
 #define LOWPAN6_MAX_PAYLOAD (127 - 2)
 
 /** Currently, this state is global, since there's only one 6LoWPAN netif */
-static lowpan6_g3_data_t lowpan6_data = {
+lowpan6_g3_data_t lowpan6_data;
+
+static const lowpan6_g3_data_t default_state = {
+    .pan_id = 0x781d,
     .short_mac_addr = {2, {0xFF, 0xFF} },
     .extended_mac_addr = {8, {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}},
     .coord_short_address = {2, { 0x00, 0x00 } },
@@ -139,28 +142,27 @@ static lowpan6_g3_data_t lowpan6_data = {
 #endif
 
 static const struct lowpan6_link_addr ieee_802154_broadcast = {2, {0xff, 0xff}};
+extern void ip6_debug_print(struct pbuf *p);
 
 static err_t adpd_data_indication(struct pbuf *p, struct netif *netif)
 {
 #if LWIP_G3_ADP_TEST
   unsigned i;
+  struct pbuf *q = p;
 
-  LWIP_DEBUGF(LWIP_LOWPAN6_DEBUG, ("\033[1;33m"));
-  LWIP_DEBUGF(LWIP_LOWPAN6_DEBUG, ("ADPD-DATA.indication:\n"));
-  LWIP_DEBUGF(LWIP_LOWPAN6_DEBUG, ("\033[0;36m"));
-  LWIP_DEBUGF(LWIP_LOWPAN6_DEBUG, ("len: %d\n", p->len));
+  LWIP_DEBUGF(LWIP_DBG_ON, ("\033[1;33m"));
+  LWIP_DEBUGF(LWIP_DBG_ON, ("ADPD-DATA.indication:\n"));
+  LWIP_DEBUGF(LWIP_DBG_ON, ("\033[0;36m"));
+  LWIP_DEBUGF(LWIP_DBG_ON, ("len: %d\n", p->tot_len));
 
-  for (i = 0; i < p->len; i++) {
-    LWIP_DEBUGF(LWIP_LOWPAN6_DEBUG, ("%02X ", ((uint8_t *)p->payload)[i]));
-  }
-
-  if (p->next != NULL) {
-    for (i = 0; i < p->next->len; i++) {
-      LWIP_DEBUGF(LWIP_LOWPAN6_DEBUG, ("%02X ", ((uint8_t *)p->next->payload)[i]));
+  while (q != NULL) {
+    for (i = 0; i < q->len; i++) {
+      LWIP_DEBUGF(LWIP_DBG_ON, ("%02X", ((uint8_t *)q->payload)[i]));
     }
+    q = q->next;
   }
 
-  LWIP_DEBUGF(LWIP_LOWPAN6_DEBUG, ("\033[0m\n"));
+  LWIP_DEBUGF(LWIP_DBG_ON, ("\033[0m\n"));
 #endif
 
   return ip6_input(p, netif);
@@ -430,6 +432,7 @@ lowpan6_g3_tmr(void *arg)
 
   ctx->seconds += LOWPAN6_TMR_INTERVAL / 1000;
   lbp_g3_tmr(arg);
+  loadng_g3_tmr();
 
   if (ctx->seconds >= 60) {
     ctx->seconds = 0;
@@ -615,7 +618,7 @@ lowpan6_g3_encapsulate(struct netif *netif, struct pbuf *p, const struct lowpan6
     MIB2_STATS_NETIF_ADD(netif, ifoutoctets, p_frag->tot_len);
     LWIP_DEBUGF(LWIP_LOWPAN6_DEBUG | LWIP_DBG_TRACE, ("lowpan6_send: sending packet %p\n", (void *)p));
 
-    err = g3_mcps_data_request(p_frag, &ctx->short_mac_addr, dst, ctx->security_level,
+    err = g3plc_output(netif, p_frag, &ctx->short_mac_addr, dst, ctx->security_level,
                                ctx->pan_id, 0, ctx->active_key_index);
 
     while ((remaining_len > 0) && (err == ERR_OK)) {
@@ -644,7 +647,7 @@ lowpan6_g3_encapsulate(struct netif *netif, struct pbuf *p, const struct lowpan6
       /* send the packet */
       MIB2_STATS_NETIF_ADD(netif, ifoutoctets, p_frag->tot_len);
       LWIP_DEBUGF(LWIP_LOWPAN6_DEBUG | LWIP_DBG_TRACE, ("lowpan6_send: sending packet %p\n", (void *)p));
-      err = g3_mcps_data_request(p_frag, &ctx->short_mac_addr, dst, ctx->security_level,
+      err = g3plc_output(netif, p_frag, &ctx->short_mac_addr, dst, ctx->security_level,
                                ctx->pan_id, 0, ctx->active_key_index);
     }
 
@@ -665,7 +668,7 @@ lowpan6_g3_encapsulate(struct netif *netif, struct pbuf *p, const struct lowpan6
     /* send the packet */
     MIB2_STATS_NETIF_ADD(netif, ifoutoctets, p_frag->tot_len);
     LWIP_DEBUGF(LWIP_LOWPAN6_DEBUG | LWIP_DBG_TRACE, ("lowpan6_send: sending packet %p\n", (void *)p));
-    err = g3_mcps_data_request(p_frag, &ctx->short_mac_addr, dst, ctx->security_level,
+    err = g3plc_output(netif, p_frag, &ctx->short_mac_addr, dst, ctx->security_level,
                                ctx->pan_id, 0, ctx->active_key_index);
   }
 
@@ -767,11 +770,11 @@ lowpan6_g3_output(struct netif *netif, struct pbuf *q, const ip6_addr_t *ip6addr
     /* By default, we send it straight to the receiver */
     next = final_dest;
     if (!ctx->disable_default_routing) {
-      struct g3_mac_nb_entry nb_entry;
+      struct g3plc_mac_nb_entry nb_entry;
 
       if (lowpan6_g3_routing_table_route(&final_dest, &next) != ERR_OK) {
         /* Routing entry not found */
-        if (g3_mac_nb_table_lookup_sync(&final_dest, &nb_entry) < 0) {
+        if (g3plc_mac_nb_table_lookup_sync(&final_dest, &nb_entry) < 0) {
           return loadng_g3_route_disc(netif, q, &ctx->short_mac_addr,
                                         &final_dest, 0, ctx->max_hops);
         }
@@ -825,8 +828,8 @@ lowpan6_g3_status_handle(struct netif *netif, struct pbuf *p, struct lowpan6_lin
   }
 
   is_route_repair = loadng_g3_route_repair_status(netif, final_dest);
-  if (status == g3_mac_status_no_ack ||
-      status == g3_mac_status_transaction_expires) {
+  if (status == g3plc_mac_status_no_ack ||
+      status == g3plc_mac_status_transaction_expires) {
     LWIP_DEBUGF(LWIP_LOWPAN6_DEBUG, ("lowpan6_g3_status_handle: Sending data failed due to device %02X%02X being unreachable.\n",
                                      dest->addr[0], dest->addr[1]));
     if (!is_route_repair) {
@@ -843,7 +846,7 @@ lowpan6_g3_status_handle(struct netif *netif, struct pbuf *p, struct lowpan6_lin
       LWIP_DEBUGF(LWIP_LOWPAN6_DEBUG, ("lowpan6_g3_status_handle: Data transmission to: %02X%02X failed after the successful Route Repair. Dropping this frame.\n",
                                        dest->addr[0], dest->addr[1]));
     }
-  } else if (status != g3_mac_status_success) {
+  } else if (status != g3plc_mac_status_success) {
     LWIP_DEBUGF(LWIP_LOWPAN6_DEBUG, ("lowpan6_g3_status_handle: Sending data failed with status: %02X\n", status));
   }
   /* TODO: do we have to remove a device from blacklist? */
@@ -856,7 +859,7 @@ lowpan6_g3_status_handle(struct netif *netif, struct pbuf *p, struct lowpan6_lin
  * NETIF input function: don't free the input pbuf when returning != ERR_OK!
  */
 err_t
-lowpan6_g3_input(struct pbuf *p, struct netif *netif, struct lowpan6_link_addr *src, struct lowpan6_link_addr *dest, struct g3_mcps_data_indication *indication)
+lowpan6_g3_input(struct pbuf *p, struct netif *netif)
 {
   lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
   const u8_t *puc;
@@ -866,16 +869,34 @@ lowpan6_g3_input(struct pbuf *p, struct netif *netif, struct lowpan6_link_addr *
   s16_t i;
   u16_t datagram_size = 0;
   u16_t datagram_offset, datagram_tag;
+  g3plc_packet_t *packet;
   struct lowpan6_reass_helper *lrh, *lrh_next, *lrh_prev = NULL;
   struct lowpan6_g3_mesh_hdr mesh_header;
   struct lowpan6_g3_routing_entry *entry;
-  struct lowpan6_link_addr next_hop, *originator = src;
+  struct lowpan6_link_addr next_hop, *originator, *src, *dest;
+  struct g3plc_mcps_indication *indication;
+
+  LWIP_DEBUGF(LBP_G3_DEBUG, ("lowpan6_g3_input: entry return null\n"));
 
   if (p == NULL) {
     return ERR_OK;
   }
 
+  LWIP_DEBUGF(LBP_G3_DEBUG, ("lowpan6_g3_input: entry\n"));
   MIB2_STATS_NETIF_ADD(netif, ifinoctets, p->tot_len);
+
+  packet = (g3plc_packet_t *)p->payload;
+  src = &packet->src;
+  originator = &packet->src;
+  dest = &packet->dst;
+  indication = &packet->indication;
+  pbuf_remove_header(p, sizeof(g3plc_packet_t));
+
+	// fprintf(stderr, "lowpan6_g3_input len(%d):\n", p->tot_len);
+	// for (i = 0; i < p->tot_len; i++) {
+	// 	fprintf(stderr, "%02X ", ((u8_t *)p->payload)[i]);
+	// }
+	// putchar('\n');
 
   puc = (u8_t *)p->payload;
   if (!lowpan6_g3_contains_lbp(puc) && indication->security_level < ctx->security_level) {
@@ -892,38 +913,49 @@ lowpan6_g3_input(struct pbuf *p, struct netif *netif, struct lowpan6_link_addr *
       !lowpan6_link_addr_cmp(dest, &ieee_802154_broadcast) &&
       !lowpan6_link_addr_cmp(dest, &ctx->short_mac_addr)) ||
       (dest->addr_len == 8 && !lowpan6_link_addr_cmp(dest, &ctx->extended_mac_addr))) {
+	  LWIP_DEBUGF(LBP_G3_DEBUG, ("lowpan6_g3_input: 1 -> %02X%02X\n", dest->addr[0], dest->addr[1]));
       goto lowpan6_input_discard;
   }
 
   b = *puc;
   if ((b & 0xc0) == LOWPAN6_HEADER_MESH) {
-    if ((ret = lowpan6_parse_mesh_header(puc, p->len, &mesh_header)) < 0)
+    if ((ret = lowpan6_parse_mesh_header(puc, p->len, &mesh_header)) < 0) {
+	  LWIP_DEBUGF(LBP_G3_DEBUG, ("lowpan6_g3_input: 2\n"));
       goto lowpan6_input_discard;
+	}
 
     pos += ret;
     originator = &mesh_header.originator;
     /* G3 supports only mesh routing of short addresses */
-    if (mesh_header.originator.addr_len != 2 || mesh_header.final_dest.addr_len != 2)
+    if (mesh_header.originator.addr_len != 2 || mesh_header.final_dest.addr_len != 2) {
+	  LWIP_DEBUGF(LBP_G3_DEBUG, ("lowpan6_g3_input: 3\n"));
       goto lowpan6_input_discard;
+	}
 
-    if (mesh_header.hops_left == 0)
+    if (mesh_header.hops_left == 0) {
+	  LWIP_DEBUGF(LBP_G3_DEBUG, ("lowpan6_g3_input: 4\n"));
       goto lowpan6_input_discard;
+	}
 
     if (lowpan6_link_addr_cmp(dest, &ieee_802154_broadcast)) {
       /* Multicast case */
-      if ((ret = lowpan6_g3_parse_bc0_header(puc + pos, p->len - pos, &seq_num)) < 0)
+      if ((ret = lowpan6_g3_parse_bc0_header(puc + pos, p->len - pos, &seq_num)) < 0) {
+		  LWIP_DEBUGF(LBP_G3_DEBUG, ("lowpan6_g3_input: 5\n"));
         goto lowpan6_input_discard;
+	  }
 
       pos += ret;
       /* Neither broadcast frame nor destined to a group, to which we belong */
       if (lowpan6_link_addr_to_u16(&mesh_header.final_dest) != PP_HTONS(LOWPAN6_BROADCAST_ADDR) &&
           lowpan6_g3_group_table_lookup(lowpan6_link_addr_to_u16(&mesh_header.final_dest)) == NULL) {
+		  LWIP_DEBUGF(LBP_G3_DEBUG, ("lowpan6_g3_input: 6\n"));
           goto lowpan6_input_discard;
       }
 
       /* Have we seen this frame? */
       if (lowpan6_g3_broadcast_log_table_lookup(lowpan6_link_addr_to_u16(&mesh_header.originator), seq_num) != NULL ||
           memcmp(mesh_header.originator.addr, ctx->short_mac_addr.addr, 2) == 0) {
+		  LWIP_DEBUGF(LBP_G3_DEBUG, ("lowpan6_g3_input: 7\n"));
           goto lowpan6_input_discard;
       }
 
@@ -934,7 +966,7 @@ lowpan6_g3_input(struct pbuf *p, struct netif *netif, struct lowpan6_link_addr *
       if (mesh_header.hops_left > 1) {
         /* Decrement HopsLeft */
         ((uint8_t *)p->payload)[0]--;
-        g3_mcps_data_request(p, &ctx->short_mac_addr, &ieee_802154_broadcast,
+        g3plc_output(netif, p, &ctx->short_mac_addr, &ieee_802154_broadcast,
                              ctx->security_level, ctx->pan_id, 0, ctx->active_key_index);
       }
     } else if (!lowpan6_link_addr_cmp(&mesh_header.final_dest, &ctx->short_mac_addr)) {
@@ -945,13 +977,15 @@ lowpan6_g3_input(struct pbuf *p, struct netif *netif, struct lowpan6_link_addr *
         if (entry != NULL) {
           /* Forward the packet to the next hop */
           lowpan6_link_addr_set_u16(&next_hop, entry->next_addr);
-          g3_mcps_data_request(p, &ctx->short_mac_addr, &next_hop,
+          g3plc_output(netif, p, &ctx->short_mac_addr, &next_hop,
                                ctx->security_level, ctx->pan_id, 0, ctx->active_key_index);
+		  LWIP_DEBUGF(LBP_G3_DEBUG, ("lowpan6_g3_input: 8\n"));
           goto lowpan6_input_discard;
         } else {
           /* An intermediate node does not have a route towards destination */
           loadng_g3_route_disc(netif, p, &mesh_header.originator,
                                &mesh_header.final_dest, 1, mesh_header.hops_left - 1);
+		  LWIP_DEBUGF(LBP_G3_DEBUG, ("lowpan6_g3_input: 9\n"));
           goto lowpan6_input_discard;
         }
       } else {
@@ -973,6 +1007,7 @@ lowpan6_g3_input(struct pbuf *p, struct netif *netif, struct lowpan6_link_addr *
   puc = (u8_t *)p->payload;
   b = *puc;
   if ((b & 0xf8) == 0xc0) {
+  		  LWIP_DEBUGF(LBP_G3_DEBUG, ("lowpan6_g3_input: FRAG1 received\n"));
     /* FRAG1 dispatch, add this packet to reassembly list. */
     datagram_size = ((u16_t)(puc[0] & 0x07) << 8) | (u16_t)puc[1];
     datagram_tag = ((u16_t)puc[2] << 8) | (u16_t)puc[3];
@@ -987,6 +1022,7 @@ lowpan6_g3_input(struct pbuf *p, struct netif *netif, struct lowpan6_link_addr *
         /* address match with packet in reassembly. */
         if ((datagram_tag == lrh->datagram_tag) && (datagram_size == lrh->datagram_size)) {
           /* duplicate fragment. */
+		  LWIP_DEBUGF(LBP_G3_DEBUG, ("lowpan6_g3_input: 10\n"));
           goto lowpan6_input_discard;
         } else {
           /* We are receiving the start of a new datagram. Discard old one (incomplete). */
@@ -1006,6 +1042,7 @@ lowpan6_g3_input(struct pbuf *p, struct netif *netif, struct lowpan6_link_addr *
     pbuf_remove_header(p, 4); /* hide frag1 dispatch */
     lrh = (struct lowpan6_reass_helper *) mem_malloc(sizeof(struct lowpan6_reass_helper));
     if (lrh == NULL) {
+		  LWIP_DEBUGF(LBP_G3_DEBUG, ("lowpan6_g3_input: 11\n"));
       goto lowpan6_input_discard;
     }
 
@@ -1028,6 +1065,7 @@ lowpan6_g3_input(struct pbuf *p, struct netif *netif, struct lowpan6_link_addr *
       if (lrh->reass == NULL) {
         /* decompression failed */
         mem_free(lrh);
+		  LWIP_DEBUGF(LBP_G3_DEBUG, ("lowpan6_g3_input: 12\n"));
         goto lowpan6_input_discard;
       }
     }
@@ -1038,6 +1076,7 @@ lowpan6_g3_input(struct pbuf *p, struct netif *netif, struct lowpan6_link_addr *
     return ERR_OK;
   } else if ((b & 0xf8) == 0xe0) {
     /* FRAGN dispatch, find packet being reassembled. */
+    		  LWIP_DEBUGF(LBP_G3_DEBUG, ("lowpan6_g3_input: FRAGN dispatch\n"));
     datagram_size = ((u16_t)(puc[0] & 0x07) << 8) | (u16_t)puc[1];
     datagram_tag = ((u16_t)puc[2] << 8) | (u16_t)puc[3];
     datagram_offset = (u16_t)puc[4] << 3;
@@ -1052,6 +1091,7 @@ lowpan6_g3_input(struct pbuf *p, struct netif *netif, struct lowpan6_link_addr *
     }
     if (lrh == NULL) {
       /* rogue fragment */
+		  LWIP_DEBUGF(LBP_G3_DEBUG, ("lowpan6_g3_input: 13\n"));
       goto lowpan6_input_discard;
     }
     /* Insert new pbuf into list of fragments. Each fragment is a pbuf,
@@ -1063,11 +1103,13 @@ lowpan6_g3_input(struct pbuf *p, struct netif *netif, struct lowpan6_link_addr *
         /* fragment overlap, discard old fragments */
         dequeue_datagram(lrh, lrh_prev);
         free_reass_datagram(lrh);
+		  LWIP_DEBUGF(LBP_G3_DEBUG, ("lowpan6_g3_input: 14\n"));
         goto lowpan6_input_discard;
       }
     }
     if (lrh->frags == NULL) {
       /* first FRAGN */
+      LWIP_DEBUGF(LBP_G3_DEBUG, ("lowpan6_g3_input: First FRAGN\n"));
       lrh->frags = p;
     } else {
       /* find the correct place to insert */
@@ -1081,6 +1123,7 @@ lowpan6_g3_input(struct pbuf *p, struct netif *netif, struct lowpan6_link_addr *
             /* overlap, discard old fragments */
             dequeue_datagram(lrh, lrh_prev);
             free_reass_datagram(lrh);
+		  LWIP_DEBUGF(LBP_G3_DEBUG, ("lowpan6_g3_input: 15\n"));
             goto lowpan6_input_discard;
           }
           /* insert here */
@@ -1112,12 +1155,14 @@ lowpan6_g3_input(struct pbuf *p, struct netif *netif, struct lowpan6_link_addr *
       for (q = lrh->frags; q != NULL; q = q->next) {
         u16_t q_datagram_offset = ((u8_t *)q->payload)[0] << 3;
         if (q_datagram_offset != offset) {
+          LWIP_DEBUGF(LBP_G3_DEBUG, ("lowpan6_g3_input: Not complete, wait for more\n"));
           /* not complete, wait for more fragments */
           return ERR_OK;
         }
         offset += q->len - 1;
       }
       if (offset == datagram_size) {
+        LWIP_DEBUGF(LBP_G3_DEBUG, ("lowpan6_g3_input: All fragments received\n"));
         /* all fragments received, combine pbufs */
         u16_t datagram_left = datagram_size - lrh->reass->len;
         for (q = lrh->frags; q != NULL; q = q->next) {
@@ -1165,10 +1210,45 @@ lowpan6_g3_input(struct pbuf *p, struct netif *netif, struct lowpan6_link_addr *
     return adpd_data_indication(p, netif);
   }
 lowpan6_input_discard:
+  LWIP_DEBUGF(LBP_G3_DEBUG, ("lowpan6_g3_input: lowpan6_input_discard -> exit\n"));
   MIB2_STATS_NETIF_INC(netif, ifindiscards);
   pbuf_free(p);
   /* always return ERR_OK here to prevent the caller freeing the pbuf */
   return ERR_OK;
+}
+
+err_t
+lowpan6_g3_tcpip_input(u8_t *buf, size_t len, struct netif *inp, struct lowpan6_link_addr *src, struct lowpan6_link_addr *dst,
+                       struct g3plc_mcps_indication *indication)
+{
+  struct pbuf *p;
+  g3plc_packet_t *packet;
+  err_t err;
+
+  p = pbuf_alloc(PBUF_RAW, len + sizeof(g3plc_packet_t), PBUF_RAM);
+  if (!p) {
+    return ERR_MEM;
+  }
+  packet = (g3plc_packet_t *)p->payload;
+  memcpy(&packet->src, src, sizeof(struct lowpan6_link_addr));
+  memcpy(&packet->dst, dst, sizeof(struct lowpan6_link_addr));
+  memcpy(&packet->indication, indication, (sizeof(*indication)));
+  packet->len = len;
+  memcpy(packet->payload, buf, len);
+
+  err = tcpip_inpkt(p, inp, lowpan6_g3_input);
+  if (err != ERR_OK) {
+    pbuf_free(p);
+  }
+
+  return err;
+}
+
+void lowpan6_g3_set_noauto(struct netif *netif, u8_t val)
+{
+  lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
+
+  ctx->noauto = val;
 }
 
 static void
@@ -1177,6 +1257,30 @@ g3_lowpan_timer(void *arg)
   lowpan6_g3_tmr(arg);
   sys_timeout(LOWPAN6_TMR_INTERVAL, g3_lowpan_timer, arg);
 }
+
+void lowpan6_g3_tmr_start(struct netif *netif)
+{
+  sys_timeout(LOWPAN6_TMR_INTERVAL, g3_lowpan_timer, netif);
+}
+
+err_t
+lowpan6_g3_reset(struct netif *netif)
+{
+  lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *)netif->state;
+
+  *ctx = default_state;
+
+  /* Get Extended MAC address */
+  if (g3plc_get_hwaddr(ctx->extended_mac_addr.addr) < 0) {
+    LWIP_DEBUGF(LWIP_LOWPAN6_DEBUG, ("lowpan6_g3_if_init: Can't get the MAC\n"));
+    return ERR_VAL;
+  }
+
+  LWIP_DEBUGF(LWIP_LOWPAN6_DEBUG, ("lowpan6_g3_if_init: Device MAC addr %016llx\n",
+                                   lowpan6_link_addr_to_u64(lowpan6_data.extended_mac_addr.addr)));
+  return ERR_OK;
+}
+
 /**
  * @ingroup sixlowpan
  */
@@ -1189,38 +1293,14 @@ lowpan6_g3_if_init(struct netif *netif)
 
   MIB2_INIT_NETIF(netif, snmp_ifType_other, 0);
 
+  netif->state = &lowpan6_data;
   /* maximum transfer unit */
   netif->mtu = 1280;
 
   /* broadcast capability */
   netif->flags = NETIF_FLAG_BROADCAST /* | NETIF_FLAG_LOWPAN6 */;
-  netif->state = &lowpan6_data;
 
-  if (g3_mac_reset() < 0) {
-    LWIP_DEBUGF(LWIP_LOWPAN6_DEBUG, ("lowpan6_g3_if_init: Can't reset the MAC\n"));
-    return ERR_VAL;
-  }
-
-  /* Get Extended MAC address */
-  if (g3_get_hwaddr(lowpan6_data.extended_mac_addr.addr) < 0) {
-    LWIP_DEBUGF(LWIP_LOWPAN6_DEBUG, ("lowpan6_g3_if_init: Can't get the MAC\n"));
-    return ERR_VAL;
-  }
-
-  LWIP_DEBUGF(LWIP_LOWPAN6_DEBUG, ("lowpan6_g3_if_init: Device MAC addr %016llx\n",
-                                   lowpan6_link_addr_to_u64(lowpan6_data.extended_mac_addr.addr)));
-
-  /*
-   * A device can become a PAN coordinator by calling
-   * lbp_g3_lbs_pan_start()
-   */
-  lowpan6_data.device_type = LOWPAN6_G3_DEVTYPE_DEVICE;
-
-  LOCK_TCPIP_CORE();
-  sys_timeout(LOWPAN6_TMR_INTERVAL, g3_lowpan_timer, netif);
-  UNLOCK_TCPIP_CORE();
-
-  return ERR_OK;
+  return lowpan6_g3_reset(netif);
 }
 
 /* Setter functions for accessing MAC */
@@ -1230,7 +1310,7 @@ lowpan6_g3_set_short_addr(struct netif *netif, u8_t addr_high, u8_t addr_low)
   lowpan6_data.short_mac_addr.addr[0] = addr_high;
   lowpan6_data.short_mac_addr.addr[1] = addr_low;
 
-  return g3_set_shortaddr((u16_t)addr_high << 8 | addr_low);
+  return g3plc_set_shortaddr((u16_t)addr_high << 8 | addr_low);
 }
 
 err_t
@@ -1240,7 +1320,7 @@ lowpan6_g3_set_ext_addr(struct netif *netif, const u8_t *addr)
 
   MEMCPY(ctx->extended_mac_addr.addr, addr, 8);
 
-  return g3_set_hwaddr(addr);
+  return g3plc_set_hwaddr(addr);
 }
 
 err_t
@@ -1252,7 +1332,7 @@ lowpan6_g3_set_gmk(struct netif *netif, const u8_t *gmk, u8_t id)
     return ERR_VAL;
   }
 
-  if (g3_set_gmk(gmk, id) < 0) {
+  if (g3plc_set_gmk(gmk, id) < 0) {
     LWIP_DEBUGF(LBP_G3_DEBUG, ("lowpan6_g3_set_gmk: Can't set GMK key!\n"));
     return ERR_VAL;
   }
@@ -1276,7 +1356,7 @@ lowpan6_g3_set_device_role(struct netif *netif, u8_t role)
     rc_val = 0xFFFF;
   }
 
-  return g3_set_rc_coord(rc_val);
+  return g3plc_set_rc_coord(rc_val);
 }
 
 /**
@@ -1290,7 +1370,7 @@ lowpan6_g3_set_pan_id(struct netif *netif, u16_t pan_id)
 
   ctx->pan_id = pan_id;
 
-  return g3_pan_id_set(pan_id);
+  return g3plc_set_pan_id(pan_id);
 }
 
 #if LWIP_G3_ADP_TEST
@@ -1376,6 +1456,8 @@ lowpan6_g3_set_weak_lqi_value(u8_t val)
 void
 lowpan6_g3_set_device_type(u8_t dev_type)
 {
+  
+  fprintf(stderr, "lowpan6_g3_set_device_type: %d\n", dev_type);
   lowpan6_data.device_type = dev_type;
 }
 

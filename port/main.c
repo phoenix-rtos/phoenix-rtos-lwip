@@ -85,6 +85,7 @@ int main(int argc, char **argv)
 	void register_driver_pppou(void);
 	void register_driver_tun(void);
 	void register_driver_tap(void);
+	void register_driver_g3plc(void);
 
 	init_lwip_tcpip();
 	init_lwip_sockets();
@@ -103,6 +104,9 @@ int main(int argc, char **argv)
 #ifdef HAVE_DRIVER_tuntap
 	register_driver_tun();
 	register_driver_tap();
+#endif
+#ifdef HAVE_DRIVER_g3plc
+	register_driver_g3plc();
 #endif
 #endif
 
