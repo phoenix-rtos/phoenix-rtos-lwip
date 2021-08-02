@@ -198,7 +198,6 @@ static int ifstatus_open(int flags)
 {
 	struct netif *netif;
 	netif_driver_t *drv;
-	unsigned int i;
 	char *buf;
 	size_t size;
 	int overflow = 0;
@@ -236,7 +235,7 @@ static int ifstatus_open(int flags)
 	}
 
 #if LWIP_DNS
-	for (i = 0; i < LWIP_DHCP_MAX_DNS_SERVERS; ++i)
+	for (unsigned int i = 0; i < LWIP_DHCP_MAX_DNS_SERVERS; ++i)
 		SNPRINTF_APPEND("dns_%u=%s\n", i, inet_ntoa(*dns_getserver(i)));
 #endif
 
