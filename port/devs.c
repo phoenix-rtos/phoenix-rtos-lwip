@@ -141,9 +141,9 @@ static int route_open(int flags)
 
 	/* add per-netif routing (LwIP uses it regardless of our routing table) - with highest priority (apart for our custom GW) */
 	for (netif = netif_list; netif != NULL; netif = netif->next) {
-		uint32_t prefix = ((netif->ip_addr.addr) & (netif->netmask.addr));
+		uint32_t prefix = ip4_addr_get_u32(netif_ip4_addr(netif)) & ip4_addr_get_u32(netif_ip4_netmask(netif));
 		unsigned int flags = netif_is_up(netif) ? RTF_UP : 0;
-		if (netif->gw.addr != 0)
+		if (ip4_addr_get_u32(netif_ip4_gw(netif)) != 0)
 			flags |= RTF_GATEWAY;
 
 		SNPRINTF_APPEND("%2s%u\t%08X\t%08X\t%04X\t%d\t%u\t%d\t%08X\t%d\t%u\t%u\n",
