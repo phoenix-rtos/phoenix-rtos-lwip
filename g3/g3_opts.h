@@ -50,7 +50,7 @@
 /** LWIP_LOWPAN6_DECOMPRESSION_DEBUG: enable decompression debug output
  */
 #ifndef LWIP_LOWPAN6_DECOMPRESSION_DEBUG
-#define LWIP_LOWPAN6_DECOMPRESSION_DEBUG      LWIP_DBG_ON
+#define LWIP_LOWPAN6_DECOMPRESSION_DEBUG      LWIP_DBG_OFF
 #endif
 
 /** LWIP_RFC7668_IP_UNCOMPRESSED_DEBUG: enable decompressed IP frame
@@ -97,7 +97,7 @@
 #endif
 
 #ifndef LOADNG_G3_DEBUG
-#define LOADNG_G3_DEBUG LWIP_DBG_ON
+#define LOADNG_G3_DEBUG LWIP_DBG_OFF
 #endif
 
 #ifndef LOADNG_G3_RREQ_TABLE_SIZE
@@ -117,7 +117,7 @@
 #endif
 
 #ifndef LBP_G3_DEBUG
-#define LBP_G3_DEBUG   LWIP_DBG_ON
+#define LBP_G3_DEBUG   LWIP_DBG_OFF
 #endif
 
 #ifndef LBP_G3_SCAN_TABLE_SIZE
