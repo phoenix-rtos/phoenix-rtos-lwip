@@ -416,6 +416,7 @@ int g3plc_mac_nb_table_lookup_sync(struct lowpan6_link_addr *addr, struct g3plc_
 	int ret;
 
 	short_addr = lowpan6_link_addr_to_u16(addr);
+	short_addr = (((uint16_t)short_addr >> 8) & 0xff) | (((uint16_t)short_addr << 8) & 0xff00);
 	req.pib_attr_index = short_addr;
 
 	ret = g3plc_mac_get(&req);
