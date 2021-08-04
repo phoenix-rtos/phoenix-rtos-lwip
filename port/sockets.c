@@ -1150,14 +1150,14 @@ static void socketsrv_thread(void *arg)
 					if ((sock = key_sockets_socket(smi->socket.domain, type, smi->socket.protocol)) < 0) {
 						msg.o.err = -errno;
 					}
-				else {
-					msg.o.err = wrap_key_socket(&msg.o.lookup.dev.port, sock, smi->socket.type);
-					msg.o.lookup.fil = msg.o.lookup.dev;
-				}
+					else {
+						msg.o.err = wrap_key_socket(&msg.o.lookup.dev.port, sock, smi->socket.type);
+						msg.o.lookup.fil = msg.o.lookup.dev;
+					}
 #else
 					msg.o.err = -EINVAL;
 #endif /* LWIP_IPSEC */
-				break;
+					break;
 				}
 				if ((sock = lwip_socket(smi->socket.domain, type, smi->socket.protocol)) < 0)
 					msg.o.lookup.err = -errno;
