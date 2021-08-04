@@ -1362,6 +1362,7 @@ loadng_g3_rlcreq_process(struct netif *netif, struct pbuf *p, struct g3plc_mcps_
 
   if (rlcreq->metric_type != ctx->metric_type) {
     LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3_rlcreq_process: Received RLCREQ with unknown metric type. Dropping.\n"));
+    LWIP_DEBUGF(LOADNG_G3_DEBUG, ("destinstion=%x, originator=%x, metric=%x\n", rlcreq->destination, rlcreq->originator, rlcreq->metric_type));
     return ERR_VAL;
   }
 
