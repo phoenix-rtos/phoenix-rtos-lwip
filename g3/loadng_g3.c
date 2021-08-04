@@ -1354,6 +1354,8 @@ loadng_g3_rlcreq_process(struct netif *netif, struct pbuf *p, struct g3plc_mcps_
 
   rlcreq = loadng_g3_pbuf_msg_cast(p, struct loadng_g3_rlcreq_msg *);
 
+  rlcreq->metric_type = ((*(u8_t *)((p->payload + 3) + 2 + 2)) >> 4) & 0xf;
+
   /* RLCREQ not for us. Routing RLCREQ is not supported */
   if (rlcreq->destination != lowpan6_dev_short_addr(ctx)) {
     LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3_rlcreq_process: Received RLCREQ not for us. Dropping.\n"));
@@ -1383,6 +1385,8 @@ loadng_g3_rlcreq_process(struct netif *netif, struct pbuf *p, struct g3plc_mcps_
 
   LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3_rlcreq_process: Received RLCREQ from %04X. Responding with RLCREP\n",
                              lwip_ntohs(rlcreq->originator)));
+
+  ((*(u8_t *)((q->payload + 3) + 2 + 2))) = rlcreq->metric_type << 4;
 
   ret = loadng_g3_output(netif, q, rlcrep->destination);
   pbuf_free(q);
