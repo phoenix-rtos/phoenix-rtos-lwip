@@ -32,7 +32,7 @@
 #define LWIP_IPV6_SEND_ROUTER_SOLICIT 0
 
 
-#if 1  // debugging LWiP PPPoS
+#if 0  // debugging LWiP PPPoS
 #define LWIP_DEBUG         1
 #define LWIP_DBG_MIN_LEVEL LWIP_DBG_LEVEL_ALL
 #define LWIP_DBG_TYPES_ON  LWIP_DBG_ON
