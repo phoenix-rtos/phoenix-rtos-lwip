@@ -76,10 +76,10 @@
 #include "lwip/def.h"
 
 
-db_set_netif *ipsecdev_dbsget(const char *dev);
-void ipsecdev_enable(const char *dev);
-void ipsecdev_disable(const char *dev);
-u32_t ipsecdev_getIP(const char *dev);
+db_set_netif *ipsecdev_dbsget(void);
+void ipsecdev_enable(void);
+void ipsecdev_disable(void);
+u32_t ipsecdev_getIP(void);
 int ipsecdev_attach(const char *dev);
 
 #endif
