@@ -166,14 +166,14 @@ static int sadb_getSPI(const struct sadb_msg *msg, struct sadb_msg *reply)
 	larval_sa.addr.addr = addr->sin_addr.s_addr;
 	larval_sa.mode = h.sa2->sadb_x_sa2_mode;
 
-	db_sets = ipsecdev_dbsget("sc3");
+	db_sets = ipsecdev_dbsget();
 	if (db_sets == NULL)
 		return -EINVAL;
 	sa = ipsec_sad_add(&larval_sa, &db_sets->inbound_sad);
 	if (sa == NULL)
 		return -ENOMEM;
 
-	ipsecdev_enable("sc3");
+	ipsecdev_enable();
 
 	/* WARN: SPI is a pointer to SA entry */
 	sa->spi = htonl((uint32_t)sa);
@@ -402,14 +402,14 @@ static int sadb_add(const struct sadb_msg *msg, struct sadb_msg *reply)
 	if (h.sa == NULL || h.address_dst == NULL || h.address_src == NULL)
 		return -EINVAL;
 
-	db_sets = ipsecdev_dbsget("sc3");
+	db_sets = ipsecdev_dbsget();
 	if (db_sets == NULL)
 		return -EINVAL;
 
 	addr = ((struct sockaddr_in *)PFKEY_ADDR_SADDR(h.address_src))->sin_addr.s_addr;
 	/* proto = h.address_src->sadb_address_proto; */
 
-	if (addr == ipsecdev_getIP("sc3")) {
+	if (addr == ipsecdev_getIP()) {
 		sad = &db_sets->outbound_sad;
 		addr = ((struct sockaddr_in *)PFKEY_ADDR_SADDR(h.address_dst))->sin_addr.s_addr;
 		;
@@ -438,7 +438,7 @@ static int sadb_add(const struct sadb_msg *msg, struct sadb_msg *reply)
 
 	IPSEC_LOG_SADB("itor: %u  spi: %x  mode: %d  dst_addr: %x", sa->initiator, sa->spi, sa->mode, sa->addr.addr);
 
-	ipsecdev_enable("sc3");
+	ipsecdev_enable();
 
 	h.key_auth = NULL;
 	h.key_encrypt = NULL;
@@ -461,7 +461,7 @@ static int sadb_del(const struct sadb_msg *msg, struct sadb_msg *reply)
 	if (h.sa == NULL || h.address_dst == NULL || h.address_src == NULL)
 		return -EINVAL;
 
-	db_sets = ipsecdev_dbsget("sc3");
+	db_sets = ipsecdev_dbsget();
 	if (db_sets == NULL)
 		return -EINVAL;
 
@@ -475,12 +475,12 @@ static int sadb_del(const struct sadb_msg *msg, struct sadb_msg *reply)
 
 static int sadb_flush(const struct sadb_msg *msg, struct sadb_msg *reply)
 {
-	db_set_netif *db_sets = ipsecdev_dbsget("sc3");
+	db_set_netif *db_sets = ipsecdev_dbsget();
 
 	if (db_sets == NULL)
 		return -EINVAL;
 
-	ipsecdev_disable("sc3");
+	ipsecdev_disable();
 	ipsec_sad_flush(&db_sets->inbound_sad);
 	ipsec_sad_flush(&db_sets->outbound_sad);
 
@@ -492,7 +492,7 @@ static int sadb_flush(const struct sadb_msg *msg, struct sadb_msg *reply)
 static int sadb_x_spdflush(const struct sadb_msg *msg, struct sadb_msg *reply)
 {
 	spd_entry_t spd_default = { .protocol = IPSEC_PROTO_ANY, .policy = IPSEC_POLICY_BYPASS };
-	db_set_netif *db_sets = ipsecdev_dbsget("sc3");
+	db_set_netif *db_sets = ipsecdev_dbsget();
 
 	if (db_sets == NULL)
 		return -EINVAL;
@@ -691,7 +691,7 @@ static int sadb_x_spdadd(const struct sadb_msg *msg, struct sadb_msg *reply)
 		dst_tun = addr[1].sin_addr.s_addr;
 	}
 
-	db_sets = ipsecdev_dbsget("sc3");
+	db_sets = ipsecdev_dbsget();
 	if (db_sets == NULL)
 		return -EINVAL;
 
@@ -741,7 +741,7 @@ static int sadb_x_spddel(const struct sadb_msg *msg, struct sadb_msg *reply)
 	if (h.policy->sadb_x_policy_id == 0)
 		return -EINVAL;
 
-	db_sets = ipsecdev_dbsget("sc3");
+	db_sets = ipsecdev_dbsget();
 	if (db_sets == NULL)
 		return -EINVAL;
 
@@ -763,7 +763,7 @@ static void ipsec_dump_tables(int dump_spd)
 {
 	db_set_netif *db_sets;
 
-	db_sets = ipsecdev_dbsget("sc3");
+	db_sets = ipsecdev_dbsget();
 	if (db_sets == NULL)
 		return;
 
@@ -787,7 +787,7 @@ static void ipsec_check_timeouts(void *arg)
 	char msgbuf[512];
 	struct sadb_msg *msg = (struct sadb_msg *)msgbuf;
 
-	db_sets = ipsecdev_dbsget("sc3");
+	db_sets = ipsecdev_dbsget();
 	if (db_sets == NULL)
 		return;
 

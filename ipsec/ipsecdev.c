@@ -65,6 +65,9 @@ struct ipsec_priv {
 };
 
 
+static struct netif *ipsecdev_netif;
+
+
 static u32_t update_ip_csum(u16_t csum, u32_t dcsum_folded)
 {
 	/* RFC 1624 incremental csum update */
@@ -444,35 +447,23 @@ static err_t ipsecdev_init(struct netif *netif)
 }
 
 
-db_set_netif *ipsecdev_dbsget(const char *dev)
+db_set_netif *ipsecdev_dbsget(void)
 {
-	struct netif *netif;
-
-	if ((netif = netif_find(dev)) == NULL)
+	if (ipsecdev_netif == NULL)
 		return NULL;
 
-	if (netif_ipsec_data(netif) != netif)
-		return NULL;
-
-	return &((struct ipsec_priv *)netif->state)->db_sets;
+	return &((struct ipsec_priv *)ipsecdev_netif->state)->db_sets;
 }
 
 
-void ipsecdev_enable(const char *dev)
+void ipsecdev_enable(void)
 {
-	struct netif *netif;
-	struct netif *ipsecdev;
 	struct ipsec_priv *state;
 
-	if ((netif = netif_find(dev)) == NULL)
+	if (ipsecdev_netif == NULL)
 		return;
 
-	ipsecdev = netif_ipsec_data(netif);
-	assert(ipsecdev == netif);
-	if (ipsecdev != netif)
-		return;
-
-	state = (struct ipsec_priv *)ipsecdev->state;
+	state = (struct ipsec_priv *)ipsecdev_netif->state;
 
 	mutexLock(state->mutex);
 	state->flags |= IPSEC_FLAGS_ENABLED;
@@ -482,21 +473,14 @@ void ipsecdev_enable(const char *dev)
 }
 
 
-void ipsecdev_disable(const char *dev)
+void ipsecdev_disable(void)
 {
-	struct netif *netif;
-	struct netif *ipsecdev;
 	struct ipsec_priv *state;
 
-	if ((netif = netif_find(dev)) == NULL)
+	if (ipsecdev_netif == NULL)
 		return;
 
-	ipsecdev = netif_ipsec_data(netif);
-	assert(ipsecdev == netif);
-	if (ipsecdev != netif)
-		return;
-
-	state = (struct ipsec_priv *)ipsecdev->state;
+	state = (struct ipsec_priv *)ipsecdev_netif->state;
 
 	mutexLock(state->mutex);
 	state->flags &= ~IPSEC_FLAGS_ENABLED;
@@ -506,22 +490,16 @@ void ipsecdev_disable(const char *dev)
 }
 
 
-u32_t ipsecdev_getIP(const char *dev)
+u32_t ipsecdev_getIP(void)
 {
-	struct netif *netif;
-	struct netif *ipsecdev;
 	struct ipsec_priv *state;
 	u32_t ip;
 
-	if ((netif = netif_find(dev)) == NULL)
+	if (ipsecdev_netif == NULL)
 		return 0;
 
-	ipsecdev = netif_ipsec_data(netif);
-	assert(ipsecdev == netif);
-	if (ipsecdev != netif)
-		return 0;
+	state = (struct ipsec_priv *)ipsecdev_netif->state;
 
-	state = (struct ipsec_priv *)ipsecdev->state;
 	mutexLock(state->mutex);
 	ip = state->hw_netif->ip_addr.addr;
 	mutexUnlock(state->mutex);
@@ -532,7 +510,7 @@ u32_t ipsecdev_getIP(const char *dev)
 int ipsecdev_attach(const char *dev)
 {
 	struct ipsec_priv *priv;
-	struct netif *netif, *hw_netif;
+	struct netif *hw_netif;
 
 	if ((hw_netif = netif_find(dev)) == NULL) {
 		errno = ENODEV;
@@ -544,7 +522,7 @@ int ipsecdev_attach(const char *dev)
 		return -1;
 	}
 
-	if ((netif = calloc(1, sizeof(*netif))) == NULL) {
+	if ((ipsecdev_netif = calloc(1, sizeof(*ipsecdev_netif))) == NULL) {
 		free(priv);
 		errno = ENOMEM;
 		return -1;
@@ -558,16 +536,17 @@ int ipsecdev_attach(const char *dev)
 	ipsec_db_init(&priv->db_sets);
 	mutexCreate(&priv->mutex);
 
-	if (netif_add_noaddr(netif, priv, ipsecdev_init, ip_input) == NULL) {
+	if (netif_add_noaddr(ipsecdev_netif, priv, ipsecdev_init, ip_input) == NULL) {
 		resourceDestroy(priv->mutex);
 		free(priv);
-		free(netif);
+		free(ipsecdev_netif);
+		ipsecdev_netif = NULL;
 		errno = EIO;
 		return -1;
 	}
 
 	/* ipsec device is always connected */
-	netif_set_link_up(netif);
+	netif_set_link_up(ipsecdev_netif);
 
 	return 0;
 }
