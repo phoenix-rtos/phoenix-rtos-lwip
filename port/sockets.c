@@ -735,10 +735,12 @@ static int socket_op(msg_t *msg, int sock)
 			msg->o.io.err = -EINVAL;
 		break;
 	case mtGetAttr:
-		if (msg->i.attr.type == atPollStatus)
-			msg->o.attr.val = poll_one(&polls, msg->i.attr.val, 0);
-		else
-			msg->o.attr.val = -EINVAL;
+		if (msg->i.attr.type != atPollStatus) {
+			msg->o.attr.err = -EINVAL;
+			break;
+		}
+		msg->o.attr.val = poll_one(&polls, msg->i.attr.val, 0);
+		msg->o.attr.err = (msg->o.attr.val < 0) ? msg->o.attr.val : EOK;
 		break;
 	case mtClose:
 		msg->o.io.err = map_errno(lwip_close(sock));

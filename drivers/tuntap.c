@@ -162,11 +162,14 @@ static void tuntap_mainLoop(void* _state)
 			msg.o.io.err = _tuntap_read(state, msg.o.data, msg.o.size);
 			break;
 		case mtGetAttr:
-			if (msg.i.attr.type == atPollStatus) {
-				msg.o.attr.val = POLLOUT;
-				if (!fifo_is_empty(state->queue))
-					msg.o.attr.val |= POLLIN;
+			if (msg.i.attr.type != atPollStatus) {
+				msg.o.attr.err = -EINVAL;
+				break;
 			}
+			msg.o.attr.val = POLLOUT;
+			if (!fifo_is_empty(state->queue))
+				msg.o.attr.val |= POLLIN;
+			msg.o.attr.err = EOK;
 			break;
 		}
 		mutexUnlock(state->lock);
