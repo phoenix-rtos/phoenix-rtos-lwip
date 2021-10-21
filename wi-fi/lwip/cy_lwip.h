@@ -58,19 +58,17 @@ extern "C" {
 /**
  * Enumeration of network interface role
  */
-typedef enum
-{
-    CY_LWIP_STA_NW_INTERFACE = 0,  /**< STA or Client Interface  */
-    CY_LWIP_AP_NW_INTERFACE  = 1   /**< SoftAP Interface         */
+typedef enum {
+	CY_LWIP_STA_NW_INTERFACE = 0, /**< STA or Client Interface  */
+	CY_LWIP_AP_NW_INTERFACE = 1   /**< SoftAP Interface         */
 } cy_lwip_nw_interface_role_t;
 
 /**
  * Enumeration of network activity type
  */
-typedef enum
-{
-    CY_NETWORK_ACTIVITY_TX = 0,  /**< TX network activity  */
-    CY_NETWORK_ACTIVITY_RX = 1   /**< RX network activity  */
+typedef enum {
+	CY_NETWORK_ACTIVITY_TX = 0, /**< TX network activity  */
+	CY_NETWORK_ACTIVITY_RX = 1  /**< RX network activity  */
 } cy_network_activity_type_t;
 
 /** \} group_lwip_whd_enums */
@@ -84,18 +82,17 @@ typedef enum
  */
 typedef struct
 {
-    cy_lwip_nw_interface_role_t role;      /**< Network interface role */
-    whd_interface_t             whd_iface; /**< WHD interface */
+	cy_lwip_nw_interface_role_t role; /**< Network interface role */
+	whd_interface_t whd_iface;        /**< WHD interface */
 } cy_lwip_nw_interface_t;
 
 /**
  * This structure represents a static IP address
  */
-typedef struct ip_static
-{
-    ip_addr_t addr;    /**< The IP address for the network interface */
-    ip_addr_t netmask; /**< The netmask for the network interface */
-    ip_addr_t gateway; /**< The default gateway for network traffic */
+typedef struct ip_static {
+	ip_addr_t addr;    /**< The IP address for the network interface */
+	ip_addr_t netmask; /**< The netmask for the network interface */
+	ip_addr_t gateway; /**< The default gateway for network traffic */
 } ip_static_addr_t;
 
 /** \} group_lwip_whd_port_structures */
@@ -118,7 +115,7 @@ typedef struct ip_static
  *
  * @return CY_RESULT_SUCCESS for successful addition to LwIP or error otherwise.
  */
-cy_rslt_t cy_lwip_add_interface(cy_lwip_nw_interface_t *iface, ip_static_addr_t *ipaddr) ;
+cy_rslt_t cy_lwip_add_interface(cy_lwip_nw_interface_t *iface, ip_static_addr_t *ipaddr);
 
 /**
  * Removes a network interface from LwIP.
@@ -136,7 +133,7 @@ cy_rslt_t cy_lwip_remove_interface(cy_lwip_nw_interface_t *iface);
  *
  * @return netif structure of the WHD interface, null if the interface type passed is invalid.
  */
-struct netif* cy_lwip_get_interface(cy_lwip_nw_interface_role_t role);
+struct netif *cy_lwip_get_interface(cy_lwip_nw_interface_role_t role);
 
 /**
  * This function brings up the network link layer and

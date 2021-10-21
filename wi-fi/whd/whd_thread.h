@@ -38,27 +38,25 @@
 #define INCLUDED_WHD_THREAD_H_
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 /******************************************************
 *             Constants
 ******************************************************/
-#define WHD_THREAD_RX_BOUND           (20)
-#define WHD_MAX_BUS_FAIL              (10)
+#define WHD_THREAD_RX_BOUND (20)
+#define WHD_MAX_BUS_FAIL    (10)
 
-typedef struct whd_thread_info
-{
+typedef struct whd_thread_info {
 
-    volatile whd_bool_t thread_quit_flag;
-    volatile whd_bool_t whd_inited;
-    cy_thread_t whd_thread;
-    cy_semaphore_t transceive_semaphore;
-    volatile whd_bool_t bus_interrupt;
-    void *thread_stack_start;
-    uint32_t thread_stack_size;
-    cy_thread_priority_t thread_priority;
+	volatile whd_bool_t thread_quit_flag;
+	volatile whd_bool_t whd_inited;
+	cy_thread_t whd_thread;
+	cy_semaphore_t transceive_semaphore;
+	volatile whd_bool_t bus_interrupt;
+	void *thread_stack_start;
+	uint32_t thread_stack_size;
+	cy_thread_priority_t thread_priority;
 
 } whd_thread_info_t;
 

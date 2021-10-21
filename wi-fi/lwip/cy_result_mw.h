@@ -77,41 +77,41 @@ extern "C" {
  *
  * @{
  */
- /* !!! ALWAYS ADD MODULE BASES AT THE END. DO NOT INSERT NEW MODULES IN BETWEEN EXISTING MODULES !!!
+/* !!! ALWAYS ADD MODULE BASES AT THE END. DO NOT INSERT NEW MODULES IN BETWEEN EXISTING MODULES !!!
  * The expectation is that all middleware modules shall define their base out of this file so
  * that the error code space can be reserved and allotted efficiently
  */
 
 /** MDNS module base */
-#define CY_RSLT_MODULE_MDNS_BASE                         CY_RSLT_MODULE_MIDDLEWARE_BASE
+#define CY_RSLT_MODULE_MDNS_BASE CY_RSLT_MODULE_MIDDLEWARE_BASE
 /** AWS IoT module base */
-#define CY_RSLT_MODULE_AWS_BASE                          CY_RSLT_MODULE_MIDDLEWARE_BASE + 1
+#define CY_RSLT_MODULE_AWS_BASE CY_RSLT_MODULE_MIDDLEWARE_BASE + 1
 /** JSON parser module base */
-#define CY_RSLT_MODULE_JSON_BASE                         CY_RSLT_MODULE_MIDDLEWARE_BASE + 2
+#define CY_RSLT_MODULE_JSON_BASE CY_RSLT_MODULE_MIDDLEWARE_BASE + 2
 /** Linked list module base */
-#define CY_RSLT_MODULE_LINKED_LIST_BASE                  CY_RSLT_MODULE_MIDDLEWARE_BASE + 3
+#define CY_RSLT_MODULE_LINKED_LIST_BASE CY_RSLT_MODULE_MIDDLEWARE_BASE + 3
 /** command console module base */
-#define CY_RSLT_MODULE_COMMAND_CONSOLE_BASE              CY_RSLT_MODULE_MIDDLEWARE_BASE + 4
+#define CY_RSLT_MODULE_COMMAND_CONSOLE_BASE CY_RSLT_MODULE_MIDDLEWARE_BASE + 4
 /** HTTP server module base */
-#define CY_RSLT_MODULE_HTTP_SERVER                       CY_RSLT_MODULE_MIDDLEWARE_BASE + 5
+#define CY_RSLT_MODULE_HTTP_SERVER CY_RSLT_MODULE_MIDDLEWARE_BASE + 5
 /** Enterprise Security base */
-#define CY_RSLT_MODULE_ENTERPRISE_SECURITY_BASE          CY_RSLT_MODULE_MIDDLEWARE_BASE + 6
+#define CY_RSLT_MODULE_ENTERPRISE_SECURITY_BASE CY_RSLT_MODULE_MIDDLEWARE_BASE + 6
 /** TCP/IP module base */
-#define CY_RSLT_MODULE_TCPIP_BASE                        CY_RSLT_MODULE_MIDDLEWARE_BASE + 7
+#define CY_RSLT_MODULE_TCPIP_BASE CY_RSLT_MODULE_MIDDLEWARE_BASE + 7
 /** Generic middleware module base */
-#define CY_RSLT_MODULE_MW_BASE                           CY_RSLT_MODULE_MIDDLEWARE_BASE + 8
+#define CY_RSLT_MODULE_MW_BASE CY_RSLT_MODULE_MIDDLEWARE_BASE + 8
 /** TLS module base */
-#define CY_RSLT_MODULE_TLS_BASE                          CY_RSLT_MODULE_MIDDLEWARE_BASE + 9
+#define CY_RSLT_MODULE_TLS_BASE CY_RSLT_MODULE_MIDDLEWARE_BASE + 9
 /** Secure Sockets module base */
-#define CY_RSLT_MODULE_SECURE_SOCKETS_BASE               CY_RSLT_MODULE_MIDDLEWARE_BASE + 10
+#define CY_RSLT_MODULE_SECURE_SOCKETS_BASE CY_RSLT_MODULE_MIDDLEWARE_BASE + 10
 /** WiFi Connection Manager (WCM) module base */
-#define CY_RSLT_MODULE_WCM_BASE                          CY_RSLT_MODULE_MIDDLEWARE_BASE + 11
+#define CY_RSLT_MODULE_WCM_BASE CY_RSLT_MODULE_MIDDLEWARE_BASE + 11
 /** lwIP WHD port module base */
-#define CY_RSLT_MODULE_LWIP_WHD_PORT_BASE                CY_RSLT_MODULE_MIDDLEWARE_BASE + 12
+#define CY_RSLT_MODULE_LWIP_WHD_PORT_BASE CY_RSLT_MODULE_MIDDLEWARE_BASE + 12
 /** Over The Air Update Module base (OTA) */
-#define CY_RSLT_MODULE_OTA_UPDATE_BASE                   CY_RSLT_MODULE_MIDDLEWARE_BASE + 13
+#define CY_RSLT_MODULE_OTA_UPDATE_BASE CY_RSLT_MODULE_MIDDLEWARE_BASE + 13
 /** HTTP Client module base */
-#define CY_RSLT_MODULE_HTTP_CLIENT                       CY_RSLT_MODULE_MIDDLEWARE_BASE + 14
+#define CY_RSLT_MODULE_HTTP_CLIENT CY_RSLT_MODULE_MIDDLEWARE_BASE + 14
 
 /**
  * @}
@@ -124,23 +124,23 @@ extern "C" {
  * List of all the generic result/error codes defined by the connectivity-utilities library.
  */
 /** Generic middleware error code start */
-#define CY_RSLT_MODULE_MW_ERR_CODE_START       (0)
+#define CY_RSLT_MODULE_MW_ERR_CODE_START (0)
 /** Generic middleware base error code */
-#define CY_RSLT_MW_ERR_BASE                   CY_RSLT_CREATE(CY_RSLT_TYPE_ERROR, CY_RSLT_MODULE_MW_BASE, CY_RSLT_MODULE_MW_ERR_CODE_START)
+#define CY_RSLT_MW_ERR_BASE CY_RSLT_CREATE(CY_RSLT_TYPE_ERROR, CY_RSLT_MODULE_MW_BASE, CY_RSLT_MODULE_MW_ERR_CODE_START)
 /** Generic middleware error */
-#define CY_RSLT_MW_ERROR                      ( CY_RSLT_MW_ERR_BASE + 1 )
+#define CY_RSLT_MW_ERROR (CY_RSLT_MW_ERR_BASE + 1)
 /** Generic middleware timeout */
-#define CY_RSLT_MW_TIMEOUT                    ( CY_RSLT_MW_ERR_BASE + 2 )
-/** Generic middleware bad argument */        
-#define CY_RSLT_MW_BADARG                     ( CY_RSLT_MW_ERR_BASE + 3 )
-/** Generic middleware out of heap memory */        
-#define CY_RSLT_MW_OUT_OF_HEAP_SPACE          ( CY_RSLT_MW_ERR_BASE + 4 )
-/** Generic middleware pending operation */        
-#define CY_RSLT_MW_PENDNG                     ( CY_RSLT_MW_ERR_BASE + 5 )
-/** Generic middleware unsupported method */        
-#define CY_RSLT_MW_UNSUPPORTED                ( CY_RSLT_MW_ERR_BASE + 6 )
-/** Generic middleware buffer unavailable */        
-#define CY_RSLT_MW_BUFFER_UNAVAIL_TEMPORARILY ( CY_RSLT_MW_ERR_BASE + 7 )
+#define CY_RSLT_MW_TIMEOUT (CY_RSLT_MW_ERR_BASE + 2)
+/** Generic middleware bad argument */
+#define CY_RSLT_MW_BADARG (CY_RSLT_MW_ERR_BASE + 3)
+/** Generic middleware out of heap memory */
+#define CY_RSLT_MW_OUT_OF_HEAP_SPACE (CY_RSLT_MW_ERR_BASE + 4)
+/** Generic middleware pending operation */
+#define CY_RSLT_MW_PENDNG (CY_RSLT_MW_ERR_BASE + 5)
+/** Generic middleware unsupported method */
+#define CY_RSLT_MW_UNSUPPORTED (CY_RSLT_MW_ERR_BASE + 6)
+/** Generic middleware buffer unavailable */
+#define CY_RSLT_MW_BUFFER_UNAVAIL_TEMPORARILY (CY_RSLT_MW_ERR_BASE + 7)
 
 /**
  * @}
@@ -153,37 +153,37 @@ extern "C" {
  * List of all the socket result/error codes defined by the connectivity-utilities library.
  */
 /** TCP/IP error code start */
-#define CY_RSLT_MODULE_TCPIP_ERR_CODE_START       (0)
+#define CY_RSLT_MODULE_TCPIP_ERR_CODE_START (0)
 /** TCPIP/IP base error code */
-#define CY_RSLT_TCPIP_ERR_BASE                CY_RSLT_CREATE(CY_RSLT_TYPE_ERROR, CY_RSLT_MODULE_TCPIP_BASE, CY_RSLT_MODULE_TCPIP_ERR_CODE_START)
+#define CY_RSLT_TCPIP_ERR_BASE CY_RSLT_CREATE(CY_RSLT_TYPE_ERROR, CY_RSLT_MODULE_TCPIP_BASE, CY_RSLT_MODULE_TCPIP_ERR_CODE_START)
 /** TCP/IP generic error */
-#define CY_RSLT_TCPIP_ERROR                   ( CY_RSLT_TCPIP_ERR_BASE + 1 )
+#define CY_RSLT_TCPIP_ERROR (CY_RSLT_TCPIP_ERR_BASE + 1)
 /** TCP/IP timeout */
-#define CY_RSLT_TCPIP_TIMEOUT                 ( CY_RSLT_TCPIP_ERR_BASE + 2 )
+#define CY_RSLT_TCPIP_TIMEOUT (CY_RSLT_TCPIP_ERR_BASE + 2)
 /** TCP/IP out of memory */
-#define CY_RSLT_TCPIP_ERROR_NO_MEMORY         ( CY_RSLT_TCPIP_ERR_BASE + 3 )
+#define CY_RSLT_TCPIP_ERROR_NO_MEMORY (CY_RSLT_TCPIP_ERR_BASE + 3)
 /** TCP/IP error opening socket */
-#define CY_RSLT_TCPIP_ERROR_SOCKET_OPEN       ( CY_RSLT_TCPIP_ERR_BASE + 4 )
+#define CY_RSLT_TCPIP_ERROR_SOCKET_OPEN (CY_RSLT_TCPIP_ERR_BASE + 4)
 /** TCP/IP error binding socket */
-#define CY_RSLT_TCPIP_ERROR_SOCKET_BIND       ( CY_RSLT_TCPIP_ERR_BASE + 5 )
+#define CY_RSLT_TCPIP_ERROR_SOCKET_BIND (CY_RSLT_TCPIP_ERR_BASE + 5)
 /** TCP/IP error listening to socket */
-#define CY_RSLT_TCPIP_ERROR_SOCKET_LISTEN     ( CY_RSLT_TCPIP_ERR_BASE + 6 )
+#define CY_RSLT_TCPIP_ERROR_SOCKET_LISTEN (CY_RSLT_TCPIP_ERR_BASE + 6)
 /** TCP/IP error accepting socket */
-#define CY_RSLT_TCPIP_ERROR_SOCKET_ACCEPT     ( CY_RSLT_TCPIP_ERR_BASE + 7 )
+#define CY_RSLT_TCPIP_ERROR_SOCKET_ACCEPT (CY_RSLT_TCPIP_ERR_BASE + 7)
 /** TCP/IP error with TLS operation */
-#define CY_RSLT_TCPIP_ERROR_TLS_OPERATION     ( CY_RSLT_TCPIP_ERR_BASE + 8 )
+#define CY_RSLT_TCPIP_ERROR_TLS_OPERATION (CY_RSLT_TCPIP_ERR_BASE + 8)
 /** TCP/IP max sockets bound */
-#define CY_RSLT_TCPIP_ERROR_NO_MORE_SOCKET    ( CY_RSLT_TCPIP_ERR_BASE + 9 )
+#define CY_RSLT_TCPIP_ERROR_NO_MORE_SOCKET (CY_RSLT_TCPIP_ERR_BASE + 9)
 /** TCP/IP error sending data */
-#define CY_RSLT_TCPIP_ERROR_SEND              ( CY_RSLT_TCPIP_ERR_BASE + 10)
+#define CY_RSLT_TCPIP_ERROR_SEND (CY_RSLT_TCPIP_ERR_BASE + 10)
 /** TCP/IP error receiving data */
-#define CY_RSLT_TCPIP_ERROR_RECEIVE           ( CY_RSLT_TCPIP_ERR_BASE + 11)
+#define CY_RSLT_TCPIP_ERROR_RECEIVE (CY_RSLT_TCPIP_ERR_BASE + 11)
 /** TCP/IP error in setting socket options */
-#define CY_RSLT_TCPIP_ERROR_SOCKET_OPTIONS    ( CY_RSLT_TCPIP_ERR_BASE + 12 )
+#define CY_RSLT_TCPIP_ERROR_SOCKET_OPTIONS (CY_RSLT_TCPIP_ERR_BASE + 12)
 /** TCP/IP error bad argument */
-#define CY_RSLT_TCPIP_ERROR_BAD_ARG           ( CY_RSLT_TCPIP_ERR_BASE + 13 )
+#define CY_RSLT_TCPIP_ERROR_BAD_ARG (CY_RSLT_TCPIP_ERR_BASE + 13)
 /** TCP/IP error socket closed */
-#define CY_RSLT_TCPIP_ERROR_SOCKET_CLOSED     ( CY_RSLT_TCPIP_ERR_BASE + 14 )
+#define CY_RSLT_TCPIP_ERROR_SOCKET_CLOSED (CY_RSLT_TCPIP_ERR_BASE + 14)
 
 /**
  * @}
@@ -196,33 +196,33 @@ extern "C" {
  * List of all the TLS result/error codes defined by the connectivity-utilities library.
  */
 /** TLS error code start */
-#define CY_RSLT_MODULE_TLS_ERR_CODE_START        (0)
+#define CY_RSLT_MODULE_TLS_ERR_CODE_START (0)
 /** TLS base error code */
-#define CY_RSLT_TLS_ERR_BASE                     CY_RSLT_CREATE(CY_RSLT_TYPE_ERROR, CY_RSLT_MODULE_TLS_BASE, CY_RSLT_MODULE_TLS_ERR_CODE_START)
+#define CY_RSLT_TLS_ERR_BASE CY_RSLT_CREATE(CY_RSLT_TYPE_ERROR, CY_RSLT_MODULE_TLS_BASE, CY_RSLT_MODULE_TLS_ERR_CODE_START)
 /** TLS generic error */
-#define CY_RSLT_MODULE_TLS_ERROR                 ( CY_RSLT_TLS_ERR_BASE + 1 )
+#define CY_RSLT_MODULE_TLS_ERROR (CY_RSLT_TLS_ERR_BASE + 1)
 /** TLS timeout error */
-#define CY_RSLT_MODULE_TLS_TIMEOUT               ( CY_RSLT_TLS_ERR_BASE + 2 )
+#define CY_RSLT_MODULE_TLS_TIMEOUT (CY_RSLT_TLS_ERR_BASE + 2)
 /** TLS bad argument */
-#define CY_RSLT_MODULE_TLS_BADARG                ( CY_RSLT_TLS_ERR_BASE + 3 )
+#define CY_RSLT_MODULE_TLS_BADARG (CY_RSLT_TLS_ERR_BASE + 3)
 /** TLS out of memory */
-#define CY_RSLT_MODULE_TLS_OUT_OF_HEAP_SPACE     ( CY_RSLT_TLS_ERR_BASE + 4 )
+#define CY_RSLT_MODULE_TLS_OUT_OF_HEAP_SPACE (CY_RSLT_TLS_ERR_BASE + 4)
 /** TLS bad input */
-#define CY_RSLT_MODULE_TLS_BAD_INPUT_DATA        ( CY_RSLT_TLS_ERR_BASE + 5 )
+#define CY_RSLT_MODULE_TLS_BAD_INPUT_DATA (CY_RSLT_TLS_ERR_BASE + 5)
 /** TLS error parsing private key */
-#define CY_RSLT_MODULE_TLS_PARSE_KEY             ( CY_RSLT_TLS_ERR_BASE + 6 )
+#define CY_RSLT_MODULE_TLS_PARSE_KEY (CY_RSLT_TLS_ERR_BASE + 6)
 /** TLS error parsing certificate */
-#define CY_RSLT_MODULE_TLS_PARSE_CERTIFICATE     ( CY_RSLT_TLS_ERR_BASE + 7 )
+#define CY_RSLT_MODULE_TLS_PARSE_CERTIFICATE (CY_RSLT_TLS_ERR_BASE + 7)
 /** TLS unsupported method */
-#define CY_RSLT_MODULE_TLS_UNSUPPORTED           ( CY_RSLT_TLS_ERR_BASE + 8 )
+#define CY_RSLT_MODULE_TLS_UNSUPPORTED (CY_RSLT_TLS_ERR_BASE + 8)
 /** TLS handshake failure */
-#define CY_RSLT_MODULE_TLS_HANDSHAKE_FAILURE     ( CY_RSLT_TLS_ERR_BASE + 9 )
+#define CY_RSLT_MODULE_TLS_HANDSHAKE_FAILURE (CY_RSLT_TLS_ERR_BASE + 9)
 /** TLS socket connection closed by peer */
-#define CY_RSLT_MODULE_TLS_CONNECTION_CLOSED     ( CY_RSLT_TLS_ERR_BASE + 10 )
+#define CY_RSLT_MODULE_TLS_CONNECTION_CLOSED (CY_RSLT_TLS_ERR_BASE + 10)
 /** TLS socket not connected */
-#define CY_RSLT_MODULE_TLS_SOCKET_NOT_CONNECTED  ( CY_RSLT_TLS_ERR_BASE + 11 )
+#define CY_RSLT_MODULE_TLS_SOCKET_NOT_CONNECTED (CY_RSLT_TLS_ERR_BASE + 11)
 /** PKCS11 generic error */
-#define CY_RSLT_MODULE_TLS_PKCS_ERROR            ( CY_RSLT_TLS_ERR_BASE + 12 )
+#define CY_RSLT_MODULE_TLS_PKCS_ERROR (CY_RSLT_TLS_ERR_BASE + 12)
 
 /**
  * @}
@@ -230,5 +230,4 @@ extern "C" {
 
 #ifdef __cplusplus
 } /*extern "C" */
-#endif        
-
+#endif

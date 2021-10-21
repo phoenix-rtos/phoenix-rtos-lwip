@@ -32,13 +32,12 @@
 
 whd_bool_t whd_wifi_p2p_is_go_up(whd_driver_t whd_driver)
 {
-    return whd_driver->internal_info.whd_wifi_p2p_go_is_up;
+	return whd_driver->internal_info.whd_wifi_p2p_go_is_up;
 }
 
 void whd_wifi_p2p_set_go_is_up(whd_driver_t whd_driver, whd_bool_t is_up)
 {
-    if (whd_driver->internal_info.whd_wifi_p2p_go_is_up != is_up)
-    {
-        whd_driver->internal_info.whd_wifi_p2p_go_is_up = is_up;
-    }
+	if (whd_driver->internal_info.whd_wifi_p2p_go_is_up != is_up) {
+		whd_driver->internal_info.whd_wifi_p2p_go_is_up = is_up;
+	}
 }

@@ -1,4 +1,4 @@
-/***************************************************************************//**
+/***************************************************************************/ /**
 * \file cyhal_hw_types_template.h
 *
 * \brief
@@ -59,29 +59,29 @@ typedef uint32_t /* TODO: port specific type */ cyhal_gpio_t;
 /** Clock divider object */
 typedef struct
 {
-    /* TODO: replace with port specific items */
-    void *div_type;
+	/* TODO: replace with port specific items */
+	void *div_type;
 } cyhal_clock_divider_t;
 
 /** SDIO object */
 typedef struct
 {
-    /* TODO: replace with port specific items */
-    void *empty;
+	/* TODO: replace with port specific items */
+	void *empty;
 } cyhal_sdio_t;
 
 /** SPI object */
 typedef struct
 {
-    /* TODO: replace with port specific items */
-    void *empty;
+	/* TODO: replace with port specific items */
+	void *empty;
 } cyhal_spi_t;
 
 /** M2M/DMA object */
 typedef struct
 {
-    /* TODO: replace with port specific items */
-    void *empty;
+	/* TODO: replace with port specific items */
+	void *empty;
 } cyhal_m2m_t;
 
 /** \} group_hal_hw_types_data_structures */

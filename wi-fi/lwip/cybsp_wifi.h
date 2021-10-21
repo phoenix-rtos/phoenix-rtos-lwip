@@ -1,4 +1,4 @@
-/***********************************************************************************************//**
+/***********************************************************************************************/ /**
  * \file cybsp_wifi.h
  *
  * \brief
@@ -43,23 +43,23 @@ extern "C" {
 
 /** Initialization of the WiFi driver failed. */
 #define CYBSP_RSLT_WIFI_INIT_FAILED \
-    (CY_RSLT_CREATE(CY_RSLT_TYPE_ERROR, CY_RSLT_MODULE_BOARD_LIB_WHD_INTEGRATION, 0))
+	(CY_RSLT_CREATE(CY_RSLT_TYPE_ERROR, CY_RSLT_MODULE_BOARD_LIB_WHD_INTEGRATION, 0))
 
 /** SDIO enumeration failed. */
 #define CYBSP_RSLT_WIFI_SDIO_ENUM_TIMEOUT \
-    (CY_RSLT_CREATE(CY_RSLT_TYPE_ERROR, CY_RSLT_MODULE_BOARD_LIB_WHD_INTEGRATION, 1))
+	(CY_RSLT_CREATE(CY_RSLT_TYPE_ERROR, CY_RSLT_MODULE_BOARD_LIB_WHD_INTEGRATION, 1))
 
 /** SD device does not support IO functionality */
 #define CYBSP_RSLT_WIFI_SDIO_ENUM_IO_NOT_SUPPORTED \
-    (CY_RSLT_CREATE(CY_RSLT_TYPE_ERROR, CY_RSLT_MODULE_BOARD_LIB_WHD_INTEGRATION, 2))
+	(CY_RSLT_CREATE(CY_RSLT_TYPE_ERROR, CY_RSLT_MODULE_BOARD_LIB_WHD_INTEGRATION, 2))
 
 /** SDIO device is not ready */
 #define CYBSP_RSLT_WIFI_SDIO_ENUM_NOT_READY \
-    (CY_RSLT_CREATE(CY_RSLT_TYPE_ERROR, CY_RSLT_MODULE_BOARD_LIB_WHD_INTEGRATION, 3))
+	(CY_RSLT_CREATE(CY_RSLT_TYPE_ERROR, CY_RSLT_MODULE_BOARD_LIB_WHD_INTEGRATION, 3))
 
 /** SDIO switch to High Speed mode failed. */
 #define CYBSP_RSLT_WIFI_SDIO_HS_SWITCH_FAILED \
-    (CY_RSLT_CREATE(CY_RSLT_TYPE_ERROR, CY_RSLT_MODULE_BOARD_LIB_WHD_INTEGRATION, 4))
+	(CY_RSLT_CREATE(CY_RSLT_TYPE_ERROR, CY_RSLT_MODULE_BOARD_LIB_WHD_INTEGRATION, 4))
 
 /** Initializes the primary interface for the WiFi driver on the board. This sets up
  * the WHD interface to use the \ref group_bsp_network_buffer APIs and to communicate
@@ -83,11 +83,11 @@ extern "C" {
  *
  * @return CY_RSLT_SUCCESS for successful initialization or error if initialization failed.
  */
-cy_rslt_t cybsp_wifi_init_primary_extended(whd_interface_t* interface,
-                                           whd_init_config_t* init_config,
-                                           whd_resource_source_t* resource_if,
-                                           whd_buffer_funcs_t* buffer_if,
-                                           whd_netif_funcs_t* netif_if);
+cy_rslt_t cybsp_wifi_init_primary_extended(whd_interface_t *interface,
+	whd_init_config_t *init_config,
+	whd_resource_source_t *resource_if,
+	whd_buffer_funcs_t *buffer_if,
+	whd_netif_funcs_t *netif_if);
 
 /**
  * Initializes the primary interface for the WiFi driver on the board using the default
@@ -98,9 +98,9 @@ cy_rslt_t cybsp_wifi_init_primary_extended(whd_interface_t* interface,
  *
  * @return CY_RSLT_SUCCESS for successful initialization or error if initialization failed.
  */
-static inline cy_rslt_t cybsp_wifi_init_primary(whd_interface_t* interface)
+static inline cy_rslt_t cybsp_wifi_init_primary(whd_interface_t *interface)
 {
-    return cybsp_wifi_init_primary_extended(interface, NULL, NULL, NULL, NULL);
+	return cybsp_wifi_init_primary_extended(interface, NULL, NULL, NULL, NULL);
 }
 
 
@@ -113,7 +113,7 @@ static inline cy_rslt_t cybsp_wifi_init_primary(whd_interface_t* interface)
  *
  * @return CY_RSLT_SUCCESS for successful initialization or error if initialization failed.
  */
-cy_rslt_t cybsp_wifi_init_secondary(whd_interface_t* interface, whd_mac_t* mac_address);
+cy_rslt_t cybsp_wifi_init_secondary(whd_interface_t *interface, whd_mac_t *mac_address);
 
 /** De-initializes all WiFi interfaces and the WiFi driver. This function does the
  * following:<br>
@@ -138,6 +138,6 @@ whd_driver_t cybsp_get_wifi_driver(void);
 
 #ifdef __cplusplus
 }
-#endif // __cplusplus
+#endif  // __cplusplus
 
 /** \} group_bsp_wifi */

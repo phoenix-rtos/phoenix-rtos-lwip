@@ -1,4 +1,4 @@
-/***********************************************************************************************//**
+/***********************************************************************************************/ /**
  * \file cy_network_buffer.h
  *
  * \brief
@@ -57,7 +57,7 @@ extern "C" {
  *
  *  @return          : CY_RSLT_SUCCESS or WHD_BADARG
  */
-whd_result_t cy_buffer_pool_init(void* tx_packet_pool, void* rx_packet_pool);
+whd_result_t cy_buffer_pool_init(void *tx_packet_pool, void *rx_packet_pool);
 
 /** Allocates a packet buffer
  *
@@ -76,8 +76,8 @@ whd_result_t cy_buffer_pool_init(void* tx_packet_pool, void* rx_packet_pool);
  *
  *  @return          : CY_RSLT_SUCCESS or WHD_BUFFER_ALLOC_FAIL if the buffer could not be allocated
  */
-whd_result_t cy_host_buffer_get(whd_buffer_t* buffer, whd_buffer_dir_t direction,
-                                unsigned short size, unsigned long timeout_ms);
+whd_result_t cy_host_buffer_get(whd_buffer_t *buffer, whd_buffer_dir_t direction,
+	unsigned short size, unsigned long timeout_ms);
 
 /** Releases a packet buffer
  *
@@ -103,7 +103,7 @@ void cy_buffer_release(whd_buffer_t buffer, whd_buffer_dir_t direction);
  *
  *  @return       : The packet buffer's current pointer.
  */
-uint8_t* cy_buffer_get_current_piece_data_pointer(whd_buffer_t buffer);
+uint8_t *cy_buffer_get_current_piece_data_pointer(whd_buffer_t buffer);
 
 /** Retrieves the size of a packet buffer
  *
@@ -148,7 +148,7 @@ whd_result_t cy_buffer_set_size(whd_buffer_t buffer, unsigned short size);
  *  @return                  : CY_RSLT_SUCCESS or WHD_BUFFER_POINTER_MOVE_ERROR if the added amount
  *                             is outside the size of the buffer
  */
-whd_result_t cy_buffer_add_remove_at_front(whd_buffer_t* buffer, int32_t add_remove_amount);
+whd_result_t cy_buffer_add_remove_at_front(whd_buffer_t *buffer, int32_t add_remove_amount);
 
 
 /** Called by WHD to pass received data to the network stack
@@ -182,6 +182,6 @@ void cy_network_process_ethernet_data(whd_interface_t interface, whd_buffer_t bu
 
 #ifdef __cplusplus
 }
-#endif // __cplusplus
+#endif  // __cplusplus
 
 /** \} group_bsp_network_buffer */

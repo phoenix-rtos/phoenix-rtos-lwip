@@ -1,4 +1,4 @@
-/***************************************************************************//**
+/***************************************************************************/ /**
 * \file cybsp.h
 *
 * \brief
@@ -31,9 +31,9 @@ extern "C" {
 #endif
 
 /* WIFI interface types */
-#define CYBSP_SDIO_INTERFACE             (0)
-#define CYBSP_SPI_INTERFACE              (1)
-#define CYBSP_M2M_INTERFACE              (2)
+#define CYBSP_SDIO_INTERFACE (0)
+#define CYBSP_SPI_INTERFACE  (1)
+#define CYBSP_M2M_INTERFACE  (2)
 
 #ifdef __cplusplus
 }

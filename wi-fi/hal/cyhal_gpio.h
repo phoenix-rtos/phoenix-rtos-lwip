@@ -1,4 +1,4 @@
-/***************************************************************************//**
+/***************************************************************************/ /**
 * \file cyhal_gpio.h
 *
 * \brief
@@ -58,7 +58,7 @@ extern "C" {
  */
 
 /** Integer representation of no connect pin (required to exist in all BSPs) */
-#define CYHAL_NC_PIN_VALUE ( (cyhal_gpio_t)0xFFFFFFFF )
+#define CYHAL_NC_PIN_VALUE ((cyhal_gpio_t)0xFFFFFFFF)
 
 /** \} group_hal_gpio_macros */
 
@@ -73,33 +73,30 @@ extern "C" {
 *******************************************************************************/
 
 /** Pin IRQ events */
-typedef enum
-{
-    CYHAL_GPIO_IRQ_NONE = 0,   /**< No interrupt */
-    CYHAL_GPIO_IRQ_RISE = 1,   /**< Interrupt on rising edge */
-    CYHAL_GPIO_IRQ_FALL = 2,   /**< Interrupt on falling edge */
-    CYHAL_GPIO_IRQ_BOTH = 3,   /**< Interrupt on both rising and falling edges */
+typedef enum {
+	CYHAL_GPIO_IRQ_NONE = 0, /**< No interrupt */
+	CYHAL_GPIO_IRQ_RISE = 1, /**< Interrupt on rising edge */
+	CYHAL_GPIO_IRQ_FALL = 2, /**< Interrupt on falling edge */
+	CYHAL_GPIO_IRQ_BOTH = 3, /**< Interrupt on both rising and falling edges */
 } cyhal_gpio_irq_event_t;
 
 /** Pin direction */
-typedef enum
-{
-    CYHAL_GPIO_DIR_INPUT         = 0,  /**< Input pin */
-    CYHAL_GPIO_DIR_OUTPUT        = 1,  /**< Output pin */
-    CYHAL_GPIO_DIR_BIDIRECTIONAL = 2,   /**< Input and output pin */
+typedef enum {
+	CYHAL_GPIO_DIR_INPUT = 0,         /**< Input pin */
+	CYHAL_GPIO_DIR_OUTPUT = 1,        /**< Output pin */
+	CYHAL_GPIO_DIR_BIDIRECTIONAL = 2, /**< Input and output pin */
 } cyhal_gpio_direction_t;
 
 /** Pin drive mode */
-typedef enum
-{
-    CYHAL_GPIO_DRIVE_NONE                = 0, /**< No drive; Hi-Z */
-    CYHAL_GPIO_DRIVE_ANALOG              = 0, /**< Analog Hi-Z */
-    CYHAL_GPIO_DRIVE_PULLUP              = 2, /**< Pull-up resistor */
-    CYHAL_GPIO_DRIVE_PULLDOWN            = 3, /**< Pull-down resistor */
-    CYHAL_GPIO_DRIVE_OPENDRAINDRIVESLOW  = 4, /**< Open-drain, Drives Low */
-    CYHAL_GPIO_DRIVE_OPENDRAINDRIVESHIGH = 5, /**< Open-drain, Drives High */
-    CYHAL_GPIO_DRIVE_STRONG              = 6, /**< Strong output */
-    CYHAL_GPIO_DRIVE_PULLUPDOWN          = 7, /**< Pull-up and pull-down resistors */
+typedef enum {
+	CYHAL_GPIO_DRIVE_NONE = 0,                /**< No drive; Hi-Z */
+	CYHAL_GPIO_DRIVE_ANALOG = 0,              /**< Analog Hi-Z */
+	CYHAL_GPIO_DRIVE_PULLUP = 2,              /**< Pull-up resistor */
+	CYHAL_GPIO_DRIVE_PULLDOWN = 3,            /**< Pull-down resistor */
+	CYHAL_GPIO_DRIVE_OPENDRAINDRIVESLOW = 4,  /**< Open-drain, Drives Low */
+	CYHAL_GPIO_DRIVE_OPENDRAINDRIVESHIGH = 5, /**< Open-drain, Drives High */
+	CYHAL_GPIO_DRIVE_STRONG = 6,              /**< Strong output */
+	CYHAL_GPIO_DRIVE_PULLUPDOWN = 7,          /**< Pull-up and pull-down resistors */
 } cyhal_gpio_drive_mode_t;
 
 /** \} group_hal_gpio_enums */
@@ -135,7 +132,7 @@ typedef void (*cyhal_gpio_irq_handler_t)(void *handler_arg, cyhal_gpio_irq_event
  * @return The status of the init request
  */
 cy_rslt_t cyhal_gpio_init(cyhal_gpio_t pin, cyhal_gpio_direction_t direction, cyhal_gpio_drive_mode_t drvMode,
-                          bool initVal);
+	bool initVal);
 
 /** Uninitialize the gpio peripheral and the cyhal_gpio_t object
  *
@@ -188,7 +185,7 @@ void cyhal_gpio_toggle(cyhal_gpio_t pin);
  * @param[in] handler_arg   Generic argument that will be provided to the handler when called, can be NULL
  */
 void cyhal_gpio_register_irq(cyhal_gpio_t pin, uint8_t intrPriority, cyhal_gpio_irq_handler_t handler,
-                             void *handler_arg);
+	void *handler_arg);
 
 /** Enable or Disable the GPIO IRQ
  *
