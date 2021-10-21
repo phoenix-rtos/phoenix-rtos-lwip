@@ -1,4 +1,4 @@
-/***********************************************************************************************//**
+/***********************************************************************************************/ /**
  * \file cyabs_rtos_impl.h
  *
  * \brief
@@ -37,8 +37,7 @@
 // #include "TODO: RTOS HEADER"
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 /**
@@ -55,8 +54,8 @@ extern "C"
 *                 Constants
 ******************************************************/
 // TODO: Replace these with proper values for the target RTOS
-#define CY_RTOS_MIN_STACK_SIZE      300                     /**< Minimum stack size */
-#define CY_RTOS_ALIGNMENT_MASK      0x00000007UL            /**< Checks for 8-bit alignment */
+#define CY_RTOS_MIN_STACK_SIZE 300          /**< Minimum stack size */
+#define CY_RTOS_ALIGNMENT_MASK 0x00000007UL /**< Checks for 8-bit alignment */
 
 
 /******************************************************
@@ -70,43 +69,42 @@ extern "C"
  * of priorities is still maintained. eg:
  * MAX >= REALTIME >= HIGH >= ABOVENORMAL >= NORMAL >= BELOWNORMAL >= LOW >= MIN
  */
-typedef enum
-{
-    CY_RTOS_PRIORITY_MIN         = 0,   /**< Minumum allowable Thread priority */
-    CY_RTOS_PRIORITY_LOW         = 1,   /**< A low priority Thread */
-    CY_RTOS_PRIORITY_BELOWNORMAL = 2,   /**< A slightly below normal Thread priority */
-    CY_RTOS_PRIORITY_NORMAL      = 3,   /**< The normal Thread priority */
-    CY_RTOS_PRIORITY_ABOVENORMAL = 4,   /**< A slightly elevated Thread priority */
-    CY_RTOS_PRIORITY_HIGH        = 5,   /**< A high priority Thread */
-    CY_RTOS_PRIORITY_REALTIME    = 6,   /**< Realtime Thread priority */
-    CY_RTOS_PRIORITY_MAX         = 7    /**< Maximum allowable Thread priority */
+typedef enum {
+	CY_RTOS_PRIORITY_MIN = 0,         /**< Minumum allowable Thread priority */
+	CY_RTOS_PRIORITY_LOW = 1,         /**< A low priority Thread */
+	CY_RTOS_PRIORITY_BELOWNORMAL = 2, /**< A slightly below normal Thread priority */
+	CY_RTOS_PRIORITY_NORMAL = 3,      /**< The normal Thread priority */
+	CY_RTOS_PRIORITY_ABOVENORMAL = 4, /**< A slightly elevated Thread priority */
+	CY_RTOS_PRIORITY_HIGH = 5,        /**< A high priority Thread */
+	CY_RTOS_PRIORITY_REALTIME = 6,    /**< Realtime Thread priority */
+	CY_RTOS_PRIORITY_MAX = 7          /**< Maximum allowable Thread priority */
 } cy_thread_priority_t;
 
 /** Alias for the RTOS specific definition of a thread handle */
-typedef void* /* TODO: Replace with RTOS specific type*/ cy_thread_t;
+typedef void * /* TODO: Replace with RTOS specific type*/ cy_thread_t;
 /** Alias for the RTOS specific argument passed to the entry function of a thread */
-typedef void* /* TODO: Replace with RTOS specific type*/ cy_thread_arg_t;
+typedef void * /* TODO: Replace with RTOS specific type*/ cy_thread_arg_t;
 /** Alias for the RTOS specific definition of a mutex */
-typedef void* /* TODO: Replace with RTOS specific type*/ cy_mutex_t;
+typedef void * /* TODO: Replace with RTOS specific type*/ cy_mutex_t;
 /** Alias for the RTOS specific definition of a semaphore */
-typedef void* /* TODO: Replace with RTOS specific type*/ cy_semaphore_t;
+typedef void * /* TODO: Replace with RTOS specific type*/ cy_semaphore_t;
 /** Alias for the RTOS specific definition of an event */
-typedef void* /* TODO: Replace with RTOS specific type*/ cy_event_t;
+typedef void * /* TODO: Replace with RTOS specific type*/ cy_event_t;
 /** Alias for the RTOS specific definition of a message queue */
-typedef void* /* TODO: Replace with RTOS specific type*/ cy_queue_t;
+typedef void * /* TODO: Replace with RTOS specific type*/ cy_queue_t;
 /** Alias for the RTOS specific definition of a timer */
-typedef void* /* TODO: Replace with RTOS specific type*/ cy_timer_t;
+typedef void * /* TODO: Replace with RTOS specific type*/ cy_timer_t;
 /** Alias for the RTOS specific argument passed to the timer callback function */
-typedef void* /* TODO: Replace with RTOS specific type*/ cy_timer_callback_arg_t;
+typedef void * /* TODO: Replace with RTOS specific type*/ cy_timer_callback_arg_t;
 /** Alias for the RTOS specific time unit (in milliseconds) */
-typedef void* /* TODO: Replace with RTOS specific type*/ cy_time_t;
+typedef void * /* TODO: Replace with RTOS specific type*/ cy_time_t;
 /** Alias for the RTOS specific definition of a error status */
-typedef void* /* TODO: Replace with RTOS specific type*/ cy_rtos_error_t;
+typedef void * /* TODO: Replace with RTOS specific type*/ cy_rtos_error_t;
 
 /** \} group_abstraction_rtos_port */
 
 #ifdef __cplusplus
-} // extern "C"
+}  // extern "C"
 #endif
 
-#endif // defined(DOXYGEN)
+#endif  // defined(DOXYGEN)

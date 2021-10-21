@@ -43,7 +43,6 @@
 ******************************************************/
 
 
-
 /******************************************************
 *                   Variables
 ******************************************************/
@@ -55,56 +54,52 @@ void (*whd_wifi_link_update_callback)(void) = NULL;
 
 uint32_t whd_wifi_set_mac_address(whd_interface_t ifp, whd_mac_t mac)
 {
-    whd_buffer_t buffer;
-    uint32_t *data;
-    whd_driver_t whd_driver = ifp->whd_driver;
+	whd_buffer_t buffer;
+	uint32_t *data;
+	whd_driver_t whd_driver = ifp->whd_driver;
 
-    /* AP interface needs to come up with MAC different from STA  */
+	/* AP interface needs to come up with MAC different from STA  */
 #ifdef APOLLO_AUDIO
 
-    /* Work around the issue of asking API to set one address and it sets a different address.
+	/* Work around the issue of asking API to set one address and it sets a different address.
      * This will cause any comparison of set and get mac address to fail.  TODO: move twiddling this
      * bit to a higher level.
      */
-    if (0)
+	if (0)
 #else
-    if (ifp->role == WHD_AP_ROLE)
+	if (ifp->role == WHD_AP_ROLE)
 #endif
-    {
-        whd_mac_t ap_mac_address;
+	{
+		whd_mac_t ap_mac_address;
 
-        memcpy(&ap_mac_address, &mac, sizeof(whd_mac_t) );
-        if (ap_mac_address.octet[0] & MAC_ADDRESS_LOCALLY_ADMINISTERED_BIT)
-        {
-            ap_mac_address.octet[0] &= (uint8_t) ~(MAC_ADDRESS_LOCALLY_ADMINISTERED_BIT);
-        }
-        else
-        {
-            ap_mac_address.octet[0] |= MAC_ADDRESS_LOCALLY_ADMINISTERED_BIT;
-        }
+		memcpy(&ap_mac_address, &mac, sizeof(whd_mac_t));
+		if (ap_mac_address.octet[0] & MAC_ADDRESS_LOCALLY_ADMINISTERED_BIT) {
+			ap_mac_address.octet[0] &= (uint8_t) ~(MAC_ADDRESS_LOCALLY_ADMINISTERED_BIT);
+		}
+		else {
+			ap_mac_address.octet[0] |= MAC_ADDRESS_LOCALLY_ADMINISTERED_BIT;
+		}
 
-        data = (uint32_t *)whd_cdc_get_iovar_buffer(whd_driver, &buffer, sizeof(whd_mac_t), IOVAR_STR_CUR_ETHERADDR);
-        CHECK_IOCTL_BUFFER(data);
-        memcpy(data, &ap_mac_address, sizeof(whd_mac_t) );
-        CHECK_RETURN(whd_cdc_send_iovar(ifp, CDC_SET, buffer, NULL) );
+		data = (uint32_t *)whd_cdc_get_iovar_buffer(whd_driver, &buffer, sizeof(whd_mac_t), IOVAR_STR_CUR_ETHERADDR);
+		CHECK_IOCTL_BUFFER(data);
+		memcpy(data, &ap_mac_address, sizeof(whd_mac_t));
+		CHECK_RETURN(whd_cdc_send_iovar(ifp, CDC_SET, buffer, NULL));
 
-        if (memcmp(&mac, &ap_mac_address, sizeof(whd_mac_t) ) != 0)
-        {
-            WPRINT_WHD_INFO( (" STA MAC address : %02x:%02x:%02x:%02x:%02x:%02x \n"
-                              " AP  MAC address : %02x:%02x:%02x:%02x:%02x:%02x \n",
-                              mac.octet[0], mac.octet[1], mac.octet[2],
-                              mac.octet[3], mac.octet[4], mac.octet[3],
-                              ap_mac_address.octet[0], ap_mac_address.octet[1], ap_mac_address.octet[2],
-                              ap_mac_address.octet[3], ap_mac_address.octet[4], ap_mac_address.octet[3]) );
-        }
-    }
-    else
-    {
-        data = (uint32_t *)whd_cdc_get_iovar_buffer(whd_driver, &buffer, sizeof(whd_mac_t), IOVAR_STR_CUR_ETHERADDR);
-        CHECK_IOCTL_BUFFER(data);
-        memcpy(data, &mac, sizeof(whd_mac_t) );
-        CHECK_RETURN(whd_cdc_send_iovar(ifp, CDC_SET, buffer, NULL) );
-    }
+		if (memcmp(&mac, &ap_mac_address, sizeof(whd_mac_t)) != 0) {
+			WPRINT_WHD_INFO((" STA MAC address : %02x:%02x:%02x:%02x:%02x:%02x \n"
+							 " AP  MAC address : %02x:%02x:%02x:%02x:%02x:%02x \n",
+				mac.octet[0], mac.octet[1], mac.octet[2],
+				mac.octet[3], mac.octet[4], mac.octet[3],
+				ap_mac_address.octet[0], ap_mac_address.octet[1], ap_mac_address.octet[2],
+				ap_mac_address.octet[3], ap_mac_address.octet[4], ap_mac_address.octet[3]));
+		}
+	}
+	else {
+		data = (uint32_t *)whd_cdc_get_iovar_buffer(whd_driver, &buffer, sizeof(whd_mac_t), IOVAR_STR_CUR_ETHERADDR);
+		CHECK_IOCTL_BUFFER(data);
+		memcpy(data, &mac, sizeof(whd_mac_t));
+		CHECK_RETURN(whd_cdc_send_iovar(ifp, CDC_SET, buffer, NULL));
+	}
 
-    return WHD_SUCCESS;
+	return WHD_SUCCESS;
 }

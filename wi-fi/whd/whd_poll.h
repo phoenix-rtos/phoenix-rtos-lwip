@@ -30,8 +30,7 @@
 #define INCLUDED_WHD_POLL_H
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 /******************************************************

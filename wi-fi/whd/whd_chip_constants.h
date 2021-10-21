@@ -24,36 +24,40 @@
 extern "C" {
 #endif
 
-#define WRAPPER_REGISTER_OFFSET     (0x100000)
-typedef enum chip_var
-{
-    ARM_CORE_BASE_ADDRESS = 1,
-    SOCSRAM_BASE_ADDRESS,
-    SOCSRAM_WRAPPER_BASE_ADDRESS,
-    SDIOD_CORE_BASE_ADDRESS,
-    PMU_BASE_ADDRESS,
-    CHIP_RAM_SIZE,
-    ATCM_RAM_BASE_ADDRESS,
-    SOCRAM_SRMEM_SIZE,
-    CHANSPEC_BAND_MASK,
-    CHANSPEC_BAND_2G,
-    CHANSPEC_BAND_5G,
-    CHANSPEC_BAND_SHIFT,
-    CHANSPEC_BW_10,
-    CHANSPEC_BW_20,
-    CHANSPEC_BW_40,
-    CHANSPEC_BW_MASK,
-    CHANSPEC_BW_SHIFT,
-    CHANSPEC_CTL_SB_LOWER,
-    CHANSPEC_CTL_SB_UPPER,
-    CHANSPEC_CTL_SB_NONE,
-    CHANSPEC_CTL_SB_MASK
+#define WRAPPER_REGISTER_OFFSET (0x100000)
+typedef enum chip_var {
+	ARM_CORE_BASE_ADDRESS = 1,
+	SOCSRAM_BASE_ADDRESS,
+	SOCSRAM_WRAPPER_BASE_ADDRESS,
+	SDIOD_CORE_BASE_ADDRESS,
+	PMU_BASE_ADDRESS,
+	CHIP_RAM_SIZE,
+	ATCM_RAM_BASE_ADDRESS,
+	SOCRAM_SRMEM_SIZE,
+	CHANSPEC_BAND_MASK,
+	CHANSPEC_BAND_2G,
+	CHANSPEC_BAND_5G,
+	CHANSPEC_BAND_SHIFT,
+	CHANSPEC_BW_10,
+	CHANSPEC_BW_20,
+	CHANSPEC_BW_40,
+	CHANSPEC_BW_MASK,
+	CHANSPEC_BW_SHIFT,
+	CHANSPEC_CTL_SB_LOWER,
+	CHANSPEC_CTL_SB_UPPER,
+	CHANSPEC_CTL_SB_NONE,
+	CHANSPEC_CTL_SB_MASK
 } chip_var_t;
 
-#define VERIFY_RESULT(x) { whd_result_t verify_result = WHD_SUCCESS; verify_result = (x); \
-                           if (verify_result != WHD_SUCCESS){ \
-                               WPRINT_WHD_ERROR( ("Function %s failed at line %d \n", __func__, __LINE__) ); \
-                               return verify_result; } }
+#define VERIFY_RESULT(x) \
+	{ \
+		whd_result_t verify_result = WHD_SUCCESS; \
+		verify_result = (x); \
+		if (verify_result != WHD_SUCCESS) { \
+			WPRINT_WHD_ERROR(("Function %s failed at line %d \n", __func__, __LINE__)); \
+			return verify_result; \
+		} \
+	}
 #define GET_C_VAR(whd_driver, var) get_whd_var(whd_driver, var)
 
 uint32_t get_whd_var(whd_driver_t whd_driver, chip_var_t var);

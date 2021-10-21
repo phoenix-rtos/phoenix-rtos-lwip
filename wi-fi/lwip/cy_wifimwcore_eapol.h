@@ -61,7 +61,7 @@ extern "C" {
  * @param[in] buffer     buffer received from WHD.
  *
  */
-typedef void (*cy_wifimwcore_eapol_packet_handler_t) (whd_interface_t whd_iface, whd_buffer_t buffer);
+typedef void (*cy_wifimwcore_eapol_packet_handler_t)(whd_interface_t whd_iface, whd_buffer_t buffer);
 
 /**
  *
