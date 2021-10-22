@@ -174,8 +174,7 @@ typedef void (*cyhal_sdio_irq_handler_t)(void *handler_arg, cyhal_sdio_irq_event
  * @param[in]  data3             The pin connected to the data3 signal
  * @return The status of the init request
  */
-cy_rslt_t cyhal_sdio_init(cyhal_sdio_t *obj, cyhal_gpio_t cmd, cyhal_gpio_t clk, cyhal_gpio_t data0, cyhal_gpio_t data1,
-	cyhal_gpio_t data2, cyhal_gpio_t data3);
+cy_rslt_t cyhal_sdio_init(cyhal_sdio_t *obj);
 
 /** Release the SDIO peripheral, not currently invoked. It requires further
  *  resource management.
@@ -217,7 +216,7 @@ cy_rslt_t cyhal_sdio_send_cmd(const cyhal_sdio_t *obj, cyhal_transfer_t directio
  * @return The status of the configure request
  */
 cy_rslt_t cyhal_sdio_bulk_transfer(cyhal_sdio_t *obj, cyhal_transfer_t direction, uint32_t argument,
-	const uint32_t *data, uint16_t length, uint32_t *response);
+	uint32_t *data, uint16_t length, uint32_t *response);
 
 /** Performs a bulk asynchronus data transfer (CMD=53) to the SDIO block.
  *

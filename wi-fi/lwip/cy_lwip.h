@@ -42,6 +42,7 @@
 */
 #pragma once
 
+#include <stdbool.h>
 #include "whd_wifi_api.h"
 #include "cy_result.h"
 #include "lwip/ip_addr.h"

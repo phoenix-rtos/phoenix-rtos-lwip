@@ -99,20 +99,6 @@ extern "C" {
 
 /** \} group_abstraction_rtos_common */
 
-/**
- * \ingroup group_abstraction_rtos_queue
- * \{
- */
-
-/** The Queue is already full and can't accept any more items at this time */
-#define CY_RTOS_QUEUE_FULL \
-	CY_RSLT_CREATE(CY_RSLT_TYPE_ERROR, CY_RSLT_MODULE_ABSTRACTION_OS, 3)
-/** The Queue is empty and has nothing to remove */
-#define CY_RTOS_QUEUE_EMPTY \
-	CY_RSLT_CREATE(CY_RSLT_TYPE_ERROR, CY_RSLT_MODULE_ABSTRACTION_OS, 4)
-
-/** \} group_abstraction_rtos_queue */
-
 /********************************************* TYPES **********************************************/
 
 /**
@@ -130,20 +116,6 @@ typedef enum cy_thread_state {
 } cy_thread_state_t;
 
 /**
- * The type of timer
- *
- * \ingroup group_abstraction_rtos_timer
- */
-typedef enum cy_timer_trigger_type {
-	CY_TIMER_TYPE_PERIODIC,                          /**< called periodically until stopped */
-	CY_TIMER_TYPE_ONCE,                              /**< called once only */
-	cy_timer_type_periodic = CY_TIMER_TYPE_PERIODIC, /**< \deprecated replaced by \ref
-                                                           CY_TIMER_TYPE_PERIODIC */
-	cy_timer_type_once = CY_TIMER_TYPE_ONCE          /**< \deprecated replaced by \ref
-                                                           CY_TIMER_TYPE_ONCE */
-} cy_timer_trigger_type_t;
-
-/**
  * The type of a function that is the entry point for a thread
  *
  * @param[in] arg the argument passed from the thread create call to the entry function
@@ -151,28 +123,6 @@ typedef enum cy_timer_trigger_type {
  * \ingroup group_abstraction_rtos_threads
  */
 typedef void (*cy_thread_entry_fn_t)(cy_thread_arg_t arg);
-
-/**
- * The callback function to be called by a timer
- *
- * \ingroup group_abstraction_rtos_timer
- */
-typedef void (*cy_timer_callback_t)(cy_timer_callback_arg_t arg);
-
-/**
- * Return the last error from the RTOS.
- *
- * The functions in the RTOS abstraction layer adhere to the Infineon return
- * results calling convention.  The underlying RTOS implementations will not but rather
- * will have their own error code conventions.  This function is provided as a service
- * to the developer, mostly for debugging, and returns the underlying RTOS error code
- * from the last RTOS abstraction layer that returned \ref CY_RTOS_GENERAL_ERROR.
- *
- * @return RTOS specific error code.
- *
- * \ingroup group_abstraction_rtos_common
- */
-cy_rtos_error_t cy_rtos_last_error(void);
 
 
 /********************************************* Threads ********************************************/
@@ -225,7 +175,7 @@ cy_rslt_t cy_rtos_create_thread(cy_thread_t *thread, cy_thread_entry_fn_t entry_
  *
  * @return The status of thread exit request. [\ref CY_RSLT_SUCCESS, \ref CY_RTOS_GENERAL_ERROR]
  */
-cy_rslt_t cy_rtos_exit_thread(void);
+void cy_rtos_exit_thread(void);
 
 /** Terminates another thread.
  *
@@ -478,265 +428,6 @@ cy_rslt_t cy_rtos_get_count_semaphore(cy_semaphore_t *semaphore, size_t *count);
 cy_rslt_t cy_rtos_deinit_semaphore(cy_semaphore_t *semaphore);
 
 /** \} group_abstraction_rtos_semaphore */
-
-/********************************************* Events ********************************************/
-
-/**
- * \ingroup group_abstraction_rtos_event
- * \{
- */
-
-/** Create an event.
- *
- * This is an event which can be used to signal a set of threads
- * with a 32 bit data element.
- *
- * @param[in,out] event Pointer to the event handle to be initialized
- *
- * @return The status of the event initialization request.
- *         [\ref CY_RSLT_SUCCESS, \ref CY_RTOS_NO_MEMORY, \ref CY_RTOS_GENERAL_ERROR]
- */
-cy_rslt_t cy_rtos_init_event(cy_event_t *event);
-
-/** Set the event flag bits.
- *
- * This is an event which can be used to signal a set of threads
- * with a 32 bit data element. Any threads waiting on this event are released
- *
- * @param[in] event  Pointer to the event handle
- * @param[in] bits   The value of the 32 bit flags
- * @param[in] in_isr If true, this is called from an ISR, otherwise from a thread
- *
- * @return The status of the set request. [\ref CY_RSLT_SUCCESS, \ref CY_RTOS_NO_MEMORY, \ref
- *         CY_RTOS_GENERAL_ERROR]
- */
-cy_rslt_t cy_rtos_setbits_event(cy_event_t *event, uint32_t bits, bool in_isr);
-
-/**
- * Clear the event flag bits
- *
- * This function clears bits in the event.
- *
- * @param[in] event   Pointer to the event handle
- * @param[in] bits    Any bits set in this value, will be cleared in the event.
- * @param[in] in_isr  if true, this is called from an ISR, otherwise from a thread
- *
- * @return The status of the clear flags request. [\ref CY_RSLT_SUCCESS, \ref CY_RTOS_NO_MEMORY,
- *         \ref CY_RTOS_GENERAL_ERROR]
- */
-cy_rslt_t cy_rtos_clearbits_event(cy_event_t *event, uint32_t bits, bool in_isr);
-
-/** Get the event bits.
- *
- * Returns the current bits for the event.
- *
- * @param[in]  event Pointer to the event handle
- * @param[out] bits  pointer to receive the value of the event flags
- *
- * @return The status of the get request. [\ref CY_RSLT_SUCCESS, \ref CY_RTOS_NO_MEMORY, \ref
- *         CY_RTOS_GENERAL_ERROR]
- */
-cy_rslt_t cy_rtos_getbits_event(cy_event_t *event, uint32_t *bits);
-
-/** Wait for the event and return bits.
- *
- * Waits for the event to be set and then returns the bits associated
- * with the event, or waits for the given timeout period.
- * @note This function returns if any bit in the set is set.
- *
- * @param[in] event        Pointer to the event handle
- * @param[in,out] bits     pointer to receive the value of the event flags
- * @param[in] clear        if true, clear any bits set that cause the wait to return
- *                         if false, do not clear bits
- * @param[in] all          if true, all bits in the initial bits value must be set to return
- *                         if false, any one bit in the initial bits value must be set to return
- * @param[in] timeout_ms   The amount of time to wait in milliseconds
- *
- * @return The status of the wait for event request. [\ref CY_RSLT_SUCCESS, \ref CY_RTOS_NO_MEMORY,
- *         \ref CY_RTOS_GENERAL_ERROR]
- */
-cy_rslt_t cy_rtos_waitbits_event(cy_event_t *event, uint32_t *bits, bool clear, bool all,
-	cy_time_t timeout_ms);
-
-/** Deinitialize a event.
- *
- * This function frees the resources associated with an event.
- *
- * @param[in] event Pointer to the event handle
- *
- * @return The status of the deletion request. [\ref CY_RSLT_SUCCESS, \ref CY_RTOS_GENERAL_ERROR]
- */
-cy_rslt_t cy_rtos_deinit_event(cy_event_t *event);
-
-/** \} group_abstraction_rtos_event */
-
-/********************************************* Queues *********************************************/
-
-/**
- * \ingroup group_abstraction_rtos_queue
- * \{
- */
-
-/** Create a queue.
- *
- * This is a queue of data where entries are placed on the back of the queue
- * and removed from the front of the queue.
- *
- * @param[out] queue    Pointer to the queue handle
- * @param[in]  length   The maximum length of the queue in items
- * @param[in]  itemsize The size of each item in the queue.
- *
- * @return The status of the init request. [\ref CY_RSLT_SUCCESS, \ref CY_RTOS_NO_MEMORY, \ref
- *         CY_RTOS_GENERAL_ERROR]
- */
-cy_rslt_t cy_rtos_init_queue(cy_queue_t *queue, size_t length, size_t itemsize);
-
-/** Put an item in a queue.
- *
- * This function puts an item in the queue. The item is copied
- * into the queue using a memory copy and the data pointed to by item_ptr
- * is no longer referenced once the call returns.
- *
- * @note If in_isr is true, timeout_ms must be zero.
- *
- * @param[in] queue      Pointer to the queue handle
- * @param[in] item_ptr   Pointer to the item to place in the queue
- * @param[in] timeout_ms The time to wait to place the item in the queue
- * @param[in] in_isr     If true this is being called from within and ISR
- *
- * @return The status of the put request. [\ref CY_RSLT_SUCCESS, \ref CY_RTOS_NO_MEMORY, \ref
- *         CY_RTOS_GENERAL_ERROR, \ref CY_RTOS_QUEUE_FULL]
- */
-cy_rslt_t cy_rtos_put_queue(cy_queue_t *queue, const void *item_ptr, cy_time_t timeout_ms,
-	bool in_isr);
-
-/** Gets an item in a queue.
- *
- * This function gets an item from the queue. The item is copied
- * out of the queue into the memory provide by item_ptr. This space must be
- * large enough to hold a queue entry as defined when the queue was initialized.
- *
- * @note If in_isr is true, timeout_ms must be zero.
- *
- * @param[in] queue      Pointer to the queue handle
- * @param[in] item_ptr   Pointer to the memory for the item from the queue
- * @param[in] timeout_ms The time to wait to get an item from the queue
- * @param[in] in_isr     If true this is being called from within an ISR
- *
- * @return The status of the get request. [\ref CY_RSLT_SUCCESS, \ref CY_RTOS_NO_MEMORY, \ref
- *         CY_RTOS_GENERAL_ERROR, \ref CY_RTOS_QUEUE_EMPTY]
- */
-cy_rslt_t cy_rtos_get_queue(cy_queue_t *queue, void *item_ptr, cy_time_t timeout_ms, bool in_isr);
-
-/** Return the number of items in the queue.
- *
- * This function returns the number of items currently in the queue.
- *
- * @param[in]  queue       Pointer to the queue handle
- * @param[out] num_waiting Pointer to the return count
- *
- * @return The status of the count request. [\ref CY_RSLT_SUCCESS, \ref CY_RTOS_GENERAL_ERROR]
- */
-cy_rslt_t cy_rtos_count_queue(cy_queue_t *queue, size_t *num_waiting);
-
-/** Return the amount of empty space in the queue.
- *
- * This function returns the amount of empty space in the
- * queue. For instance, if the queue was created with 10 entries max and there
- * are currently 2 entries in the queue, this will return 8.
- *
- * @param[in]  queue      Pointer to the queue handle
- * @param[out] num_spaces Pointer to the return count.
- *
- * @return The status of the space request. [\ref CY_RSLT_SUCCESS, \ref CY_RTOS_GENERAL_ERROR]
- */
-cy_rslt_t cy_rtos_space_queue(cy_queue_t *queue, size_t *num_spaces);
-
-/** Reset the queue.
- *
- * This function sets the queue to empty.
- *
- * @param[in] queue pointer to the queue handle
- *
- * @return The status of the reset request. [\ref CY_RSLT_SUCCESS, \ref CY_RTOS_GENERAL_ERROR]
- */
-cy_rslt_t cy_rtos_reset_queue(cy_queue_t *queue);
-
-/** Deinitialize the queue handle.
- *
- * This function de-initializes the queue and returns all
- * resources used by the queue.
- *
- * @param[in] queue Pointer to the queue handle
- *
- * @return The status of the deinit request. [\ref CY_RSLT_SUCCESS, \ref CY_RTOS_GENERAL_ERROR]
- */
-cy_rslt_t cy_rtos_deinit_queue(cy_queue_t *queue);
-
-/** \} group_abstraction_rtos_queue */
-
-/********************************************* Timers *********************************************/
-
-/**
- * \ingroup group_abstraction_rtos_timer
- * \{
- */
-
-/** Create a new timer.
- *
- * This function initializes a timer object.
- * @note The timer is not active until start is called.
- * @note The callback may be (likely will be) called from a different thread.
- *
- * @param[out] timer Pointer to the timer handle to initialize
- * @param[in]  type  Type of timer (periodic or once)
- * @param[in]  fun   The function
- * @param[in]  arg   Argument to pass along to the callback function
- *
- * @return The status of the init request. [\ref CY_RSLT_SUCCESS, \ref CY_RTOS_GENERAL_ERROR]
- */
-cy_rslt_t cy_rtos_init_timer(cy_timer_t *timer, cy_timer_trigger_type_t type,
-	cy_timer_callback_t fun, cy_timer_callback_arg_t arg);
-
-/** Sends a request to start the timer. Depending on the priorities of threads in the system,
- * it may be necessary for high priority items to wait before the timer actually starts running.
- *
- * @param[in] timer  Pointer to the timer handle
- * @param[in] num_ms The number of milliseconds to wait before the timer fires
- *
- * @return The status of the start request. [\ref CY_RSLT_SUCCESS, \ref CY_RTOS_GENERAL_ERROR]
- */
-cy_rslt_t cy_rtos_start_timer(cy_timer_t *timer, cy_time_t num_ms);
-
-/** Sends a request to stop the timer. Depending on the priorities of threads in the system,
- * it may be necessary for high priority items to wait before the timer is actually stopped.
- *
- * @param[in] timer Pointer to the timer handle
- *
- * @return The status of the stop request. [\ref CY_RSLT_SUCCESS, \ref CY_RTOS_GENERAL_ERROR]
- */
-cy_rslt_t cy_rtos_stop_timer(cy_timer_t *timer);
-
-/** Returns state of a timer.
- *
- * @param[in]  timer Pointer to the timer handle
- * @param[out] state Return value for state, true if running, false otherwise
- *
- * @return The status of the is_running request. [\ref CY_RSLT_SUCCESS, \ref CY_RTOS_GENERAL_ERROR]
- */
-cy_rslt_t cy_rtos_is_running_timer(cy_timer_t *timer, bool *state);
-
-/** Deinit the timer.
- *
- * This function deinitializes the timer and frees all consumed resources.
- *
- * @param[in] timer Pointer to the timer handle
- *
- * @return The status of the deinit request. [\ref CY_RSLT_SUCCESS, \ref CY_RTOS_GENERAL_ERROR]
- */
-cy_rslt_t cy_rtos_deinit_timer(cy_timer_t *timer);
-
-/** \} group_abstraction_rtos_timer */
 
 /********************************************** Time **********************************************/
 

@@ -1202,6 +1202,10 @@ extern uint32_t whd_wifi_get_bss_info(whd_interface_t ifp, wl_bss_info_t *bi);
  */
 extern uint32_t whd_print_stats(whd_driver_t whd_drv, whd_bool_t reset_after_print);
 
+extern uint32_t whd_print_wlan_log(whd_driver_t whd_drv);
+
+extern uint32_t whd_wifi_print_wlan_log(whd_interface_t ifp);
+
 /* @} */
 /* @} */
 

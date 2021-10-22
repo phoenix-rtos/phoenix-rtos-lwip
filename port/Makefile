@@ -13,4 +13,11 @@ else
   LOCAL_CFLAGS += -DLWIP_IPSEC=0
 endif
 
+ifeq (${LWIP_WIFI_BUILD},yes)
+  LOCAL_CFLAGS += -DLWIP_WIFI=1
+  DEP_LIBS += wifi-hal wifi-lwip wifi-whd
+else
+  LOCAL_CFLAGS += -DLWIP_WIFI=0
+endif
+
 include $(binary.mk)

@@ -28,13 +28,8 @@
 
 #pragma once
 
-/*
- * Exclude template files except for documentation purposes.
- * This should be removed when using the template to support a new RTOS.
- */
-#if defined(DOXYGEN)
-
-// #include "TODO: RTOS HEADER"
+#include <sys/types.h>
+#include <sys/threads.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -81,30 +76,18 @@ typedef enum {
 } cy_thread_priority_t;
 
 /** Alias for the RTOS specific definition of a thread handle */
-typedef void * /* TODO: Replace with RTOS specific type*/ cy_thread_t;
+typedef handle_t cy_thread_t;
 /** Alias for the RTOS specific argument passed to the entry function of a thread */
-typedef void * /* TODO: Replace with RTOS specific type*/ cy_thread_arg_t;
+typedef void *cy_thread_arg_t;
 /** Alias for the RTOS specific definition of a mutex */
-typedef void * /* TODO: Replace with RTOS specific type*/ cy_mutex_t;
+typedef handle_t cy_mutex_t;
 /** Alias for the RTOS specific definition of a semaphore */
-typedef void * /* TODO: Replace with RTOS specific type*/ cy_semaphore_t;
-/** Alias for the RTOS specific definition of an event */
-typedef void * /* TODO: Replace with RTOS specific type*/ cy_event_t;
-/** Alias for the RTOS specific definition of a message queue */
-typedef void * /* TODO: Replace with RTOS specific type*/ cy_queue_t;
-/** Alias for the RTOS specific definition of a timer */
-typedef void * /* TODO: Replace with RTOS specific type*/ cy_timer_t;
-/** Alias for the RTOS specific argument passed to the timer callback function */
-typedef void * /* TODO: Replace with RTOS specific type*/ cy_timer_callback_arg_t;
+typedef handle_t cy_semaphore_t;
 /** Alias for the RTOS specific time unit (in milliseconds) */
-typedef void * /* TODO: Replace with RTOS specific type*/ cy_time_t;
-/** Alias for the RTOS specific definition of a error status */
-typedef void * /* TODO: Replace with RTOS specific type*/ cy_rtos_error_t;
+typedef time_t cy_time_t;
 
 /** \} group_abstraction_rtos_port */
 
 #ifdef __cplusplus
 }  // extern "C"
 #endif
-
-#endif  // defined(DOXYGEN)

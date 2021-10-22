@@ -40,7 +40,7 @@
 #if LWIP_IPV4
 
 #include "cy_lwip.h"
-#include "cy_worker_thread.h"
+#include "cyabs_rtos.h"
 
 #ifdef __cplusplus
 extern "C" {

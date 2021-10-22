@@ -35,6 +35,13 @@ include $(static-lib.mk)
 # should define NET_DRIVERS and platform driver sources
 -include _targets/Makefile.$(TARGET_FAMILY)-$(TARGET_SUBFAMILY)
 
+ifeq (${LWIP_WIFI_BUILD},yes)
+CFLAGS += -Iwi-fi/hal -Iwi-fi/lwip -Iwi-fi/whd
+include wi-fi/hal/Makefile
+include wi-fi/whd/Makefile
+include wi-fi/lwip/Makefile
+endif
+
 include drivers/Makefile
 include port/Makefile
 

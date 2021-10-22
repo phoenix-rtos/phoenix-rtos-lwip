@@ -60,6 +60,21 @@
 
 #pragma once
 
-#include "cyhal_general_types.h"
 #include "cyhal_hw_types.h"
 #include "cyhal_drivers.h"
+
+
+/**
+* \ingroup group_hal_availability
+* \{
+*/
+
+/** Macro specifying whether the DMA driver is available for the current device \def CYHAL_DRIVER_AVAILABLE_DMA
+*/
+#define CYHAL_DRIVER_AVAILABLE_DMA 0
+/** Macro specifying whether the SDIO driver is available for the current device \def CYHAL_DRIVER_AVAILABLE_SDIO
+*/
+#define CYHAL_DRIVER_AVAILABLE_SDIO 1
+/** Macro specifying whether the SPI driver is available for the current device \def CYHAL_DRIVER_AVAILABLE_SPI 
+*/
+#define CYHAL_DRIVER_AVAILABLE_SPI 0

@@ -43,10 +43,32 @@
 #include <stdbool.h>
 #include "cy_result.h"
 #include "cyhal_hw_types.h"
+#include "cyhal_modules.h"
 
 #if defined(__cplusplus)
 extern "C" {
 #endif /* __cplusplus */
+
+/** \addtogroup group_hal_results_gpio GPIO HAL Results
+ *  GPIO specific return codes
+ *  \ingroup group_hal_results
+ *  \{ */
+/**
+ */
+
+/** The specified pin has no supported input signal */
+#define CYHAL_GPIO_RSLT_ERR_NO_INPUT_SIGNAL \
+	(CY_RSLT_CREATE(CY_RSLT_TYPE_ERROR, CYHAL_RSLT_MODULE_GPIO, 0))
+/** The specified pin has no supported output signal */
+#define CYHAL_GPIO_RSLT_ERR_NO_OUTPUT_SIGNAL \
+	(CY_RSLT_CREATE(CY_RSLT_TYPE_ERROR, CYHAL_RSLT_MODULE_GPIO, 1))
+/** The parameter is invalid */
+#define CYHAL_GPIO_RSLT_ERR_BAD_PARAM \
+	(CY_RSLT_CREATE(CY_RSLT_TYPE_ERROR, CYHAL_RSLT_MODULE_GPIO, 2))
+
+/**
+ * \}
+ */
 
 /*******************************************************************************
 *       Defines

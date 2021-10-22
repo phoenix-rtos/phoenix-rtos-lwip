@@ -230,8 +230,11 @@ static int ifstatus_open(int flags)
 			SNPRINTF_APPEND("%2s%d_ptp=%s\n", netif->name, netif->num, inet_ntoa(netif->gw));
 		}
 
-		if (strncmp("lo", netif->name, sizeof(netif->name)) && (drv = netif_driver(netif)) && drv->media != NULL)
-			SNPRINTF_APPEND("%2s%d_media=%s\n", netif->name, netif->num, drv->media(netif));
+		if (strncmp("lo", netif->name, sizeof(netif->name)) != 0 && strncmp("wl", netif->name, sizeof(netif->name)) != 0) {
+			drv = netif_driver(netif);
+			if (drv != NULL && drv->media != NULL)
+				SNPRINTF_APPEND("%2s%d_media=%s\n", netif->name, netif->num, drv->media(netif));
+		}
 	}
 
 #if LWIP_DNS

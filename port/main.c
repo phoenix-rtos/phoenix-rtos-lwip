@@ -21,6 +21,7 @@
 #include "route.h"
 #include "filter.h"
 #include "devs.h"
+#include "wifi-api.h"
 
 
 static void mainLoop(void)
@@ -105,6 +106,10 @@ int main(int argc, char **argv)
 
 #if LWIP_EXT_PF
 	init_filters();
+#endif
+
+#if LWIP_WIFI
+	init_wifi();
 #endif
 
 	while (++argv, --argc) {
