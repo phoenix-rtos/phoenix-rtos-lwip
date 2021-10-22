@@ -602,7 +602,7 @@ whd_result_t whd_ioctl_print(whd_driver_t whd_driver)
 	size_t iovar_string_size = 0;
 
 	for (i = 0; i < WHD_IOCTL_LOG_SIZE; i++) {
-		char iovar[WHD_IOVAR_STRING_SIZE] = { 0 };
+		char iovar[WHD_IOVAR_STRING_SIZE + 1] = { 0 };
 		data = whd_driver->whd_ioctl_log[i].data;
 
 		if ((whd_driver->whd_ioctl_log[i].ioct_log == WLC_SET_VAR) ||
@@ -612,11 +612,9 @@ whd_result_t whd_ioctl_print(whd_driver_t whd_driver)
 				data++;
 			}
 
-			if (strlen((char *)data) <= WHD_IOVAR_STRING_SIZE)
-				strncpy(iovar, (char *)data, strlen((char *)data));
+			snprintf(iovar, sizeof(iovar), "%s", data);
 
 			iovar_string_size = strlen((const char *)data);
-			iovar[iovar_string_size] = '\0';
 			data += iovar_string_size;
 			whd_driver->whd_ioctl_log[i].data_size -= iovar_string_size;
 		}
@@ -708,7 +706,9 @@ whd_result_t whd_allow_wlan_bus_to_sleep(whd_driver_t whd_driver)
 {
 	/* Get chip number */
 	uint16_t wlan_chip_id = whd_chip_get_chip_id(whd_driver);
+#if 0
 	whd_bt_dev_t btdev = whd_driver->bt_dev;
+#endif
 	if ((wlan_chip_id == 4334) || (wlan_chip_id == 43362)) {
 		/* Clear HT clock request */
 		if (whd_bus_is_up(whd_driver) == WHD_TRUE) {
@@ -731,9 +731,11 @@ whd_result_t whd_allow_wlan_bus_to_sleep(whd_driver_t whd_driver)
 					(uint8_t)1, 0);
 			}
 			else {
+#if 0
 				if (btdev->bt_int_cb) {
 					return WHD_SUCCESS;
 				}
+#endif
 				return whd_kso_enable(whd_driver, WHD_FALSE);
 			}
 		}

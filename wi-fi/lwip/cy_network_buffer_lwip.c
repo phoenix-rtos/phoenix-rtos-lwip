@@ -28,7 +28,7 @@
 #include <stdlib.h>
 #include "cy_network_buffer.h"
 #include "cy_utils.h"
-#include "cyhal_system.h"
+#include "cyabs_rtos.h"
 #include "lwip/pbuf.h"
 
 #define SDIO_BLOCK_SIZE (64U)
@@ -75,7 +75,7 @@ whd_result_t cy_host_buffer_get(whd_buffer_t *buffer, whd_buffer_dir_t direction
 		}
 
 		if (NULL == p) {
-			cyhal_system_delay_ms(1);
+			cy_rtos_delay_milliseconds(1);
 		}
 	} while ((NULL == p) && (++counter < timeout_ms));
 

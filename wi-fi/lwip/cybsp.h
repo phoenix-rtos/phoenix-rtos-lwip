@@ -28,12 +28,7 @@
 
 #include "cy_result.h"
 #include "cybsp_types.h"
-#if defined(CYBSP_WIFI_CAPABLE) && defined(CY_USING_HAL)
 #include "cyhal_sdio.h"
-#endif
-#if defined(COMPONENT_WICED_BLE) || defined(COMPONENT_WICED_DUALMODE)
-#include "cybsp_bt_config.h"
-#endif
 
 #if defined(__cplusplus)
 extern "C" {
@@ -44,10 +39,6 @@ extern "C" {
  * \{
  * Error codes specific to the board.
  */
-
-/** Failed to configure sysclk power management callback */
-#define CYBSP_RSLT_ERR_SYSCLK_PM_CALLBACK \
-	(CY_RSLT_CREATE(CY_RSLT_TYPE_ERROR, CY_RSLT_MODULE_ABSTRACTION_BSP, 0))
 
 /** \} group_bsp_errors */
 
@@ -65,7 +56,7 @@ extern "C" {
  */
 cy_rslt_t cybsp_init(void);
 
-#if defined(CYBSP_WIFI_CAPABLE) && defined(CY_USING_HAL)
+void cybsp_free(void);
 
 #define CYBSP_WIFI_INTERFACE_TYPE CYBSP_SDIO_INTERFACE
 
@@ -75,7 +66,6 @@ cy_rslt_t cybsp_init(void);
  * \returns The initialized sdio object.
  */
 cyhal_sdio_t *cybsp_get_wifi_sdio_obj(void);
-#endif  // defined(CYBSP_WIFI_CAPABLE)
 
 /** \} group_bsp_functions */
 

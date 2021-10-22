@@ -1132,8 +1132,8 @@ static void whd_wifi_active_join_deinit(whd_interface_t ifp, cy_semaphore_t *sta
 static uint32_t whd_wifi_join_wait_for_complete(whd_interface_t ifp, cy_semaphore_t *semaphore)
 {
 	whd_result_t result;
-	uint32_t start_time;
-	uint32_t current_time;
+	whd_time_t start_time;
+	whd_time_t current_time;
 	whd_bool_t done = WHD_FALSE;
 
 	cy_rtos_get_time(&start_time);
@@ -3022,7 +3022,7 @@ whd_iovar_mkbuf(const char *name, char *data, uint32_t datalen, char *iovar_buf,
 		memmove(&iovar_buf[iovar_len], data, datalen);
 
 	/* copy the name to the beginning of the buffer */
-	strncpy(iovar_buf, name, (iovar_len - 1));
+	strncpy(iovar_buf, name, iovar_len);
 
 	return WHD_SUCCESS;
 }
@@ -3351,7 +3351,7 @@ whd_result_t whd_arp_hostip_list_add(whd_interface_t ifp, uint32_t *host_ipv4_li
 
 		for (curr_index = 0; curr_index < filled; curr_index++) {
 			for (new_index = 0; new_index < count; new_index++) {
-				WPRINT_WHD_DEBUG(("%s() curr:%ld of %ld curr:0x%lx new:%ld of %ld:0x%lx\n", __func__, curr_index,
+				WPRINT_WHD_DEBUG(("%s() curr:%u of %u curr:0x%x new:%u of %u:0x%x\n", __func__, curr_index,
 					filled, current_ipv4_list[curr_index],
 					new_index, count, host_ipv4_list[new_index]));
 				if (current_ipv4_list[curr_index] == host_ipv4_list[new_index]) {
@@ -3359,7 +3359,7 @@ whd_result_t whd_arp_hostip_list_add(whd_interface_t ifp, uint32_t *host_ipv4_li
 					count--;
 					if (new_index < count) {
 						/* copy next one down */
-						WPRINT_WHD_DEBUG(("move %ld (+1) of %ld \n", new_index, count));
+						WPRINT_WHD_DEBUG(("move %u (+1) of %u\n", new_index, count));
 						host_ipv4_list[new_index] = host_ipv4_list[new_index + 1];
 					}
 					break;
@@ -3373,9 +3373,9 @@ whd_result_t whd_arp_hostip_list_add(whd_interface_t ifp, uint32_t *host_ipv4_li
 
 	if (count > 0) {
 		uint32_t new_index;
-		WPRINT_WHD_DEBUG(("%s() whd_wifi_set_iovar_buffer( %p, %lx)\n", __func__, host_ipv4_list, count));
+		WPRINT_WHD_DEBUG(("%s() whd_wifi_set_iovar_buffer( %p, %x)\n", __func__, host_ipv4_list, count));
 		for (new_index = 0; new_index < count; new_index++) {
-			WPRINT_WHD_DEBUG(("  0x%lx\n", host_ipv4_list[new_index]));
+			WPRINT_WHD_DEBUG(("  0x%x\n", host_ipv4_list[new_index]));
 		}
 		whd_ret = whd_wifi_set_iovar_buffer(ifp, IOVAR_STR_ARP_HOSTIP, host_ipv4_list, (count * sizeof(uint32_t)));
 		if (whd_ret != WHD_SUCCESS) {
@@ -3420,7 +3420,7 @@ whd_result_t whd_arp_hostip_list_clear_id(whd_interface_t ifp, uint32_t ipv4_add
 
 		/* remove the one address from the list and re-write arp_hostip list */
 		for (index = 0; index < filled; index++) {
-			WPRINT_WHD_DEBUG(("%d %s() drop() 0x%lx == 0x%lx ? %s\n", __LINE__, __func__, host_ipv4_list[index],
+			WPRINT_WHD_DEBUG(("%d %s() drop() 0x%x == 0x%x ? %s\n", __LINE__, __func__, host_ipv4_list[index],
 				ipv4_addr, (host_ipv4_list[index] == ipv4_addr) ? "DROP" : ""));
 			if (host_ipv4_list[index] == ipv4_addr) {
 				uint32_t drop;
@@ -4092,4 +4092,25 @@ whd_tko_toggle(whd_interface_t ifp, whd_bool_t enable)
 		WPRINT_WHD_ERROR(("%s: Successfully %s\n", __func__, (enable == WHD_TRUE ? "enabled" : "disabled")));
 	}
 	return result;
+}
+
+whd_result_t
+whd_print_wlan_log(whd_driver_t whd_drv)
+{
+	char *buf;
+	whd_result_t result;
+
+	buf = malloc(WLAN_LOG_BUF_LEN);
+	if (buf == NULL)
+		return WHD_MALLOC_FAILURE;
+
+	result = whd_wifi_read_wlan_log(whd_drv, buf, WLAN_LOG_BUF_LEN);
+	free(buf);
+	return result;
+}
+
+whd_result_t
+whd_wifi_print_wlan_log(whd_interface_t ifp)
+{
+	return whd_print_wlan_log(ifp->whd_driver);
 }

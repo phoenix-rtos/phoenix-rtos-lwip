@@ -34,6 +34,7 @@
  */
 #pragma once
 
+#include <stddef.h>
 #include "cy_result.h"
 #include "whd_wifi_api.h"
 

@@ -35,6 +35,7 @@
  *  Implementation of a simple DHCP server
  */
 
+#include <string.h>
 #include "lwip/err.h"
 #include "lwip/api.h"
 #include "lwip/netif.h"
@@ -328,7 +329,7 @@ static void cy_dhcp_thread_func(cy_thread_arg_t thread_input)
 		dhcp_header_t *request_header;
 
 		/* Sleep until data is received from socket. */
-		if (udp_receive(&server->socket, &received_packet, WAIT_FOREVER) != CY_RSLT_SUCCESS) {
+		if (udp_receive(&server->socket, &received_packet, 1000) != CY_RSLT_SUCCESS) {
 			continue;
 		}
 

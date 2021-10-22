@@ -141,7 +141,7 @@ whd_result_t whd_process_clm_data(whd_interface_t ifp)
 			CHECK_IOCTL_BUFFER(data);
 			ret_clmload_status = whd_cdc_send_iovar(ifp, CDC_GET, buffer, &response);
 			if (ret_clmload_status != WHD_SUCCESS) {
-				WPRINT_WHD_DEBUG(("clmload_status failed with return %lu\n", ret_clmload_status));
+				WPRINT_WHD_DEBUG(("clmload_status failed with return %u\n", ret_clmload_status));
 			}
 			else {
 				uint8_t *clmload_status = (uint8_t *)whd_buffer_get_current_piece_data_pointer(whd_driver, response);

@@ -177,22 +177,15 @@ void cy_network_process_ethernet_data(whd_interface_t iface, whd_buffer_t buf)
 			activity_callback(false);
 		}
 
+#if ETH_PAD_SIZE
+		pbuf_add_header(buf, ETH_PAD_SIZE);
+#endif
+
 		/* If the interface is not yet setup we drop the packet here */
 		if (net_interface->input == NULL || net_interface->input(buf, net_interface) != ERR_OK) {
 			cy_buffer_release(buf, WHD_NETWORK_RX);
 		}
 	}
-}
-
-/* This function creates duplicate pbuf of input pbuf */
-static struct pbuf *pbuf_dup(const struct pbuf *orig)
-{
-	struct pbuf *p = pbuf_alloc(PBUF_LINK, orig->tot_len, PBUF_RAM);
-	if (p != NULL) {
-		pbuf_copy(p, orig);
-		p->flags = orig->flags;
-	}
-	return p;
 }
 
 /*
@@ -209,11 +202,14 @@ static err_t wifioutput(struct netif *iface, struct pbuf *p)
 		return ERR_INPROGRESS;
 	}
 
-	struct pbuf *whd_buf = pbuf_dup(p);
+	struct pbuf *whd_buf = pbuf_clone(PBUF_LINK, PBUF_RAM, p);
 	if (whd_buf == NULL) {
 		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "failed to allocate buffer for outgoing packet\n");
 		return ERR_MEM;
 	}
+#if ETH_PAD_SIZE
+	pbuf_remove_header(whd_buf, ETH_PAD_SIZE);
+#endif
 	/* Call activity handler which is registered with argument as true
      * indicating there is TX packet
      */
@@ -329,7 +325,10 @@ static err_t wifiinit(struct netif *iface)
 #endif
 	iface->linkoutput = wifioutput;
 	iface->mtu = WHD_LINK_MTU;
-	iface->flags |= (NETIF_FLAG_BROADCAST | NETIF_FLAG_ETHARP | NETIF_FLAG_IGMP);
+	iface->flags |= (NETIF_FLAG_BROADCAST | NETIF_FLAG_ETHARP);
+#if LWIP_IPV4 && LWIP_IGMP
+	iface->flags |= NETIF_FLAG_IGMP;
+#endif
 #ifdef LWIP_IPV6_MLD
 	iface->flags |= NETIF_FLAG_MLD6;
 #endif
@@ -665,7 +664,9 @@ cy_rslt_t cy_lwip_network_up(cy_lwip_nw_interface_t *iface)
 	}
 	else {
 		memset(&internal_dhcp_server, 0, sizeof(internal_dhcp_server));
+#if LWIP_IGMP
 		igmp_start(IP_HANDLE(iface->role));
+#endif
 		/* Start internal DHCP server */
 		if ((result = cy_lwip_dhcp_server_start(&internal_dhcp_server, iface->role)) != CY_RSLT_SUCCESS) {
 			return CY_RSLT_LWIP_ERROR_STARTING_DHCP;

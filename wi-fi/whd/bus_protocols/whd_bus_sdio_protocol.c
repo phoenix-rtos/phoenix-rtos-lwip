@@ -60,7 +60,7 @@
 #define F2_AVAIL_TIMEOUT_MS   (500)
 #define F2_READY_TIMEOUT_MS   (1000)
 #define ALP_AVAIL_TIMEOUT_MS  (100)
-#define HT_AVAIL_TIMEOUT_MS   (500)
+#define HT_AVAIL_TIMEOUT_MS   (5000)
 #define ABORT_TIMEOUT_MS      (100)
 /* Taken from FALCON_5_90_195_26 dhd/sys/dhd_sdio.c. */
 #define SDIO_F2_WATERMARK (8)
@@ -70,6 +70,8 @@
 #define WHD_THREAD_POLL_TIMEOUT (CY_RTOS_NEVER_TIMEOUT)
 
 #define WHD_THREAD_POKE_TIMEOUT (100)
+
+#define WHD_INT_CLEAR_TIMEOUT 1000
 
 #define HOSTINTMASK (I_HMB_SW_MASK)
 
@@ -81,6 +83,7 @@ struct whd_bus_priv {
 	whd_sdio_config_t sdio_config;
 	whd_bus_stats_t whd_bus_stats;
 	cyhal_sdio_t *sdio_obj;
+	cy_semaphore_t int_clear_semaphore;
 };
 
 /* For BSP backward compatible, should be removed the macro once 1.0 is not supported */
@@ -432,8 +435,8 @@ whd_result_t whd_bus_sdio_init(whd_driver_t whd_driver)
 	cy_rtos_get_time(&current_time);
 	elapsed_time = current_time - elapsed_time;
 	CHECK_RETURN(whd_resource_size(whd_driver, WHD_RESOURCE_WLAN_FIRMWARE, &wifi_firmware_image_size));
-	WPRINT_WHD_INFO(("WLAN FW download size: %" PRIu32 " bytes\n", wifi_firmware_image_size));
-	WPRINT_WHD_INFO(("WLAN FW download time: %" PRIu32 " ms\n", elapsed_time));
+	WPRINT_WHD_INFO(("WLAN FW download size: %u bytes\n", wifi_firmware_image_size));
+	WPRINT_WHD_INFO(("WLAN FW download time: %llu ms\n", elapsed_time));
 
 	if (result != WHD_SUCCESS) {
 		/*  either an error or user abort */
@@ -574,6 +577,8 @@ uint32_t whd_bus_sdio_packet_available_to_read(whd_driver_t whd_driver)
 			int_status = 0;
 			goto exit;
 		}
+
+		cy_rtos_set_semaphore(&whd_driver->bus_priv->int_clear_semaphore, WHD_FALSE);
 	}
 exit:
 	return ((int_status) & (FRAME_AVAILABLE_MASK));
@@ -1309,10 +1314,14 @@ static void whd_bus_sdio_irq_handler(void *handler_arg, cyhal_sdio_irq_event_t e
 
 	/* call thread notify to wake up WHD thread */
 	whd_thread_notify_irq(whd_driver);
+
+	/* wait for interrupt clear */
+	cy_rtos_get_semaphore(&whd_driver->bus_priv->int_clear_semaphore, WHD_INT_CLEAR_TIMEOUT, WHD_FALSE);
 }
 
 whd_result_t whd_bus_sdio_irq_register(whd_driver_t whd_driver)
 {
+	cy_rtos_init_semaphore(&whd_driver->bus_priv->int_clear_semaphore, 1, 0);
 #if (CYHAL_API_VERSION >= 2)
 	cyhal_sdio_register_callback(whd_driver->bus_priv->sdio_obj, whd_bus_sdio_irq_handler, whd_driver);
 #else

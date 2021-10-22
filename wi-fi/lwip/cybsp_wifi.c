@@ -45,7 +45,7 @@ extern "C" {
 #define CY_WIFI_THREAD_PRIORITY (CY_RTOS_PRIORITY_HIGH)
 #endif
 #if !defined(CY_WIFI_COUNTRY)
-#define CY_WIFI_COUNTRY (WHD_COUNTRY_AUSTRALIA)
+#define CY_WIFI_COUNTRY (WHD_COUNTRY_UNITED_STATES)
 #endif
 
 #define DEFAULT_OOB_PIN         (0)
@@ -206,10 +206,10 @@ static void _cybsp_wifi_reset_wifi_chip(void)
 {
 	// WiFi into reset
 	// Allow CBUCK regulator to discharge
-	(void)cyhal_system_delay_ms(WLAN_CBUCK_DISCHARGE_MS);
+	cy_rtos_delay_milliseconds(WLAN_CBUCK_DISCHARGE_MS);
 	// WiFi out of reset
 	cyhal_gpio_write(CYBSP_WIFI_WL_REG_ON, true);
-	(void)cyhal_system_delay_ms(WLAN_POWER_UP_DELAY_MS);
+	cy_rtos_delay_milliseconds(WLAN_POWER_UP_DELAY_MS);
 }
 
 
@@ -230,7 +230,7 @@ static cy_rslt_t _cybsp_wifi_sdio_try_send_cmd(cyhal_sdio_t *sdio_object,
 	do {
 		result = cyhal_sdio_send_cmd(sdio_object, direction, command, argument, response);
 		if (result != CY_RSLT_SUCCESS) {
-			cyhal_system_delay_ms(SDIO_RETRY_DELAY_MS);
+			cy_rtos_delay_milliseconds(SDIO_RETRY_DELAY_MS);
 		}
 		loop_count++;
 	} while ((result != CY_RSLT_SUCCESS) && (loop_count <= SDIO_BUS_LEVEL_MAX_RETRIES));
@@ -267,10 +267,12 @@ static cy_rslt_t _cybsp_wifi_sdio_card_init(cyhal_sdio_t *sdio_object)
 	uint32_t response = 0;
 	uint32_t no_argument = 0;
 
+#if 0
 #if !defined(CYHAL_UDB_SDIO)
 	uint32_t argument = 0;
 	uint32_t io_num = 0;
 #endif /* !defined(CYHAL_UDB_SDIO) */
+#endif
 
 	do {
 		// Send CMD0 to set it to idle state
@@ -286,6 +288,7 @@ static cy_rslt_t _cybsp_wifi_sdio_card_init(cyhal_sdio_t *sdio_object)
 				&response /*ignored on UDB-based SDIO*/);
 		}
 
+#if 0
 // UDB-based SDIO does not support io volt switch sequence
 #if !defined(CYHAL_UDB_SDIO)
 		if (result == CY_RSLT_SUCCESS) {
@@ -347,6 +350,7 @@ static cy_rslt_t _cybsp_wifi_sdio_card_init(cyhal_sdio_t *sdio_object)
 			}
 		}
 #endif /* !defined(CYHAL_UDB_SDIO) */
+#endif
 
 		if (CY_RSLT_SUCCESS == result) {
 			// Send CMD3 to get RCA.
@@ -356,7 +360,7 @@ static cy_rslt_t _cybsp_wifi_sdio_card_init(cyhal_sdio_t *sdio_object)
 		}
 
 		if (result != CY_RSLT_SUCCESS) {
-			cyhal_system_delay_ms(SDIO_RETRY_DELAY_MS);
+			cy_rtos_delay_milliseconds(SDIO_RETRY_DELAY_MS);
 		}
 		loop_count++;
 	} while ((result != CY_RSLT_SUCCESS) && (loop_count <= SDIO_ENUMERATION_TRIES));

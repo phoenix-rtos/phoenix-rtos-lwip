@@ -919,6 +919,9 @@ void whd_ioctl_info_to_string(uint32_t cmd, char *ioctl_str, uint16_t ioctl_str_
 	if (cmd == 2) {
 		strncpy(ioctl_str, "WLC_UP", ioctl_str_len);
 	}
+	else if (cmd == 3) {
+		strncpy(ioctl_str, "WLC_DOWN", ioctl_str_len);
+	}
 	else if (cmd == 20) {
 		strncpy(ioctl_str, "WLC_SET_INFRA", ioctl_str_len);
 	}
@@ -927,6 +930,9 @@ void whd_ioctl_info_to_string(uint32_t cmd, char *ioctl_str, uint16_t ioctl_str_
 	}
 	else if (cmd == 26) {
 		strncpy(ioctl_str, "WLC_SET_SSID", ioctl_str_len);
+	}
+	else if (cmd == 30) {
+		strncpy(ioctl_str, "WLC_SET_CHANNEL", ioctl_str_len);
 	}
 	else if (cmd == 52) {
 		strncpy(ioctl_str, "WLC_DISASSOC", ioctl_str_len);
@@ -940,11 +946,17 @@ void whd_ioctl_info_to_string(uint32_t cmd, char *ioctl_str, uint16_t ioctl_str_
 	else if (cmd == 59) {
 		strncpy(ioctl_str, "WLC_SET_ROAM_SCAN_PERIOD", ioctl_str_len);
 	}
+	else if (cmd == 86) {
+		strncpy(ioctl_str, "WLC_SET_PM", ioctl_str_len);
+	}
 	else if (cmd == 110) {
 		strncpy(ioctl_str, "WLC_SET_GMODE", ioctl_str_len);
 	}
 	else if (cmd == 116) {
 		strncpy(ioctl_str, "WLC_SET_SCANSUPPRESS", ioctl_str_len);
+	}
+	else if (cmd == 118) {
+		strncpy(ioctl_str, "WLC_SET_AP", ioctl_str_len);
 	}
 	else if (cmd == 134) {
 		strncpy(ioctl_str, "WLC_SET_WSEC", ioctl_str_len);
