@@ -25,10 +25,10 @@
 #define AT_CONNECT_CMD_TIMEOUT_MS 3000
 
 static const char *at_init_cmds[] = {
-	"ATZ\r\n",                                         /* reset modem */
-	"AT+CFUN=1\r\n",                                   /* full functionality */
-	"AT^SYSCFGEX=\"030201\",3FFFFFFF,0,1,800C5,,\r\n", /* config params: prefer 4G, All bands, roam disabled, Data only, LTE EU */
-	"AT+CGDCONT=1,\"IP\",\"internet\"\r\n",            /* set APN to "internet" */
+	"ATZ\r\n",                                       /* reset modem */
+	"AT+CFUN=1\r\n",                                 /* full functionality */
+	"AT^SYSCFGEX=\"0201\",3FFFFFFF,0,1,800C5,,\r\n", /* config params: prefer UMTS, All bands, roam disabled, Data only */
+	"AT+CGDCONT=1,\"IP\",\"internet\"\r\n",          /* set APN to "internet" */
 	NULL,
 };
 
