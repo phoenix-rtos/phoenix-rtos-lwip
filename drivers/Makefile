@@ -13,7 +13,9 @@ DRIVERS_SRCS_pppou := pppou.c
 DRIVERS_SRCS_tuntap := tuntap.c
 DRIVERS_SRCS_g3plc := g3plc.c
 
+ifeq (${LWIP_G3_BUILD}, yes)
 LIBS := ps_eap ps_g3_sap libtinyaes
+endif
 
 DRIVERS_SRCS += $(foreach driver,$(NET_DRIVERS),$(if $(filter $(driver),$(NET_DRIVERS_SUPPORTED)),\
 	$(DRIVERS_SRCS_$(driver)),\
