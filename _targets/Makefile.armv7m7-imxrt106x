@@ -6,7 +6,11 @@
 # Copyright 2021, 2024 Phoenix Systems
 #
 
-NET_DRIVERS_SUPPORTED := pppou pppos enet g3plc
+NET_DRIVERS_SUPPORTED := pppou pppos enet
+ifeq ($(LWIP_G3_BUILD), yes)
+NET_DRIVERS_SUPPORTED += g3plc
+endif
+
 NET_DRIVERS ?= $(NET_DRIVERS_SUPPORTED)
 PPPOS_MODEM ?= huawei
 
