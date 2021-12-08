@@ -8,8 +8,8 @@
  *
  * %LICENSE%
  */
-#ifndef NET_GPIO_H_
-#define NET_GPIO_H_
+#ifndef _LWIP_PHOENIX_GPIO_H_
+#define _LWIP_PHOENIX_GPIO_H_
 
 #include <sys/types.h>
 #include <stdint.h>
@@ -47,4 +47,5 @@ static inline int gpio_valid(gpio_info_t *gp)
 
 int imx6ull_gpio_config(const char *name, uint32_t mask, unsigned flags);
 
-#endif /* NET_GPIO_H_ */
+
+#endif

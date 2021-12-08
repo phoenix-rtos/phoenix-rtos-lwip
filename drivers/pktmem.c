@@ -8,25 +8,23 @@
  *
  * %LICENSE%
  */
-#include "physmmap.h"
-#include "pktmem.h"
-#include "lwip/mem.h"
-#include "lwip/pbuf.h"
-#include "lwip/sys.h"
 
+#include <limits.h>
 #include <stdio.h>
 #include <string.h>
+#include <lwip/mem.h>
+#include <lwip/sys.h>
+#include "pktmem.h"
+#include "physmmap.h"
 
 
 #define CACHE_LINE_SIZE 64
-#define PAGE_SIZE 4096
-
-#define TRUE_LRU 0
+#define TRUE_LRU        0
 
 
-#define PKT_BUF_SIZE (2048 - CACHE_LINE_SIZE)
-#define PKT_BUF_CNT	(size_t)((PAGE_SIZE - CACHE_LINE_SIZE) / PKT_BUF_SIZE)
-#define PKT_BUF_IDX	11	// log2(PAGE_SIZE) - ceil(log2(PKT_BUF_CNT))
+#define PKT_BUF_SIZE       (2048 - CACHE_LINE_SIZE)
+#define PKT_BUF_CNT        (size_t)((PAGE_SIZE - CACHE_LINE_SIZE) / PKT_BUF_SIZE)
+#define PKT_BUF_IDX        11 // log2(PAGE_SIZE) - ceil(log2(PKT_BUF_CNT))
 #define PKT_BUF_CACHE_SIZE 16
 
 

@@ -8,17 +8,18 @@
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
-#ifndef PHOENIX_NETIF_H_
-#define PHOENIX_NETIF_H_
 
+#ifndef _LWIP_PHOENIX_NETIF_H_
+#define _LWIP_PHOENIX_NETIF_H_
 
-#include <lwip/netif.h>
 #include <lwip/dhcp.h>
+#include <lwip/netif.h>
 
 
 #define netif_is_ppp(_netif) (((_netif)->name[0] == 'p') && ((_netif)->name[1] == 'p'))
 #define netif_is_tun(_netif) (((_netif)->name[0] == 't') && ((_netif)->name[1] == 'u'))
 #define netif_is_eth(_netif) (((_netif)->name[0] == 'e') && ((_netif)->name[1] == 'n'))
+
 
 #if LWIP_DHCP
 static inline int netif_is_dhcp(struct netif *netif)

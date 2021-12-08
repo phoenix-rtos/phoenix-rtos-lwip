@@ -8,12 +8,11 @@
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
-#ifndef PHOENIX_NETIF_DRIVER_H_
-#define PHOENIX_NETIF_DRIVER_H_
+#ifndef _LWIP_PHOENIX_NETIF_DRIVER_H_
+#define _LWIP_PHOENIX_NETIF_DRIVER_H_
 
-
-#include "lwip/netif.h"
 #include <stdint.h>
+#include <lwip/netif.h>
 
 
 enum {
@@ -63,4 +62,4 @@ int mdio_lock_bus(unsigned bus);
 void mdio_unlock_bus(unsigned bus);
 
 
-#endif /* PHOENIX_NETIF_DRIVER_H_ */
+#endif

@@ -9,14 +9,14 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef PHOENIX_ROUTE_H_
-#define PHOENIX_ROUTE_H_
+#ifndef _LWIP_PHOENIX_ROUTE_H_
+#define _LWIP_PHOENIX_ROUTE_H_
 
-#include <sys/list.h>
-#include <net/route.h>
-
-#include <lwip/netif.h>
 #include <lwip/ip4_addr.h>
+#include <lwip/netif.h>
+#include <net/route.h>
+#include <sys/list.h>
+#include <sys/types.h>
 
 
 typedef struct _rt_entry {
@@ -56,4 +56,4 @@ ip4_addr_t *route_get_gw(struct netif *netif, const ip4_addr_t *dest);
 struct netif *route_find(const ip4_addr_t *dest);
 
 
-#endif /* PHOENIX_ROUTE_H_ */
+#endif

@@ -9,8 +9,8 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef PHOENIX_FILTER_API_H_
-#define PHOENIX_FILTER_API_H_
+#ifndef _LWIP_PHOENIX_FILTER_API_H_
+#define _LWIP_PHOENIX_FILTER_API_H_
 
 
 enum { pfin = 1, pfout = 2 };
@@ -49,5 +49,6 @@ typedef struct pfrule_array_s {
 	size_t len;
 	pfrule_t array[];
 } pfrule_array_t;
+
 
 #endif

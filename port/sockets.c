@@ -9,33 +9,21 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#include <sys/ioctl.h>
-
-#define ifreq lwip_ifreq
-#include <lwip/netdb.h>
-#include <lwip/sockets.h>
-#include <lwip/sys.h>
-#include <lwip/netif.h>
-#include <lwip/netifapi.h>
-#include <lwip/dhcp.h>
-#include <lwip/prot/dhcp.h>
-#undef ifreq
-#undef IFNAMSIZ
-
 #include <errno.h>
+#include <ifaddrs.h>
 #include <poll.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/file.h>
-#include <sys/sockport.h>
-#include <sys/sockios.h>
+#include <lwip/netdb.h>
+#include <lwip/netifapi.h>
 #include <net/if.h>
-#include <net/route.h>
 #include <net/if_arp.h>
+#include <sys/file.h>
+#include <sys/ioctl.h>
 #include <sys/threads.h>
 #include <posix/utils.h>
-#include <ifaddrs.h>
+#include <phoenix/posix/sockport.h>
 
 #if LWIP_IPV6
 #include <net/if6.h>
@@ -106,27 +94,6 @@ static int poll_one(struct poll_state *p, int events, time_t timeout)
 }
 
 
-static const struct sockaddr *sa_convert_lwip_to_sys(const void *sa)
-{
-	// hack warning
-	*(uint16_t *)sa = ((uint8_t *)sa)[1];
-	return sa;
-}
-
-
-static const struct sockaddr *sa_convert_sys_to_lwip(const void *sa, socklen_t salen)
-{
-	uint16_t fam = *(volatile uint16_t *)sa;
-	struct sockaddr *lsa = (void *)sa;
-
-	if (fam != AF_PACKET) {
-		lsa->sa_len = (uint8_t)salen;
-		lsa->sa_family = (sa_family_t)fam;
-	}
-
-	return lsa;
-}
-
 #if LWIP_IPV6
 
 /*
@@ -189,7 +156,6 @@ static int socket_ioctl6(int sock, unsigned long request, const void *in_data, v
 			return -ENXIO;
 		}
 
-		sin6 = (struct sockaddr_in6 *) sa_convert_sys_to_lwip(sin6, sizeof(struct sockaddr_in6));
 		if (sin6->sin6_family != AF_INET6) {
 			return -EINVAL;
 		}
@@ -227,7 +193,6 @@ static int socket_ioctl6(int sock, unsigned long request, const void *in_data, v
 			return -ENXIO;
 		}
 
-		sin6 = (struct sockaddr_in6 *) sa_convert_sys_to_lwip(sin6, sizeof(struct sockaddr_in6));
 		if (sin6->sin6_family != AF_INET6) {
 			return -EINVAL;
 		}
@@ -254,7 +219,6 @@ static int socket_ioctl6(int sock, unsigned long request, const void *in_data, v
 			return -ENXIO;
 		}
 
-		sin6 = (struct sockaddr_in6 *) sa_convert_sys_to_lwip(sin6, sizeof(struct sockaddr_in6));
 		if (sin6->sin6_family != AF_INET6) {
 			return -EINVAL;
 		}
@@ -488,11 +452,9 @@ static int socket_ioctl(int sock, unsigned long request, const void* in_data, vo
 			ifreq->ifr_hwaddr.sa_family = -1;
 		} else {
 			ifreq->ifr_hwaddr.sa_family = ARPHRD_ETHER;
-			ifreq->ifr_hwaddr.sa_len = interface->hwaddr_len;
 			memcpy(ifreq->ifr_hwaddr.sa_data, interface->hwaddr, interface->hwaddr_len);
 		}
 
-		sa_convert_lwip_to_sys(&ifreq->ifr_hwaddr);
 		return EOK;
 	}
 
@@ -665,10 +627,10 @@ static int socket_op(msg_t *msg, int sock)
 
 	switch (msg->type) {
 	case sockmConnect:
-		smo->ret = map_errno(lwip_connect(sock, sa_convert_sys_to_lwip(smi->send.addr, smi->send.addrlen), smi->send.addrlen));
+		smo->ret = map_errno(lwip_connect(sock, (const struct sockaddr *)smi->send.addr, smi->send.addrlen));
 		break;
 	case sockmBind:
-		smo->ret = map_errno(lwip_bind(sock, sa_convert_sys_to_lwip(smi->send.addr, smi->send.addrlen), smi->send.addrlen));
+		smo->ret = map_errno(lwip_bind(sock, (const struct sockaddr *)smi->send.addr, smi->send.addrlen));
 		break;
 	case sockmListen:
 		smo->ret = map_errno(lwip_listen(sock, smi->listen.backlog));
@@ -676,7 +638,6 @@ static int socket_op(msg_t *msg, int sock)
 	case sockmAccept:
 		err = lwip_accept(sock, (void *)smo->sockname.addr, &salen);
 		if (err >= 0) {
-			sa_convert_lwip_to_sys(smo->sockname.addr);
 			smo->sockname.addrlen = salen;
 			err = wrap_socket(&new_port, err, smi->send.flags);
 			smo->ret = err < 0 ? err : new_port;
@@ -686,24 +647,18 @@ static int socket_op(msg_t *msg, int sock)
 		break;
 	case sockmSend:
 		smo->ret = map_errno(lwip_sendto(sock, msg->i.data, msg->i.size, smi->send.flags,
-			smi->send.addrlen == 0 ? NULL : sa_convert_sys_to_lwip(smi->send.addr, smi->send.addrlen), smi->send.addrlen));
+			smi->send.addrlen == 0 ? NULL : (const struct sockaddr *)smi->send.addr, smi->send.addrlen));
 		break;
 	case sockmRecv:
 		smo->ret = map_errno(lwip_recvfrom(sock, msg->o.data, msg->o.size, smi->send.flags, (void *)smo->sockname.addr, &salen));
-		if (smo->ret >= 0)
-			sa_convert_lwip_to_sys(smo->sockname.addr);
 		smo->sockname.addrlen = salen;
 		break;
 	case sockmGetSockName:
 		smo->ret = map_errno(lwip_getsockname(sock, (void *)smo->sockname.addr, &salen));
-		if (smo->ret >= 0)
-			sa_convert_lwip_to_sys(smo->sockname.addr);
 		smo->sockname.addrlen = salen;
 		break;
 	case sockmGetPeerName:
 		smo->ret = map_errno(lwip_getpeername(sock, (void *)smo->sockname.addr, &salen));
-		if (smo->ret >= 0)
-			sa_convert_lwip_to_sys(smo->sockname.addr);
 		smo->sockname.addrlen = salen;
 		break;
 	case sockmGetFl:
@@ -885,7 +840,6 @@ static int do_getaddrinfo(const char *name, const char *serv, const struct addri
 
 		if ((dest->ai_addrlen = ai->ai_addrlen)) {
 			memcpy(addrdest, ai->ai_addr, ai->ai_addrlen);
-			sa_convert_lwip_to_sys(addrdest);
 			dest->ai_addr = (void *)(addrdest - buf);
 			addrdest += (ai->ai_addrlen + sizeof(size_t) - 1) & ~(sizeof(size_t) - 1);
 		}
@@ -959,20 +913,19 @@ static int do_getifaddrs(char *buf, size_t *buflen)
 	NETIF_FOREACH(netif) {
 		dest->ifa_flags = netif->flags;
 		sin->sin_family = AF_INET;
-		sin->sin_len = sizeof(struct sockaddr_in);
 
 		inet_addr_from_ip4addr(&sin->sin_addr, netif_ip4_addr(netif));
-		memcpy(addrdest, sin, sin->sin_len);
+		memcpy(addrdest, sin, sizeof(struct sockaddr_in));
 		dest->ifa_addr = (struct sockaddr *)(addrdest - buf);
 		addrdest += sizeof(struct sockaddr_in);
 
 		inet_addr_from_ip4addr(&sin->sin_addr, netif_ip4_gw(netif));
-		memcpy(addrdest, sin, sin->sin_len);
+		memcpy(addrdest, sin, sizeof(struct sockaddr_in));
 		dest->ifa_dstaddr = (struct sockaddr *)(addrdest - buf);
 		addrdest += sizeof(struct sockaddr_in);
 
 		inet_addr_from_ip4addr(&sin->sin_addr, netif_ip4_netmask(netif));
-		memcpy(addrdest, sin, sin->sin_len);
+		memcpy(addrdest, sin, sizeof(struct sockaddr_in));
 		dest->ifa_netmask = (struct sockaddr *)(addrdest - buf);
 		addrdest += sizeof(struct sockaddr_in);
 
@@ -985,16 +938,15 @@ static int do_getifaddrs(char *buf, size_t *buflen)
 				dest->ifa_next = (struct ifaddrs *)((char *)(dest + 1) - buf);
 				++dest;
 				sin6->sin6_family = AF_INET6;
-				sin6->sin6_len = sizeof(struct sockaddr_in6);
 				sin6->sin6_scope_id = ip6_addr_zone(netif_ip6_addr(netif, i));
 				inet6_addr_from_ip6addr(&sin6->sin6_addr, netif_ip6_addr(netif, i));
-				memcpy(addrdest, sin6, sin6->sin6_len);
+				memcpy(addrdest, sin6, sizeof(struct sockaddr_in6));
 				dest->ifa_addr = (struct sockaddr *)(addrdest - buf);
 				addrdest += sizeof(struct sockaddr_in6);
 
 				sin6->sin6_scope_id = 0;
 				inet6_addr_netmask_from_ip6addr(&sin6->sin6_addr, netif_ip6_addr(netif, i));
-				memcpy(addrdest, sin6, sin6->sin6_len);
+				memcpy(addrdest, sin6, sizeof(struct sockaddr_in6));
 				dest->ifa_netmask = (struct sockaddr *)(addrdest - buf);
 				addrdest += sizeof(struct sockaddr_in6);
 
@@ -1047,7 +999,7 @@ static void socketsrv_thread(void *arg)
 				break;
 			}
 
-			smo->ret = do_getnameinfo(sa_convert_sys_to_lwip(smi->send.addr, smi->send.addrlen), smi->send.addrlen, msg.o.data, sz, msg.o.data + sz, msg.o.size - sz, smi->send.flags);
+			smo->ret = do_getnameinfo((const struct sockaddr *)smi->send.addr, smi->send.addrlen, msg.o.data, sz, msg.o.data + sz, msg.o.size - sz, smi->send.flags);
 			smo->sys.err = smo->ret == EAI_SYSTEM ? errno : 0;
 			smo->nameinfo.hostlen = sz > 0 ? strlen(msg.o.data) + 1  : 0;
 			smo->nameinfo.servlen = msg.o.size - sz > 0 ? strlen(msg.o.data + sz) + 1 : 0;

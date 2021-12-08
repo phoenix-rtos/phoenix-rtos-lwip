@@ -8,8 +8,8 @@
  *
  * %LICENSE%
  */
-#ifndef PHOENIX_NET_BDRING_H_
-#define PHOENIX_NET_BDRING_H_
+#ifndef _LWIP_PHOENIX_BDRING_H_
+#define _LWIP_PHOENIX_BDRING_H_
 
 #include <sys/types.h>
 #include <stdatomic.h>

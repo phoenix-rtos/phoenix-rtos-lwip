@@ -1,5 +1,5 @@
-#ifndef _LIBTTY_FIFO_H
-#define _LIBTTY_FIFO_H
+#ifndef _LWIP_PHOENIX_FIFO_H_
+#define _LWIP_PHOENIX_FIFO_H_
 
 typedef struct fifo_s fifo_t;
 
@@ -84,4 +84,4 @@ static inline void *fifo_peek_front(fifo_t *f)
 }
 
 
-#endif // _LIBTTY_FIFO_H
+#endif

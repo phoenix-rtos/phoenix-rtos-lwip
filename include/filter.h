@@ -9,12 +9,11 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef PHOENIX_FILTER_H_
-#define PHOENIX_FILTER_H_
+#ifndef _LWIP_PHOENIX_FILTER_H_
+#define _LWIP_PHOENIX_FILTER_H_
 
-
+#include <lwip/ip.h>
 #include "filter-api.h"
-#include "lwip/ip.h"
 
 
 int pf_filterIn(struct pbuf *pbuf, struct netif *netif);

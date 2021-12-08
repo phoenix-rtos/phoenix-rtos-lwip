@@ -8,8 +8,8 @@
  *
  * %LICENSE%
  */
-#ifndef NET_EPHY_H_
-#define NET_EPHY_H_
+#ifndef _LWIP_PHOENIX_EPHY_H_
+#define _LWIP_PHOENIX_EPHY_H_
 
 #include "gpio.h"
 

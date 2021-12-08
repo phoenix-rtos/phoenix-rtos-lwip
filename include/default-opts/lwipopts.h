@@ -1,10 +1,26 @@
-#define LWIP_TCPIP_CORE_LOCKING 1
-#define LWIP_SUPPORT_CUSTOM_PBUF 1
-#define LWIP_NETIF_LOOPBACK 1
-#define LWIP_HAVE_SLIPIF 0
-#define LWIP_NETIF_API 1
-#define LWIP_SOCKET 1
+#define LWIP_SOCKET                  1
+/* Settings required for <sys/socket.h> header usage. DO NOT CHANGE */
+
+#define LWIP_SOCKET_EXTERNAL_HEADERS 1
+#define LWIP_SOCKET_EXTERNAL_HEADER_INET_H <arpa/inet.h>
+#define LWIP_SOCKET_EXTERNAL_HEADER_SOCKETS_H <sys/socket.h>
+
 #define LWIP_COMPAT_SOCKETS 0
+#define LWIP_DNS_API_DEFINE_ERRORS   0
+#define LWIP_DNS_API_DEFINE_FLAGS    0
+#define LWIP_DNS_API_DECLARE_STRUCTS 0
+#define LWIP_DNS_API_DECLARE_H_ERRNO 0
+
+
+
+/* Other settings */
+#define LWIP_TCPIP_CORE_LOCKING  1
+#define LWIP_SUPPORT_CUSTOM_PBUF 1
+#define LWIP_NETIF_LOOPBACK      1
+#define LWIP_HAVE_SLIPIF         0
+#define LWIP_NETIF_API           1
+
+
 #define LWIP_ARP 1
 #define LWIP_ICMP 1
 #define LWIP_RAW 1
@@ -17,10 +33,6 @@
 #define MEM_LIBC_MALLOC 1
 #define MEMP_MEM_MALLOC 1
 #define LWIP_ERRNO_INCLUDE "errno.h"
-#define LWIP_DNS_API_DEFINE_ERRORS 0
-#define LWIP_DNS_API_DEFINE_FLAGS 0
-#define LWIP_DNS_API_DECLARE_STRUCTS 0
-#define LWIP_DNS_API_DECLARE_H_ERRNO 0
 #define MEMP_NUM_NETCONN 1024
 #define PPP_SUPPORT 1
 #define PPPOS_SUPPORT 1
@@ -66,4 +78,3 @@
 #define LWIP_DHCP_AUTOIP_COOP 1
 #define LWIP_DHCP_AUTOIP_COOP_TRIES 3
 #define LWIP_SO_RCVTIMEO 1
-#define ifreq lwip_ifreq

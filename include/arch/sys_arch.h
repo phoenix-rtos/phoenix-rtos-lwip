@@ -8,13 +8,11 @@
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
-#ifndef PHOENIX_LWIP_SYS_ARCH_H_
-#define PHOENIX_LWIP_SYS_ARCH_H_
+#ifndef _LWIP_PHOENIX_SYS_ARCH_H_
+#define _LWIP_PHOENIX_SYS_ARCH_H_
 
-
-#include <sys/threads.h>
-#include <stdint.h>
 #include <time.h>
+#include <sys/threads.h>
 
 
 struct sys_mbox_s
@@ -49,12 +47,13 @@ typedef struct sys_mbox_s sys_mbox_t;
 void sys_arch_global_lock(void);
 void sys_arch_global_unlock(void);
 
+
 #define SYS_ARCH_DECL_PROTECT(lev)
-#define SYS_ARCH_PROTECT(lev)	sys_arch_global_lock();
-#define SYS_ARCH_UNPROTECT(lev)	sys_arch_global_unlock();
+#define SYS_ARCH_PROTECT(lev)   sys_arch_global_lock();
+#define SYS_ARCH_UNPROTECT(lev) sys_arch_global_unlock();
 
 
 int sys_thread_opt_new(const char *name, void (* thread)(void *arg), void *arg, int stacksize, int prio, handle_t *id);
 
 
-#endif /* PHOENIX_LWIP_SYS_ARCH_H_ */
+#endif

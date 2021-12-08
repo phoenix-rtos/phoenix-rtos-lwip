@@ -9,14 +9,16 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef PHOENIX_HOOKS_H_
-#define PHOENIX_HOOKS_H_
+#ifndef _LWIP_PHOENIX_HOOKS_H_
+#define _LWIP_PHOENIX_HOOKS_H_
 
-#include <lwip/sockets.h>
 #include <lwipopts.h>
-#include "route.h"
+#include <lwip/sockets.h>
+
 #include "filter.h"
 #include "netpacket.h"
+#include "route.h"
+
 
 #define LWIP_HOOK_ETHARP_GET_GW(netif, dest) route_get_gw(netif, dest)
 #define LWIP_HOOK_IP4_ROUTE(dest) route_find(dest)
@@ -35,4 +37,5 @@
 #define LWIP_HOOK_NETPACKET_LINKOUTPUT(netif, p)                   netpacket_linkoutput(netif, p)
 #endif
 
-#endif /* PHOENIX_HOOKS_H_ */
+
+#endif

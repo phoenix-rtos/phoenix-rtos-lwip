@@ -8,13 +8,12 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#ifndef PHOENIX_NETPACKET_H_
-#define PHOENIX_NETPACKET_H_
+#ifndef _LWIP_PHOENIX_NETPACKET_H_
+#define _LWIP_PHOENIX_NETPACKET_H_
 
 #include "lwip/opt.h"
 
 #if LWIP_NETPACKET
-
 #include "lwip/netifapi.h"
 
 #include <netpacket/packet.h>
@@ -34,7 +33,7 @@ err_t netpacket_send(struct netpacket_pcb *pcb, struct pbuf *p);
 err_t netpacket_sendto(struct netpacket_pcb *pcb, struct pbuf *p, u8_t *dst_addr, u8_t dst_addr_len);
 int netpacket_input(struct pbuf *p, struct netif *netif);
 void netpacket_linkoutput(struct netif *netif, struct pbuf *p);
+#endif
 
-#endif /* LWIP_NETPACKET */
 
-#endif /* PHOENIX_NETPACKET_H_ */
+#endif

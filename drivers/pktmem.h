@@ -8,17 +8,18 @@
  *
  * %LICENSE%
  */
-#ifndef NET_PKTMEM_H_
-#define NET_PKTMEM_H_
+#ifndef _LWIP_PHOENIX_PKTMEM_H_
+#define _LWIP_PHOENIX_PKTMEM_H_
 
 #include <stdint.h>
+#include <lwip/pbuf.h>
+#include <sys/types.h>
 
 
-struct pbuf;
+extern struct pbuf *net_allocDMAPbuf(addr_t *pa, size_t sz);
 
 
-struct pbuf *net_allocDMAPbuf(addr_t *pa, size_t sz);
-struct pbuf *net_makeDMAPbuf(struct pbuf *p);
+extern struct pbuf *net_makeDMAPbuf(struct pbuf *p);
 
 
-#endif /* NET_PKTMEM_H_ */
+#endif
