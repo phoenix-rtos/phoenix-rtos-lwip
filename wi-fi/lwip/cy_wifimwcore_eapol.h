@@ -54,7 +54,7 @@ extern "C" {
 */
 
 /**
- * EAPOL packet handler function pointer type; On recieving EAPOL data, WHD will send the data to WiFi Middleware Core.
+ * EAPOL packet handler function pointer type; On receiving EAPOL data, WHD will send the data to WiFi Middleware Core.
  * The buffer should be freed by EAPOL handler.
  *
  * @param[in] interface  WHD interface.
@@ -70,7 +70,7 @@ typedef void (*cy_wifimwcore_eapol_packet_handler_t)(whd_interface_t whd_iface, 
  * then it will be directly redirected to registered callback. passing "NULL"
  * as handler will de-register the previously registered callback
  *
- * @param[in] eapol_packet_handler : Callback function to be invoked when eapol packets are recieved from WHD.
+ * @param[in] eapol_packet_handler : Callback function to be invoked when eapol packets are received from WHD.
  *
  * @return CY_RSLT_SUCCESS if the registration was successful; returns [WiFi middleware specific error codes](./cy_lwip_error.h) otherwise.
  *

@@ -3113,7 +3113,7 @@ uint32_t whd_wifi_get_clm_version(whd_interface_t ifp, char *version, uint8_t le
 
 		version_length = strlen(version);
 
-		/* -2 becase \0 termination needs a char and strlen doesn't include length of \0 */
+		/* -2 because \0 termination needs a char and strlen doesn't include length of \0 */
 		if (version_length > length - 2)
 			version_length = length - 2;
 		version[version_length + 1] = '\0';
@@ -3514,7 +3514,7 @@ whd_result_t whd_arp_stats_get(whd_interface_t ifp, whd_arp_stats_t *arp_stats)
 		return WHD_BADARG;
 	}
 
-	/* set up the buffer to retreive the data */
+	/* set up the buffer to retrieve the data */
 	memcpy(&arp_stats_test, arp_stats, sizeof(whd_arp_stats_t));
 	memset(arp_stats, 0xFF, sizeof(whd_arp_stats_t));
 
@@ -3850,7 +3850,7 @@ whd_tko_param(whd_interface_t ifp, whd_tko_retry_t *whd_retry, uint8_t set)
 		}
 	}
 	else {
-		/* GET paramters */
+		/* GET parameters */
 		wl_tko_param_t tko_param_real;
 
 		result = whd_cdc_send_iovar(ifp, CDC_GET, buffer, &response);

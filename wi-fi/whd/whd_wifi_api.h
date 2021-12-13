@@ -311,7 +311,7 @@ extern uint32_t whd_wifi_join(whd_interface_t ifp, const whd_ssid_t *ssid, whd_s
  *
  *  @param   ifp           Pointer to handle instance of whd interface
  *  @param   ap            A pointer to a whd_scan_result_t structure containing AP details and
- *                         set ap.channel to 0 for unspecificed channel
+ *                         set ap.channel to 0 for unspecified channel
  *  @param   security_key  A byte array containing either the cleartext security key for WPA/WPA2
  *                         secured networks
  *  @param   key_length    The length of the security_key in bytes.
@@ -502,7 +502,7 @@ extern uint32_t whd_wifi_init_ap(whd_interface_t ifp, whd_ssid_t *ssid, whd_secu
 	const uint8_t *security_key, uint8_t key_length, uint8_t channel);
 
 /** Start the infrastructure WiFi network (SoftAP)
- *  using the parameter set by whd_wifi_init_ap() and optionaly by whd_wifi_manage_custom_ie()
+ *  using the parameter set by whd_wifi_init_ap() and optionally by whd_wifi_manage_custom_ie()
  *
  *  @return  WHD_SUCCESS   if successfully creates an AP
  *           Error code    if an error occurred
@@ -1107,8 +1107,8 @@ extern uint32_t whd_wifi_get_ioctl_buffer(whd_interface_t ifp, uint32_t ioctl, u
  *
  *  @param  ifp           Pointer to handle instance of whd interface
  *  @param  iovar_name    SDPCM_GET - To get the I/O Variable
- *  @param  param         Paramater to be passed for the IOVAR
- *  @param  paramlen      Paramter length
+ *  @param  param         Parameter to be passed for the IOVAR
+ *  @param  paramlen      Parameter length
  *  @param  out_buffer    Pointer to receive the handle for the packet buffer containing the response data value received
  *  @param  out_length    Length of out_buffer
  *
@@ -1184,7 +1184,7 @@ extern uint32_t whd_network_get_ifidx_from_ifp(whd_interface_t ifp, uint8_t *ifi
 extern uint32_t whd_network_get_bsscfgidx_from_ifp(whd_interface_t ifp, uint8_t *bsscfgidx);
 
 
-/** Retrives the bss info
+/** Retrieves the bss info
  *
  *  @param  ifp                  Pointer to handle instance of whd interface
  *  @param  bi                   A pointer to the structure wl_bss_info_t

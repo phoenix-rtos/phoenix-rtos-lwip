@@ -189,7 +189,7 @@ cy_rslt_t cyhal_spi_write(cyhal_spi_t *obj, uint32_t value);
  * @param[in] tx            Pointer to the byte-array of data to write to the device
  * @param[in,out] tx_length Number of bytes to write, updated with the number actually written
  * @param[out] rx           Pointer to the byte-array of data to read from the device
- * @param[in,out] rx_length Number of bytes to read, udpated with the number actually read
+ * @param[in,out] rx_length Number of bytes to read, updated with the number actually read
  * @param[in] write_fill    Default data transmitted while performing a read
  * @return The status of the transfer request
  * @note Both MOSI and MISO pins required to be non-NC for this API to operate

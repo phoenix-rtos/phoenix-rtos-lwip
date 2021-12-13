@@ -143,7 +143,7 @@ typedef struct
 	uint8_t hops;                     /* gateway hops */
 	uint32_t transaction_id;          /* transaction ID */
 	uint16_t second_elapsed;          /* seconds since boot began */
-	uint16_t flags;                   /* DCHP flags, reserved for future */
+	uint16_t flags;                   /* DHCP flags, reserved for future */
 	uint8_t client_ip_addr[4];        /* client IP address */
 	uint8_t your_ip_addr[4];          /* 'your' IP address */
 	uint8_t server_ip_addr[4];        /* server IP address */
@@ -682,7 +682,7 @@ uint8_t unsigned_to_decimal_string(uint32_t value, char *output, uint8_t min_len
  *
  *  @note: String is 16 bytes including terminating null
  *
- * @param[out] buffer       : Buffer which will recieve the IPv4 string
+ * @param[out] buffer       : Buffer which will receive the IPv4 string
  * @param[in]  ipv4_address : IPv4 address to convert
  */
 static void ipv4_to_string(char buffer[16], uint32_t ipv4_address)
