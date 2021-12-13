@@ -86,7 +86,7 @@ extern "C" {
 /** The RTOS could not allocate memory for the specified operation */
 #define CY_RTOS_NO_MEMORY \
 	CY_RSLT_CREATE(CY_RSLT_TYPE_ERROR, CY_RSLT_MODULE_ABSTRACTION_OS, 1)
-/** An error occured in the RTOS */
+/** An error occurred in the RTOS */
 #define CY_RTOS_GENERAL_ERROR \
 	CY_RSLT_CREATE(CY_RSLT_TYPE_ERROR, CY_RSLT_MODULE_ABSTRACTION_OS, 2)
 /** A bad argument was passed into the APIs */
@@ -341,7 +341,7 @@ cy_rslt_t cy_rtos_set_mutex(cy_mutex_t *mutex);
 
 /** Deletes a mutex.
  *
- * This function frees the resources associated with a sempahore.
+ * This function frees the resources associated with a semaphore.
  *
  * @param[in] mutex Pointer to the mutex handle
  *

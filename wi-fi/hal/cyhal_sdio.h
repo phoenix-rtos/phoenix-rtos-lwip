@@ -63,7 +63,7 @@ extern "C" {
 #define CYHAL_SDIO_RET_DAT_CRC_ERROR   (0x10) /**< There was a data CRC Error*/
 #define CYHAL_SDIO_RET_CMD_TIMEOUT     (0x20) /**< The command didn't finish before the timeout period was over*/
 #define CYHAL_SDIO_RET_DAT_TIMEOUT     (0x40) /**< The data didn't finish before the timeout period was over*/
-#define CYHAL_SDIO_RET_RESP_FLAG_ERROR (0x80) /**< There was an error in the resposne flag for command 53*/
+#define CYHAL_SDIO_RET_RESP_FLAG_ERROR (0x80) /**< There was an error in the response flag for command 53*/
 
 #define CYHAL_SDIO_CLOCK_ERROR        (0x100) /**< Failed to initial clock for SDIO */
 #define CYHAL_SDIO_BAD_ARGUMENT       (0x200) /**< Bad argument passed for SDIO */

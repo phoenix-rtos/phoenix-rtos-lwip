@@ -85,7 +85,7 @@ int errno;
 #ifndef AUTO_IP_ADDRESS_RESOLUTION_TIMEOUT_IN_MS
 #define AUTO_IP_ADDRESS_RESOLUTION_TIMEOUT_IN_MS (60000 * 10)
 #endif
-#define DCHP_RENEWAL_DELAY_IN_MS (100)
+#define DHCP_RENEWAL_DELAY_IN_MS (100)
 #define DHCP_STOP_DELAY_IN_MS    (400)
 
 #define MAX_NW_INTERFACE (2)
@@ -639,7 +639,7 @@ cy_rslt_t cy_lwip_network_up(cy_lwip_nw_interface_t *iface)
 				}
 
 				if (timeout_occurred) {
-					wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "Unable to obtain IP address via DCHP and AutoIP\n");
+					wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "Unable to obtain IP address via DHCP and AutoIP\n");
 
 					/*
                      * If LPA is enabled, invoke activity callback to resume the network stack,
@@ -818,7 +818,7 @@ cy_rslt_t cy_lwip_dhcp_renew(cy_lwip_nw_interface_t *iface)
 	/* DHCP renewal*/
 	netifapi_netif_common(IP_HANDLE(iface->role), (netifapi_void_fn)dhcp_renew, NULL);
 
-	cy_rtos_delay_milliseconds(DCHP_RENEWAL_DELAY_IN_MS);
+	cy_rtos_delay_milliseconds(DHCP_RENEWAL_DELAY_IN_MS);
 	return CY_RSLT_SUCCESS;
 }
 

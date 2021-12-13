@@ -157,7 +157,7 @@ extern "C" {
 #endif  // (CY_SDIO_BUS_USE_OOB_INTR != 0)
 // *RESUME-FORMATTING*
 
-// Add compatability for HAL 1.x
+// Add compatibility for HAL 1.x
 #if !defined(CYHAL_API_VERSION)
 typedef cyhal_transfer_t cyhal_sdio_transfer_type_t;
 #define CYHAL_SDIO_XFER_TYPE_READ  CYHAL_READ

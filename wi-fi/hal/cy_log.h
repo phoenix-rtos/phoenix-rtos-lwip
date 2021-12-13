@@ -56,7 +56,7 @@
  *  }
  *
  *
- *  Log time callback - get the current time for the log message timestamp in millseconds
+ *  Log time callback - get the current time for the log message timestamp in milliseconds
  *
  *  cy_rslt_t app_log_time(uint32_t* time)
  *  {

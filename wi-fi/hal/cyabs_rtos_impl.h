@@ -41,7 +41,7 @@ extern "C" {
  * \{
  * The following defines and types have values that are specific to each RTOS port.
  * The define values are specific to each RTOS. The types are simple aliases that
- * wrap RTOS specifc types. Code cannot assume anything about the values or internals
+ * wrap RTOS specific types. Code cannot assume anything about the values or internals
  * of any types.
  */
 
@@ -65,7 +65,7 @@ extern "C" {
  * MAX >= REALTIME >= HIGH >= ABOVENORMAL >= NORMAL >= BELOWNORMAL >= LOW >= MIN
  */
 typedef enum {
-	CY_RTOS_PRIORITY_MIN = 0,         /**< Minumum allowable Thread priority */
+	CY_RTOS_PRIORITY_MIN = 0,         /**< Minimum allowable Thread priority */
 	CY_RTOS_PRIORITY_LOW = 1,         /**< A low priority Thread */
 	CY_RTOS_PRIORITY_BELOWNORMAL = 2, /**< A slightly below normal Thread priority */
 	CY_RTOS_PRIORITY_NORMAL = 3,      /**< The normal Thread priority */
