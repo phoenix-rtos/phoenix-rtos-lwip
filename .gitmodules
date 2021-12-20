@@ -4,4 +4,4 @@
 	branch = STABLE-2_1_x_phoenix
 [submodule "contrib-lwip"]
 	path = contrib-lwip
-	url = https://git.savannah.nongnu.org/git/lwip/lwip-contrib.git
+	url = https://github.com/damianloew/contrib-lwip
