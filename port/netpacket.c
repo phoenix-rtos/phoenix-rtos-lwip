@@ -242,15 +242,27 @@ void netpacket_linkoutput(struct netif *netif, struct pbuf *p)
 		SMEMCPY(&src_addr, netif->hwaddr, sizeof(struct eth_addr));
 
 		if (pcb->type == SOCK_DGRAM) {
-			/* remove ethernet header from pbuf */
-			pbuf_header(p, -(s16_t)sizeof(struct eth_hdr));
+			/* remove ethernet header */
+			pbuf_remove_header(p, sizeof(struct eth_hdr));
+		}
+		else {
+#if ETH_PAD_SIZE
+			/* remove ethernet header padding */
+			pbuf_remove_header(p, ETH_PAD_SIZE);
+#endif
 		}
 
 		netpacket_recv(pcb, p, &src_addr);
 
 		if (pcb->type == SOCK_DGRAM) {
-			/* restore ethernet header to pbuf */
-			pbuf_header(p, sizeof(struct eth_hdr));
+			/* restore ethernet header */
+			pbuf_add_header_force(p, sizeof(struct eth_hdr));
+		}
+		else {
+#if ETH_PAD_SIZE
+			/* restore ethernet header padding */
+			pbuf_add_header_force(p, ETH_PAD_SIZE);
+#endif
 		}
 	}
 }
