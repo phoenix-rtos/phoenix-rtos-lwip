@@ -16,6 +16,7 @@
 #include <string.h>
 #include <sys/msg.h>
 #include <posix/utils.h>
+#include <syslog.h>
 
 #include "netif-driver.h"
 #include "route.h"
@@ -72,6 +73,8 @@ static void mainLoop(void)
 int main(int argc, char **argv)
 {
 	size_t have_intfs = 0;
+
+	openlog("lwip", LOG_NDELAY, LOG_DAEMON);
 
 #ifndef HAVE_WORKING_INIT_ARRAY
 	void init_lwip_tcpip(void);
