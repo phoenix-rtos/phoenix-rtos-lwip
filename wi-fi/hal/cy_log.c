@@ -23,8 +23,6 @@ static struct {
 
 cy_rslt_t cy_log_init(CY_LOG_LEVEL_T level)
 {
-	openlog("wifi", LOG_NDELAY, LOG_DAEMON);
-
 	if (level >= CY_LOG_MAX)
 		level = CY_LOG_MAX - 1;
 
