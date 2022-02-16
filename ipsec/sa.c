@@ -31,12 +31,12 @@ typedef struct ipsec_in_ip_s /**< IPsec in IP structure - used to access headers
 	} inner_header;
 } ipsec_in_ip_t;
 
-static time_t init_time;
-
 
 static u32_t get_seconds(void)
 {
-	return (time(NULL) - init_time);
+	struct timespec tp;
+	clock_gettime(CLOCK_MONOTONIC_RAW, &tp);
+	return tp.tv_sec;
 }
 
 
@@ -49,7 +49,6 @@ static int get_ffs(u32_t val)
 
 void ipsec_db_init(db_set_netif *dbs)
 {
-	init_time = time(NULL);
 	mutexCreate(&dbs->inbound_sad.mutex);
 	LIST_HEAD_INIT(&dbs->inbound_sad);
 	mutexCreate(&dbs->outbound_sad.mutex);
