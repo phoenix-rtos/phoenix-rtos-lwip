@@ -8,6 +8,9 @@
 
 include ../phoenix-rtos-build/Makefile.common
 
+# set local path manually as we're including other Makefiles here (as an empty var - TOPDIR)
+LOCAL_DIR :=
+
 .DEFAULT_GOAL := all
 
 LWIPOPTS_DIR ?= "include/default-opts"
@@ -30,6 +33,8 @@ CFLAGS += -Wundef -Iinclude -Ilib-lwip/src/include -I"$(LWIPOPTS_DIR)"
 
 NAME := lwip-core
 SRCS := $(LWIP_SRCS)
+# don't install include subdir contents, these are actually internal headers
+LOCAL_HEADER_DIR := nothing
 include $(static-lib.mk)
 
 # should define NET_DRIVERS and platform driver sources
