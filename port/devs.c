@@ -3,8 +3,8 @@
  *
  * LwIP status devices
  *
- * Copyright 2021 Phoenix Systems
- * Author: Ziemowit Leszczynski
+ * Copyright 2021, 2022 Phoenix Systems
+ * Author: Ziemowit Leszczynski, Maciej Purski
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -14,6 +14,7 @@
 #include "lwip/sockets.h"
 #include "lwip/inet.h"
 #include "lwip/dns.h"
+#include "lwip/stats.h"
 
 #include "netif.h"
 #include "netif-driver.h"
@@ -48,11 +49,18 @@
 #ifndef LWIP_LINKMONITOR_DEV_NAME
 #define LWIP_LINKMONITOR_DEV_NAME "en1"
 #endif
+#ifndef LWIP_STATS_DEV
+#define LWIP_STATS_DEV "/dev/ipstats"
+#endif
+#ifndef LWIP_STATS_DEV_BUFFER_SIZE
+#define LWIP_STATS_DEV_BUFFER_SIZE 4096
+#endif
 
 #define DEV_ROUTE_ID       0
 #define DEV_IFSTATUS_ID    1
 #define DEV_PF_ID          2
 #define DEV_LINKMONITOR_ID 3
+#define DEV_STATS_ID       4
 
 #define SNPRINTF_APPEND(fmt, ...) \
 	do { \
@@ -68,7 +76,7 @@
 	} while (0)
 
 
-#if (LWIP_ROUTE_DEV || LWIP_IFSTATUS_DEV || LWIP_EXT_PF || LWIP_LINKMONITOR_DEV)
+#if (LWIP_ROUTE_DEV || LWIP_IFSTATUS_DEV || LWIP_EXT_PF || LWIP_LINKMONITOR_DEV || LWIP_STATS)
 static struct {
 #if LWIP_ROUTE_DEV
 	struct {
@@ -99,8 +107,15 @@ static struct {
 		int len;
 	} linkmonitor;
 #endif
+#if LWIP_STATS
+	struct {
+		int busy;
+		size_t len;
+		char buf[LWIP_STATS_DEV_BUFFER_SIZE];
+	} stats;
+#endif
 } devs_common;
-#endif /* (LWIP_ROUTE_DEV || LWIP_IFSTATUS_DEV || LWIP_EXT_PF || LWIP_LINKMONITOR_DEV) */
+#endif /* (LWIP_ROUTE_DEV || LWIP_IFSTATUS_DEV || LWIP_EXT_PF || LWIP_LINKMONITOR_DEV || LWIP_STATS) */
 
 
 #if LWIP_ROUTE_DEV
@@ -247,6 +262,148 @@ static int ifstatus_open(int flags)
 
 	return 0;
 }
+
+
+#if LWIP_STATS
+static void stats_append(const char *fmt, ...)
+{
+	char *ptr = devs_common.stats.buf + devs_common.stats.len;
+	int left;
+	int n;
+	va_list arg;
+
+	left = sizeof(devs_common.stats.buf) - devs_common.stats.len;
+	if (left == 0)
+		return;
+
+	va_start(arg, fmt);
+	n = vsnprintf(ptr, left, fmt, arg);
+	if (n > 0)
+		devs_common.stats.len += min(n, left);
+	va_end(arg);
+}
+
+
+static void stats_proto_append(const struct stats_proto *proto, const char *name)
+{
+	stats_append("%s.xmit=%" STAT_COUNTER_F "\n", name, proto->xmit);
+	stats_append("%s.recv=%" STAT_COUNTER_F "\n", name, proto->recv);
+	stats_append("%s.fw=%" STAT_COUNTER_F "\n", name, proto->fw);
+	stats_append("%s.drop=%" STAT_COUNTER_F "\n", name, proto->drop);
+	stats_append("%s.chkerr=%" STAT_COUNTER_F "\n", name, proto->chkerr);
+	stats_append("%s.lenerr=%" STAT_COUNTER_F "\n", name, proto->lenerr);
+	stats_append("%s.memerr=%" STAT_COUNTER_F "\n", name, proto->memerr);
+	stats_append("%s.rterr=%" STAT_COUNTER_F "\n", name, proto->rterr);
+	stats_append("%s.proterr=%" STAT_COUNTER_F "\n", name, proto->proterr);
+	stats_append("%s.opterr=%" STAT_COUNTER_F "\n", name, proto->opterr);
+	stats_append("%s.err=%" STAT_COUNTER_F "\n", name, proto->err);
+	stats_append("%s.cachehit=%" STAT_COUNTER_F "\n\n", name, proto->cachehit);
+}
+
+
+static void stats_mem_append(const struct stats_mem *mem, const char *name)
+{
+	stats_append("%s.avail=%" MEM_SIZE_F "\n", name, mem->avail);
+	stats_append("%s.used=%" MEM_SIZE_F "\n", name, mem->used);
+	stats_append("%s.max=%" MEM_SIZE_F "\n", name, mem->max);
+	stats_append("%s.err=%" STAT_COUNTER_F "\n\n", name, mem->err);
+}
+
+
+static void stats_sys_append(const struct stats_sys *sys)
+{
+	stats_append("sys.sem.used=%" STAT_COUNTER_F "\n", sys->sem.used);
+	stats_append("sys.sem.max=%" STAT_COUNTER_F "\n", sys->sem.max);
+	stats_append("sys.sem.err=%" STAT_COUNTER_F "\n", sys->sem.err);
+	stats_append("sys.mutex.used=%" STAT_COUNTER_F "\n", sys->mutex.used);
+	stats_append("sys.mutex.max=%" STAT_COUNTER_F "\n", sys->mutex.max);
+	stats_append("sys.mutex.err=%" STAT_COUNTER_F "\n", sys->mutex.err);
+	stats_append("sys.mbox.used=%" STAT_COUNTER_F "\n", sys->mbox.used);
+	stats_append("sys.mbox.max=%" STAT_COUNTER_F "\n", sys->mbox.max);
+	stats_append("sys.mbox.err=%" STAT_COUNTER_F "\n\n", sys->mbox.err);
+}
+
+
+static int stats_open(int flags)
+{
+	int i;
+
+	if (flags & (O_WRONLY | O_RDWR))
+		return -EACCES;
+
+	if (devs_common.stats.busy)
+		return -EBUSY;
+
+	devs_common.stats.busy = 1;
+	devs_common.stats.len = 0;
+
+#if LINK_STATS
+	stats_proto_append(&lwip_stats.link, "link");
+#endif
+#if ETHARP_STATS
+	stats_proto_append(&lwip_stats.etharp, "etharp");
+#endif
+#if IPFRAG_STATS
+	stats_proto_append(&lwip_stats.ip_frag, "ipfrag");
+#endif
+#if IP6_FRAG_STATS
+	stats_proto_append(&lwip_stats.ip6_frag, "ip6_frag");
+#endif
+#if IP_STATS
+	stats_proto_append(&lwip_stats.ip, "ip");
+#endif
+#if ICMP_STATS
+	stats_proto_append(&lwip_stats.icmp, "icmp");
+#endif
+#if ICMP6_STATS
+	stats_proto_append(&lwip_stats.icmp6, "icmp6");
+#endif
+#if UDP_STATS
+	stats_proto_append(&lwip_stats.udp, "udp");
+#endif
+#if TCP_STATS
+	stats_proto_append(&lwip_stats.tcp, "tcp");
+#endif
+#if SYS_STATS
+	stats_sys_append(&lwip_stats.sys);
+#endif
+#if MEM_STATS
+	stats_mem_append(&lwip_stats.mem, "heap");
+#endif
+#if MEMP_STATS
+	for (i = 0; i < MEMP_MAX; i++)
+		stats_mem_append(lwip_stats.memp[i], lwip_stats.memp[i]->name);
+#endif
+
+	return 0;
+}
+
+
+static int stats_read(char *data, size_t size, size_t offset)
+{
+	int read;
+
+	if (offset > devs_common.stats.len)
+		return -ERANGE;
+
+	read = min(size, devs_common.stats.len - offset);
+	memcpy(data, devs_common.stats.buf + offset, read);
+
+	return read;
+}
+
+
+static int stats_close(void)
+{
+	if (!devs_common.stats.busy)
+		return -EBADF;
+
+	devs_common.stats.busy = 0;
+
+	return 0;
+}
+
+#endif /* LWIP_STATS */
 
 
 static int ifstatus_close(void)
@@ -421,6 +578,9 @@ int devs_init(unsigned int port)
 #if LWIP_LINKMONITOR_DEV
 	oid_t linkmonitor_oid = { port, DEV_LINKMONITOR_ID };
 #endif
+#if LWIP_STATS
+	oid_t stats_oid = { port, DEV_STATS_ID };
+#endif
 
 #if LWIP_ROUTE_DEV
 	if (create_dev(&route_oid, "/dev/route") < 0) {
@@ -452,6 +612,15 @@ int devs_init(unsigned int port)
 	}
 #endif
 
+#if LWIP_STATS
+	stats_init();
+
+	if (create_dev(&stats_oid, LWIP_STATS_DEV) < 0) {
+		printf("phoenix-rtos-lwip: can't create %s\n", LWIP_STATS_DEV);
+		return -1;
+	}
+#endif
+
 	return 0;
 }
 
@@ -474,6 +643,10 @@ int dev_open(id_t id, int flags)
 #if LWIP_LINKMONITOR_DEV
 		case DEV_LINKMONITOR_ID:
 			return linkmonitor_open(flags);
+#endif
+#if LWIP_STATS
+		case DEV_STATS_ID:
+			return stats_open(flags);
 #endif
 	}
 	return -ENOENT;
@@ -498,6 +671,10 @@ int dev_close(id_t id)
 		case DEV_LINKMONITOR_ID:
 			return linkmonitor_close();
 #endif
+#if LWIP_STATS
+		case DEV_STATS_ID:
+			return stats_close();
+#endif
 	}
 	return -ENOENT;
 }
@@ -521,6 +698,10 @@ int dev_read(id_t id, void *data, size_t size, size_t offset)
 #if LWIP_LINKMONITOR_DEV
 		case DEV_LINKMONITOR_ID:
 			return linkmonitor_read(data, size, offset);
+#endif
+#if LWIP_STATS
+		case DEV_STATS_ID:
+			return stats_read(data, size, offset);
 #endif
 	}
 	return -ENOENT;
