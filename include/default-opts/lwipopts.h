@@ -44,6 +44,26 @@
 #define PBUF_DEBUG LWIP_DBG_OFF
 #define SOCKETS_DEBUG LWIP_DBG_ON
 #endif
+
+#ifndef LWIP_STATS
+#define LWIP_STATS 0
+#endif
+
+#if LWIP_STATS
+#define LWIP_STATS_DISPLAY 1
+#define LINK_STATS         1
+#define IP_STATS           1
+#define ICMP_STATS         1
+#define IGMP_STATS         1
+#define IPFRAG_STATS       1
+#define UDP_STATS          1
+#define TCP_STATS          1
+#define MEM_STATS          1
+#define MEMP_STATS         1
+#define PBUF_STATS         1
+#define SYS_STATS          1
+#endif /* LWIP_STATS */
+
 #define TCP_MSS 1460
 #define TCP_WND (32 * TCP_MSS)
 #define TCP_SND_BUF TCP_WND
