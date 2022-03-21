@@ -81,8 +81,6 @@ typedef handle_t cy_thread_t;
 typedef void *cy_thread_arg_t;
 /** Alias for the RTOS specific definition of a mutex */
 typedef handle_t cy_mutex_t;
-/** Alias for the RTOS specific definition of a semaphore */
-typedef handle_t cy_semaphore_t;
 /** Alias for the RTOS specific time unit (in milliseconds) */
 typedef time_t cy_time_t;
 
