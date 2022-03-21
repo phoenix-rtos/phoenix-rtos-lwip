@@ -147,14 +147,16 @@ cy_rslt_t cy_rtos_init_semaphore(cy_semaphore_t *semaphore, uint32_t maxcount, u
 	if (semaphore == NULL)
 		return CY_RTOS_BAD_PARAM;
 
-	// NOTE: only binary semaphores are supported (simulated by mutex)
-	if (maxcount != 1 || initcount != 0)
-		return CY_RTOS_BAD_PARAM;
-
-	if (mutexCreate(semaphore) < 0)
+	if (mutexCreate(&semaphore->mutex) != EOK)
 		return CY_RTOS_NO_MEMORY;
 
-	mutexLock(*semaphore);
+	if (condCreate(&semaphore->cond) != EOK) {
+		resourceDestroy(semaphore->mutex);
+		return CY_RTOS_NO_MEMORY;
+	}
+
+	semaphore->m = maxcount;
+	semaphore->v = initcount;
 
 	return CY_RSLT_SUCCESS;
 }
@@ -163,30 +165,47 @@ cy_rslt_t cy_rtos_init_semaphore(cy_semaphore_t *semaphore, uint32_t maxcount, u
 cy_rslt_t cy_rtos_get_semaphore(cy_semaphore_t *semaphore, cy_time_t timeout_ms, bool in_isr)
 {
 	// NOTE: ignore in_isr (we don't use semaphores in ISR)
+	int err = EOK;
+	time_t timeout = 0, now, when = 0;
+
 	if (semaphore == NULL)
 		return CY_RTOS_BAD_PARAM;
 
-	if (timeout_ms == 0) {
-		if (mutexTry(*semaphore) == 0)
-			return CY_RSLT_SUCCESS;
+	if (timeout_ms && timeout_ms != CY_RTOS_NEVER_TIMEOUT) {
+		gettime(&now, NULL);
+		timeout = timeout_ms * 1000;
+		when = now + timeout;
 	}
-	else if (timeout_ms == CY_RTOS_NEVER_TIMEOUT) {
-		if (mutexLock(*semaphore) == 0)
-			return CY_RSLT_SUCCESS;
-	}
-	else {
-		cy_time_t waited_ms = 0;
 
-		while (timeout_ms > waited_ms) {
-			if (mutexTry(*semaphore) == 0)
-				return CY_RSLT_SUCCESS;
+	mutexLock(semaphore->mutex);
 
-			waited_ms += 1;
-			usleep(1000);
+	for (;;) {
+		if (semaphore->v > 0) {
+			--semaphore->v;
+			break;
+		}
+
+		if (timeout_ms == 0) {
+			err = -ETIME;
+			break;
+		}
+
+		if ((err = condWait(semaphore->cond, semaphore->mutex, timeout)) == -ETIME)
+			break;
+
+		if (timeout) {
+			gettime(&now, NULL);
+
+			if (now >= when)
+				timeout = 1;
+			else
+				timeout = when - now;
 		}
 	}
 
-	return CY_RTOS_TIMEOUT;
+	mutexUnlock(semaphore->mutex);
+
+	return (err == EOK ? CY_RSLT_SUCCESS : CY_RTOS_TIMEOUT);
 }
 
 
@@ -196,7 +215,14 @@ cy_rslt_t cy_rtos_set_semaphore(cy_semaphore_t *semaphore, bool in_isr)
 	if (semaphore == NULL)
 		return CY_RTOS_BAD_PARAM;
 
-	mutexUnlock(*semaphore);
+	mutexLock(semaphore->mutex);
+
+	if (semaphore->v < semaphore->m) {
+		condSignal(semaphore->cond);
+		++semaphore->v;
+	}
+
+	mutexUnlock(semaphore->mutex);
 
 	return CY_RSLT_SUCCESS;
 }
@@ -209,7 +235,8 @@ cy_rslt_t cy_rtos_deinit_semaphore(cy_semaphore_t *semaphore)
 	if (semaphore == NULL)
 		return CY_RTOS_BAD_PARAM;
 
-	resourceDestroy(*semaphore);
+	resourceDestroy(semaphore->mutex);
+	resourceDestroy(semaphore->cond);
 
 	return CY_RSLT_SUCCESS;
 }

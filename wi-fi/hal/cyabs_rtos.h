@@ -124,6 +124,13 @@ typedef enum cy_thread_state {
  */
 typedef void (*cy_thread_entry_fn_t)(cy_thread_arg_t arg);
 
+typedef struct {
+	handle_t mutex;
+	handle_t cond;
+	volatile unsigned int v;
+	unsigned int m;
+} cy_semaphore_t;
+
 
 /********************************************* Threads ********************************************/
 
