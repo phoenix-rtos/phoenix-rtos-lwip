@@ -267,6 +267,30 @@ static int ifstatus_open(int flags)
 }
 
 
+static int ifstatus_close(void)
+{
+	if (!devs_common.ifstatus.busy)
+		return -EBADF;
+	devs_common.ifstatus.busy = 0;
+	return 0;
+}
+
+
+static int ifstatus_read(char *data, size_t size, size_t offset)
+{
+	int read;
+
+	if (offset > devs_common.ifstatus.len)
+		return -ERANGE;
+
+	read = min(size, devs_common.ifstatus.len - offset);
+	memcpy(data, devs_common.ifstatus.buf + offset, read);
+
+	return read;
+}
+#endif /* LWIP_IFSTATUS_DEV */
+
+
 #if LWIP_STATS
 static void stats_append(const char *fmt, ...)
 {
@@ -304,6 +328,7 @@ static void stats_proto_append(const struct stats_proto *proto, const char *name
 }
 
 
+#if MEM_STATS
 static void stats_mem_append(const struct stats_mem *mem, const char *name)
 {
 	stats_append("%s.avail=%" MEM_SIZE_F "\n", name, mem->avail);
@@ -311,8 +336,10 @@ static void stats_mem_append(const struct stats_mem *mem, const char *name)
 	stats_append("%s.max=%" MEM_SIZE_F "\n", name, mem->max);
 	stats_append("%s.err=%" STAT_COUNTER_F "\n\n", name, mem->err);
 }
+#endif /* MEM_STATS */
 
 
+#if SYS_STATS
 static void stats_sys_append(const struct stats_sys *sys)
 {
 	stats_append("sys.sem.used=%" STAT_COUNTER_F "\n", sys->sem.used);
@@ -325,12 +352,11 @@ static void stats_sys_append(const struct stats_sys *sys)
 	stats_append("sys.mbox.max=%" STAT_COUNTER_F "\n", sys->mbox.max);
 	stats_append("sys.mbox.err=%" STAT_COUNTER_F "\n\n", sys->mbox.err);
 }
+#endif /* SYS_STATS */
 
 
 static int stats_open(int flags)
 {
-	int i;
-
 	if (flags & (O_WRONLY | O_RDWR))
 		return -EACCES;
 
@@ -373,7 +399,8 @@ static int stats_open(int flags)
 #if MEM_STATS
 	stats_mem_append(&lwip_stats.mem, "heap");
 #endif
-#if MEMP_STATS
+#if MEMP_STATS && (defined(LWIP_DEBUG) || LWIP_STATS_DISPLAY)
+	int i;
 	for (i = 0; i < MEMP_MAX; i++)
 		stats_mem_append(lwip_stats.memp[i], lwip_stats.memp[i]->name);
 #endif
@@ -407,30 +434,6 @@ static int stats_close(void)
 }
 
 #endif /* LWIP_STATS */
-
-
-static int ifstatus_close(void)
-{
-	if (!devs_common.ifstatus.busy)
-		return -EBADF;
-	devs_common.ifstatus.busy = 0;
-	return 0;
-}
-
-
-static int ifstatus_read(char *data, size_t size, size_t offset)
-{
-	int read;
-
-	if (offset > devs_common.ifstatus.len)
-		return -ERANGE;
-
-	read = min(size, devs_common.ifstatus.len - offset);
-	memcpy(data, devs_common.ifstatus.buf + offset, read);
-
-	return read;
-}
-#endif /* LWIP_IFSTATUS_DEV */
 
 
 #if LWIP_LINKMONITOR_DEV
