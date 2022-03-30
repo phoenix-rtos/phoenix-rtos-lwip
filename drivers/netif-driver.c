@@ -15,6 +15,7 @@
 #include "lwip/stats.h"
 #include "lwip/snmp.h"
 #include "lwip/ethip6.h"
+#include <lwip/dns.h>
 
 #include <sys/threads.h>
 #include <errno.h>
@@ -150,6 +151,11 @@ int create_netif(char *conf)
 		ni->state = (char *)storage + sz;
 		err = storage->drv->init(ni, storage->cfg);
 	}
+
+	ip_addr_t dnsaddr;
+	IP_ADDR4(&dnsaddr, 8, 8, 8, 8);
+	dns_setserver(0, &dnsaddr);
+	dns_setserver(1, &dnsaddr);
 
 	if (err != ERR_OK)
 		free(ni);
