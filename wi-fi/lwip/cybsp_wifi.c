@@ -566,6 +566,7 @@ cy_rslt_t cybsp_wifi_init_primary_extended(whd_interface_t *interface,
 				result = whd_wifi_on(whd_drv, interface);
 
 				if (result != CY_RSLT_SUCCESS) {
+					whd_wifi_off(*interface);
 					_cybsp_wifi_bus_detach();
 				}
 			}

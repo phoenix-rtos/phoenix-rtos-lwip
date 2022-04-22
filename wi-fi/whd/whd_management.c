@@ -275,15 +275,14 @@ uint32_t whd_wifi_on(whd_driver_t whd_driver, whd_interface_t *ifpp)
 
 	whd_init_stats(whd_driver);
 
+	whd_add_primary_interface(whd_driver, ifpp);
+	ifp = *ifpp;
 
 	retval = whd_management_wifi_platform_init(whd_driver, whd_driver->country, WHD_FALSE);
 	if (retval != WHD_SUCCESS) {
 		WPRINT_WHD_INFO(("Could not initialize wifi platform\n"));
 		return retval;
 	}
-
-	whd_add_primary_interface(whd_driver, ifpp);
-	ifp = *ifpp;
 
 	/* Download blob file if exists */
 	retval = whd_process_clm_data(ifp);
