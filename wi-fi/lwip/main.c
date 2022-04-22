@@ -31,6 +31,8 @@
 #define WIFI_FLAG_FAILED  (1 << 1)
 #define WIFI_FLAG_FINISH  (1 << 2)
 
+#define WIFI_START_RETRIES 5
+
 #define WIFI_DEV_ID   0
 #define WIFI_DEV_NAME "/dev/wifi"
 
@@ -421,7 +423,12 @@ static int wifi_dev_write(char *data, size_t size)
 		wifi_ap_set_key(data + 4, size - 4);
 	}
 	else if (strncmp("start", data, size) == 0) {
-		wifi_ap_start();
+		unsigned int retries = WIFI_START_RETRIES;
+
+		while (wifi_ap_start() < 0 && retries-- > 0) {
+			/* FIXME: temporary workaround - find out why AP doesn't start */
+			wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "retrying to start Wi-Fi AP\n");
+		}
 	}
 	else if (strncmp("stop", data, size) == 0) {
 		wifi_ap_stop();
