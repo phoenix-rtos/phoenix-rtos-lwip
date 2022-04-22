@@ -33,7 +33,6 @@ static struct {
 	char collector_stack[512] __attribute__((aligned(8)));
 	rbtree_t threads;
 	handle_t lock;
-	handle_t join_lock;
 	handle_t join_cond;
 } global;
 
@@ -96,9 +95,7 @@ static void thread_waittid_thr(void *arg)
 			free(data->stack);
 			free(data);
 
-			mutexLock(global.join_lock);
-			condSignal(global.join_cond);
-			mutexUnlock(global.join_lock);
+			condBroadcast(global.join_cond);
 		}
 		else {
 			mutexUnlock(global.lock);
@@ -175,19 +172,20 @@ int sys_thread_join(handle_t id)
 
 	s.tid = id;
 
+	mutexLock(global.lock);
+
 	for (;;) {
-		mutexLock(global.lock);
 		data = lib_treeof(thread_data_t, linkage, lib_rbFind(&global.threads, &s.linkage));
-		mutexUnlock(global.lock);
 
-		if (data == NULL) {
-			return 0;
-		}
+		if (data == NULL)
+			break;
 
-		mutexLock(global.join_lock);
-		condWait(global.join_cond, global.join_lock, 0);
-		mutexUnlock(global.join_lock);
+		condWait(global.join_cond, global.lock, 0);
 	}
+
+	mutexUnlock(global.lock);
+
+	return 0;
 }
 
 
@@ -199,16 +197,9 @@ void init_lwip_threads(void)
 	if (err)
 		errout(err, "mutexCreate(lock)");
 
-	err = mutexCreate(&global.join_lock);
-	if (err) {
-		resourceDestroy(global.lock);
-		errout(err, "mutexCreate(join_lock)");
-	}
-
 	err = condCreate(&global.join_cond);
 	if (err) {
 		resourceDestroy(global.lock);
-		resourceDestroy(global.join_lock);
 		errout(err, "condCreate(join_cond)");
 	}
 
