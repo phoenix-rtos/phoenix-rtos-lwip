@@ -9,10 +9,6 @@
 SIL ?= @
 MAKEFLAGS += --no-print-directory
 
-#TARGET ?= ia32-qemu
-#TARGET ?= armv7-stm32
-TARGET ?= arm-imx
-
 # Compliation options for various architectures
 TARGET_FAMILY = $(firstword $(subst -, ,$(TARGET)-))
 include Makefile.$(TARGET_FAMILY)
