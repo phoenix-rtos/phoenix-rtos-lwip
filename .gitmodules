@@ -2,6 +2,3 @@
 	path = lib-lwip
 	url = https://github.com/phoenix-rtos/lwip
 	branch = STABLE-2_1_x_phoenix
-[submodule "contrib-lwip"]
-	path = contrib-lwip
-	url = https://github.com/damianloew/contrib-lwip
