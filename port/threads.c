@@ -17,6 +17,12 @@
 #include <stdlib.h>
 #include <errno.h>
 
+#include <lwipopts.h>
+
+#ifndef WAITTID_THREAD_PRIO
+#define WAITTID_THREAD_PRIO 3
+#endif
+
 
 typedef struct {
 	rbnode_t linkage;
@@ -79,7 +85,6 @@ static void thread_register(thread_data_t *ts)
 static void thread_waittid_thr(void *arg)
 {
 	thread_data_t *data, s;
-	priority(3);
 
 	for (;;) {
 		while ((s.tid = threadJoin(0)) == -EINTR)
@@ -204,5 +209,5 @@ void init_lwip_threads(void)
 	}
 
 	lib_rbInit(&global.threads, thread_cmp, NULL);
-	beginthreadex(thread_waittid_thr, 4, global.collector_stack, sizeof(global.collector_stack), NULL, NULL);
+	beginthreadex(thread_waittid_thr, WAITTID_THREAD_PRIO, global.collector_stack, sizeof(global.collector_stack), NULL, NULL);
 }
