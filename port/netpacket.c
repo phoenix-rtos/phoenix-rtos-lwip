@@ -112,6 +112,7 @@ err_t netpacket_sendto(struct netpacket_pcb *pcb, struct pbuf *p, u8_t *dst_addr
 		}
 	}
 
+	netpacket_linkoutput_full(pcb->netif, packet, pcb);
 	err_t ret = pcb->netif->linkoutput(pcb->netif, packet);
 	if (pcb->type == SOCK_DGRAM) {
 		pbuf_dechain(packet);
@@ -221,7 +222,7 @@ int netpacket_input(struct pbuf *p, struct netif *netif)
 }
 
 
-void netpacket_linkoutput(struct netif *netif, struct pbuf *p)
+static void netpacket_linkoutput_full(struct netif *netif, struct pbuf *p, struct netpacket_pcb *from_pcb)
 {
 	if (p->len < sizeof(struct eth_hdr))
 		return;
@@ -232,6 +233,9 @@ void netpacket_linkoutput(struct netif *netif, struct pbuf *p)
 	/* find netpacket pcb's that are binded to this netif */
 	struct netpacket_pcb *pcb = NULL;
 	for (pcb = netpacket_pcbs; pcb != NULL && pcb->netif != NULL; pcb = pcb->next) {
+		if (pcb == from_pcb)
+			continue;
+
 		if (netif_get_index(pcb->netif) != netif_get_index(netif))
 			continue;
 
@@ -265,6 +269,11 @@ void netpacket_linkoutput(struct netif *netif, struct pbuf *p)
 #endif
 		}
 	}
+}
+
+void netpacket_linkoutput(struct netif *netif, struct pbuf *p)
+{
+	netpacket_linkoutput_full(netif, p, NULL);
 }
 
 #endif /* LWIP_NETPACKET */
