@@ -19,6 +19,9 @@
 #include <net/ethernet.h>
 
 
+static void netpacket_linkoutput_full(struct netif *netif, struct pbuf *p, struct netpacket_pcb *from_pcb);
+
+
 static struct netpacket_pcb *netpacket_pcbs;
 
 
@@ -222,6 +225,12 @@ int netpacket_input(struct pbuf *p, struct netif *netif)
 }
 
 
+void netpacket_linkoutput(struct netif *netif, struct pbuf *p)
+{
+	netpacket_linkoutput_full(netif, p, NULL);
+}
+
+
 static void netpacket_linkoutput_full(struct netif *netif, struct pbuf *p, struct netpacket_pcb *from_pcb)
 {
 	if (p->len < sizeof(struct eth_hdr))
@@ -269,11 +278,6 @@ static void netpacket_linkoutput_full(struct netif *netif, struct pbuf *p, struc
 #endif
 		}
 	}
-}
-
-void netpacket_linkoutput(struct netif *netif, struct pbuf *p)
-{
-	netpacket_linkoutput_full(netif, p, NULL);
 }
 
 #endif /* LWIP_NETPACKET */
