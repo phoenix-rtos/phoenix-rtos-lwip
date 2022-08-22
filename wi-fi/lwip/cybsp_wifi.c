@@ -501,7 +501,10 @@ static cy_rslt_t _cybsp_wifi_m2m_init_bus(void)
 static inline cy_rslt_t _cybsp_wifi_bus_init(void)
 {
 #if !defined(WIFI_MODE_M2M)
-	_cybsp_wifi_reset_wifi_chip();
+	/* resetting chip is actually done by the
+	 * HAL layer which directly interfaces with
+	 * the new SDIO library */
+	//_cybsp_wifi_reset_wifi_chip();
 #endif
 #if defined(WIFI_MODE_SDIO)
 	return _cybsp_wifi_sdio_init_bus();
@@ -540,8 +543,13 @@ cy_rslt_t cybsp_wifi_init_primary_extended(whd_interface_t *interface,
 #if defined(WIFI_MODE_M2M)
 	cy_rslt_t result = CY_RSLT_SUCCESS;
 #else
+	/* this is not ran because the configuration is done by HAL layer
+	 * which directly interfaces with the new SDIO library */
+	/*
 	cy_rslt_t result = cyhal_gpio_init(CYBSP_WIFI_WL_REG_ON, CYHAL_GPIO_DIR_OUTPUT,
 		CYHAL_GPIO_DRIVE_PULLUP, false);
+	*/
+	cy_rslt_t result = CY_RSLT_SUCCESS;
 #endif
 
 	if (result == CY_RSLT_SUCCESS) {
