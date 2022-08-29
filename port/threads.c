@@ -87,7 +87,7 @@ static void thread_waittid_thr(void *arg)
 	thread_data_t *data, s;
 
 	for (;;) {
-		while ((s.tid = threadJoin(0)) == -EINTR)
+		while ((s.tid = threadJoin(-1, 0)) == -EINTR)
 			;
 
 		mutexLock(global.lock);
