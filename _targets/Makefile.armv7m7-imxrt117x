@@ -1,0 +1,11 @@
+#
+# Makefile for Phoenix-RTOS 3 LwIP
+#
+# i.MX RT117x target
+#
+# Copyright 2022 Phoenix Systems
+#
+
+NET_DRIVERS_SUPPORTED := pppou pppos
+NET_DRIVERS ?= $(NET_DRIVERS_SUPPORTED)
+PPPOS_MODEM := huawei
