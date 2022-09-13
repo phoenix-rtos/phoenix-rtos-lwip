@@ -41,7 +41,8 @@ NAME:= lwip-inc2
 LOCAL_HEADERS_DIR := $(LWIPOPTS_DIR) 
 include $(static-lib.mk)
 
-LWIP_SRCS += contrib/ports/unix/port/sys_arch.c contrib/ports/unix/port/perf.c
+LWIP_SRCS += contrib/ports/unix/port/sys_arch.c contrib/ports/unix/port/perf.c contrib/apps/ping/ping.c
+LOCAL_HEADERS := contrib/apps/ping/ping.h
 DEPS := lwip-inc lwip-inc2
 LOCAL_HEADERS_DIR :=  $(LWIPDIR)/include
 else
