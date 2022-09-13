@@ -16,7 +16,7 @@
 #include "lwip/snmp.h"
 #include "lwip/ethip6.h"
 
-#include <sys/threads.h>
+#include <pthread.h>
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,7 +30,7 @@
 struct mdio_bus {
 	const mdio_bus_ops_t *ops;
 	void *arg;
-	handle_t lock;
+	pthread_mutex_t *lock;
 };
 
 
@@ -53,7 +53,7 @@ int register_mdio_bus(const mdio_bus_ops_t *ops, void *arg)
 		if (mdio[i].ops)
 			continue;
 
-		if ((err = mutexCreate(&mdio[i].lock)))
+		if ((err = pthread_mutex_init(mdio[i].lock, NULL)))
 			return err;
 
 		mdio[i].ops = ops;
@@ -123,7 +123,7 @@ int create_netif(char *conf)
 		*arg++ = 0;
 
 	is_ppp = (arg != NULL) && (strncmp(conf, "ppp", 3) == 0);
-	//printf("netif: driver '%s' args '%s' is_ppp=%d\n", conf, arg, is_ppp);
+	printf("netif: driver '%s' args '%s' is_ppp=%d\n", conf, arg, is_ppp);
 
 	for (drv = net_driver_list; drv != NULL; drv = drv->next)
 		if (!strcmp(conf, drv->name))
@@ -140,6 +140,7 @@ int create_netif(char *conf)
 		return -ENOMEM;
 
 	ni = &storage->netif;
+	netif_default = ni;
 	storage->cfg = arg;
 	storage->drv = drv;
 
@@ -179,7 +180,7 @@ int mdio_lock_bus(unsigned bus)
 	const struct mdio_bus *pb = mdio_bus(bus);
 
 	if (pb)
-		return mutexLock(pb->lock);
+		return pthread_mutex_lock(pb->lock);
 	else
 		return -ENODEV;
 }
@@ -187,7 +188,7 @@ int mdio_lock_bus(unsigned bus)
 
 void mdio_unlock_bus(unsigned bus)
 {
-	mutexUnlock(mdio_bus(bus)->lock);
+	pthread_mutex_unlock(mdio_bus(bus)->lock);
 }
 
 
@@ -197,9 +198,9 @@ int mdio_setup(unsigned bus, unsigned max_khz, unsigned min_hold_ns, unsigned op
 	int err;
 
 	if (pb) {
-		mutexLock(pb->lock);
+		pthread_mutex_lock(pb->lock);
 		err = pb->ops->setup(pb->arg, max_khz, min_hold_ns, opt_preamble);
-		mutexUnlock(pb->lock);
+		pthread_mutex_unlock(pb->lock);
 	} else
 		err = -ENODEV;
 
@@ -213,9 +214,9 @@ uint16_t mdio_read(unsigned bus, unsigned addr, uint16_t reg)
 	uint16_t v = 0;
 
 	if (pb) {
-		mutexLock(pb->lock);
+		pthread_mutex_lock(pb->lock);
 		v = pb->ops->read(pb->arg, addr, reg);
-		mutexUnlock(pb->lock);
+		pthread_mutex_unlock(pb->lock);
 	}
 
 	return v;
@@ -227,8 +228,9 @@ void mdio_write(unsigned bus, unsigned addr, uint16_t reg, uint16_t val)
 	const struct mdio_bus *pb = mdio_bus(bus);
 
 	if (pb) {
-		mutexLock(pb->lock);
+		pthread_mutex_lock(pb->lock);
 		pb->ops->write(pb->arg, addr, reg, val);
-		mutexUnlock(pb->lock);
+		pthread_mutex_unlock(pb->lock);
 	}
 }
+
