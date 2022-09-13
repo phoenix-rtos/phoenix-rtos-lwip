@@ -21,10 +21,10 @@
 #include <string.h>
 #include <unistd.h>
 #include <strings.h>
-#include <sys/threads.h>
-#include <sys/msg.h>
+#include <pthread.h>
 #include <syslog.h>
-
+#include "fcntl.h"
+#include <arch/sys_arch.h>
 #include <pppos_modem.h>
 
 enum {
@@ -56,17 +56,19 @@ typedef struct
 	volatile int thread_running;
 	volatile int want_connected;
 	volatile int conn_state;
-	handle_t lock, cond;
-
+	sys_sem_t sem;
+	
 	uint32_t main_loop_stack[4096];
 } pppos_priv_t;
+
+static pppos_priv_t* state;
 
 #define COL_RED     "\033[1;31m"
 #define COL_CYAN    "\033[1;36m"
 #define COL_YELLOW  "\033[1;33m"
 #define COL_NORMAL  "\033[0m"
 
-#if 0
+#if 1
 #define log_debug(fmt, ...)     do { if (1) pppos_printf(state, fmt, ##__VA_ARGS__); } while (0)
 #define log_at(fmt, ...)     	do { if (1) pppos_printf(state, COL_CYAN fmt COL_NORMAL, ##__VA_ARGS__); } while (0)
 #define log_info(fmt, ...)      do { if (1) pppos_printf(state, COL_CYAN fmt COL_NORMAL, ##__VA_ARGS__); } while (0)
@@ -115,12 +117,14 @@ static void serial_close(int fd)
 	// state->conn_state = CONN_STATE_DISCONNECTED;
 }
 
+
 static void serial_set_non_blocking(int fd)
 {
 	int flags = fcntl(fd, F_GETFL, 0);
 	if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0)
 		log_error("%s() : fcntl(%d, O_NONBLOCK) = (%d -> %s)", __func__, fd, errno, strerror(errno));
 }
+
 
 #if 0
 static void serial_set_blocking(int fd)
@@ -130,6 +134,7 @@ static void serial_set_blocking(int fd)
 		log_error("%s() : fcntl(%d, ~O_NONBLOCK) = (%d -> %s)", __func__, fd, errno, strerror(errno));
 }
 #endif
+
 
 #define WRITE_MAX_RETRIES 2
 static int serial_write(int fd, const u8_t* data, u32_t len)
@@ -201,6 +206,7 @@ static int at_check_result(const char* buf)
 	return -1;
 }
 
+
 static const char * at_result_to_str(int res) {
 	if (res < 0 || res >= at_result_codes_len)
 		return "!INVALID!";
@@ -223,10 +229,11 @@ static int at_send_cmd_res(int fd, const char* cmd, int timeout_ms, char *rx_buf
 	end = strstr(cmd, "\r\n");
 	/* remove newlines for better result printing */
 	log_at("AT Tx: [%*s]", (end != NULL) ? end - cmd : strlen(cmd), cmd);
-
+	
 	// wait for result with optional response text
 	int off = 0;
 	while (off < max_len) {
+		usleep(timeout_ms*1000);
 		int len = read(fd, rx_buf + off, max_len - off);
 		if (len < 0) {
 			if (errno == EINTR)
@@ -322,7 +329,7 @@ static u32_t pppos_output_cb(ppp_pcb *pcb, u8_t *data, u32_t len, void *ctx)
 	pppos_priv_t* state = (pppos_priv_t*) ctx;
 
 	int res = serial_write(state->fd, data, len);
-	//log_debug("%s : write(%d) = %d", __func__, len, res);
+	log_debug("%s : write(%d) = %d", __func__, len, res);
 	if (res < 0 && errno != EINTR && errno != EWOULDBLOCK) {
 		log_error("%s() : write(%d) = %d (%d -> %s)", __func__, len, res, errno, strerror(errno));
 		serial_close(state->fd);
@@ -333,11 +340,11 @@ static u32_t pppos_output_cb(ppp_pcb *pcb, u8_t *data, u32_t len, void *ctx)
 	return res;
 }
 
+
 static void pppos_link_status_cb(ppp_pcb *pcb, int err_code, void *ctx)
 {
 	struct netif *pppif = ppp_netif(pcb);
 	pppos_priv_t* state = (pppos_priv_t*) ctx;
-	mutexLock(state->lock);
 
 	switch(err_code) {
 	case PPPERR_NONE:               /* No error. */
@@ -424,9 +431,9 @@ static void pppos_link_status_cb(ppp_pcb *pcb, int err_code, void *ctx)
 	}
 
 	log_info("ppp_link_status_cb out");
-	mutexUnlock(state->lock);
-	condSignal(state->cond);
+	sys_sem_signal(&(state->sem));
 }
+
 
 static void pppos_do_rx(pppos_priv_t* state)
 {
@@ -440,7 +447,7 @@ static void pppos_do_rx(pppos_priv_t* state)
 			/* Pass received raw characters from PPPoS to be decoded through lwIP
 			* TCPIP thread using the TCPIP API. This is thread safe in all cases
 			* but you should avoid passing data byte after byte. */
-			//log_debug("%s : read() = %d", __func__, len);
+			log_debug("%s : read() = %d", __func__, len);
 			pppos_input_tcpip(state->ppp, buffer, len);
 		} else {
 			if (len < 0 && errno != EINTR && errno != EWOULDBLOCK) {
@@ -467,12 +474,9 @@ static void pppos_mainLoop(void* _state)
 
 	state->thread_running = 1;
 	while (running) {
-		mutexLock(state->lock);
 		while (!state->want_connected) {
-			condWait(state->cond, state->lock, 0);
+			sys_arch_sem_wait(&(state->sem),0);
 		}
-		mutexUnlock(state->lock);
-
 		/* Wait for the serial device */
 		if (state->fd < 0)  {
 			while ((state->fd = open(state->serialdev_fn, O_RDWR | O_NOCTTY | O_NONBLOCK)) < 0)
@@ -480,7 +484,7 @@ static void pppos_mainLoop(void* _state)
 
 			log_info("open success!");
 		}
-
+		
 		serial_set_non_blocking(state->fd);
 #if PPPOS_DISCONNECT_ON_INIT
 		if (at_disconnect(state->fd) != AT_RESULT_OK)
@@ -488,12 +492,10 @@ static void pppos_mainLoop(void* _state)
 #endif
 
 #if PPPOS_USE_CONFIG_FILE
-		mutexLock(state->lock);
 		while (!state->apn[0])
-			condWait(state->cond, state->lock, 0);
-		mutexUnlock(state->lock);
+			sys_arch_sem_wait(&(state->sem),0);
 #endif
-
+			
 		if (!at_is_responding(state->fd, 1000)) {
 			goto fail;
 		}
@@ -538,20 +540,19 @@ static void pppos_mainLoop(void* _state)
 		state->conn_state = CONN_STATE_CONNECTING;
 		pppapi_connect(state->ppp, 0);
 
-		//serial_set_blocking(state);
+		//serial_set_blocking(state->fd);
 		log_debug("receiving");
 		pppos_do_rx(state);
 
 		log_debug("pppapi_close");
 		pppapi_close(state->ppp, 0);
-
-		mutexLock(state->lock);
+		
 		log_debug("waiting for close to complete");
 		while (state->conn_state != CONN_STATE_DISCONNECTED) {
-			condWait(state->cond, state->lock, 0);
-			log_debug("still waiting for close to complete");
+			
+			sys_arch_sem_wait(&(state->sem),0);
+			log_warn("still waiting for close to complete");
 		}
-		mutexUnlock(state->lock);
 
 		log_debug("connection closed");
 
@@ -568,7 +569,7 @@ fail:
 		pppapi_free(state->ppp);
 	}
 
-	endthread();
+	sys_sem_free(&state->sem);
 }
 
 
@@ -589,7 +590,6 @@ static int pppos_netifUp(pppos_priv_t *state)
 		return 0;
 	}
 
-	mutexLock(state->lock);
 	while (fgets(lcfg, sizeof(lcfg), fcfg) != NULL) {
 		line++;
 		if (lcfg[0] == '#')
@@ -617,12 +617,9 @@ static int pppos_netifUp(pppos_priv_t *state)
 	}
 
 	fclose(fcfg);
-#else
-	mutexLock(state->lock);
 #endif
 	state->want_connected = 1;
-	condSignal(state->cond);
-	mutexUnlock(state->lock);
+	sys_sem_signal(&(state->sem));
 
 	return 0;
 }
@@ -633,7 +630,6 @@ static int pppos_netifDown(pppos_priv_t *state)
 	/* Unconditional use of pppapi_close() in the status callback
 	can (and will) cause recursive firing of the callback */
 
-	mutexLock(state->lock);
 #if PPPOS_USE_CONFIG_FILE
 	if (state->apn[0]) {
 		state->apn[0] = 0;
@@ -643,7 +639,6 @@ static int pppos_netifDown(pppos_priv_t *state)
 	state->conn_state = CONN_STATE_DISCONNECTING;
 #endif
 	state->want_connected = 0;
-	mutexUnlock(state->lock);
 
 	return 0;
 }
@@ -666,7 +661,7 @@ static void pppos_statusCallback(struct netif *netif)
 			netif->flags &= ~NETIF_FLAG_UP;
 	} else if (pppos_netifDown(state)) {
 		netif->flags |= NETIF_FLAG_UP;
-	}
+	}	
 }
 
 
@@ -688,7 +683,7 @@ static char *cfg_get_next_arg(char *arg)
 
 static int pppos_netifInit(struct netif *netif, char *cfg)
 {
-	pppos_priv_t* state;
+	err_t err;
 	int retries, flags = 0;
 	char *next;
 
@@ -699,7 +694,7 @@ static int pppos_netifInit(struct netif *netif, char *cfg)
 	memset(state, 0, sizeof(pppos_priv_t));
 	state->netif = netif;
 	state->serialdev_fn = cfg;
-	state->serialat_fn = "/dev/ttyacm1";
+	state->serialat_fn = "/dev/ttyACM0";
 	state->fd = -1;
 
 #if PPPOS_USE_CONFIG_FILE
@@ -732,8 +727,9 @@ static int pppos_netifInit(struct netif *netif, char *cfg)
 		}
 	}
 
-	mutexCreate(&state->lock);
-	condCreate(&state->cond);
+	err = sys_sem_new(&(state->sem), 0);
+	LWIP_ASSERT("failed to create init_sem", err == ERR_OK);
+	LWIP_UNUSED_ARG(err);
 
 	netif->name[0] = 'p';
 	netif->name[1] = 'p';
@@ -748,10 +744,13 @@ static int pppos_netifInit(struct netif *netif, char *cfg)
 			log_error("could not create PPP control interface");
 			return ERR_IF ; // TODO: maybe permanent broken state?
 		}
+	
 		netif->flags &= ~NETIF_FLAG_UP;
+		LOCK_TCPIP_CORE();	
 		ppp_set_netif_statuscallback(state->ppp, pppos_statusCallback);
-		if (!(flags & CFG_FLAG_NO_DEFAULT_ROUTE))
+		if (!(flags & CFG_FLAG_NO_DEFAULT_ROUTE)){	
 			ppp_set_default(state->ppp);
+		}
 
 #if LWIP_DNS
 		if (!(flags & CFG_FLAG_NO_DNS))
@@ -761,9 +760,9 @@ static int pppos_netifInit(struct netif *netif, char *cfg)
 #if PPPOS_USE_AUTH
 		ppp_set_auth(state->ppp, PPPOS_AUTH_TYPE, PPPOS_AUTH_USER, PPPOS_AUTH_PASSWD);
 #endif /* PPPOS_USE_AUTH */
+		UNLOCK_TCPIP_CORE();
 	}
-
-	beginthread(pppos_mainLoop, 4, (void *)state->main_loop_stack, sizeof(state->main_loop_stack), state);
+		sys_thread_new("pppos_mainLoop", pppos_mainLoop, state, DEFAULT_THREAD_STACKSIZE, DEFAULT_THREAD_PRIO);
 
 	for (retries = 3; retries > 0; retries--) {
 		/* wait until thread started */
@@ -773,13 +772,15 @@ static int pppos_netifInit(struct netif *netif, char *cfg)
 		}
 
 		if (flags & CFG_FLAG_DEFAULT_UP) {
-			log_info("pppou netif up");
+			log_info("pppos netif up");
+			LOCK_TCPIP_CORE();
 			netif_set_up(netif);
+			UNLOCK_TCPIP_CORE();
 		}
-
+		
 		break;
 	}
-
+	log_info("done netifInit");
 	return ERR_OK;
 }
 
@@ -824,3 +825,4 @@ void register_driver_pppos(void)
 {
 	register_netif_driver(&pppos_drv);
 }
+

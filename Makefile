@@ -5,15 +5,13 @@
 #
 # %LICENSE%
 #
+# set local path manually as we're including other Makefiles here (as an empty var - TOPDIR)
+
+LWIP_LOCAL_DIR := $(dir $(lastword $(MAKEFILE_LIST)))
 
 include ../phoenix-rtos-build/Makefile.common
 
-# set local path manually as we're including other Makefiles here (as an empty var - TOPDIR)
-LOCAL_DIR :=
-
 .DEFAULT_GOAL := all
-
-LWIPOPTS_DIR ?= "include/default-opts"
 
 # default path for the programs to be installed in rootfs
 DEFAULT_INSTALL_PATH := /sbin
@@ -29,12 +27,21 @@ ifeq (${LWIP_G3_BUILD}, yes)
 include g3/Makefile
 endif
 
-CFLAGS += -Wundef -Iinclude -Ilib-lwip/src/include -I"$(LWIPOPTS_DIR)"
+# port specific definitions
+ifeq ("$(TARGET)","host-generic-pc")
+include contrib/Makefile
+DEPS := lwip-port lwip-opts
+LOCAL_HEADERS_DIR :=  $(LWIPDIR)/include
+else
+# don't install include subdir contents, these are actually internal headers
+LOCAL_HEADERS_DIR :=  nothing
+endif
 
+CFLAGS += -Wundef -I$(LWIPPORT_DIR) -I$(LWIPDIR)/include -I$(LWIPOPTS_DIR) 
+
+LOCAL_DIR := $(LWIP_LOCAL_DIR)
 NAME := lwip-core
 SRCS := $(LWIP_SRCS)
-# don't install include subdir contents, these are actually internal headers
-LOCAL_HEADER_DIR := nothing
 include $(static-lib.mk)
 
 # should define NET_DRIVERS and platform driver sources
@@ -52,7 +59,9 @@ include ipsec/Makefile
 endif
 
 include drivers/Makefile
+ifneq ("$(TARGET)","host-generic-pc")
 include port/Makefile
+endif
 
 DEFAULT_COMPONENTS := $(ALL_COMPONENTS)
 

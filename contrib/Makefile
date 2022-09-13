@@ -1,0 +1,25 @@
+# Makefile for port specific components to include
+
+ifeq ("$(TARGET)","host-generic-pc")
+LWIPOPTS_DIR = include/default-opts/unix
+LWIPPORT_DIR = contrib/ports/unix/port/include
+LWIP_SRCS += contrib/ports/unix/port/sys_arch.c contrib/ports/unix/port/perf.c 
+
+# Application components 
+LWIP_SRCS += contrib/apps/ping/ping.c
+LOCAL_HEADERS := contrib/apps/ping/ping.h
+else
+LWIPOPTS_DIR ?= include/default-opts
+LWIPPORT_DIR ?= include/
+endif
+
+
+LOCAL_DIR := $(LWIP_LOCAL_DIR)
+NAME := lwip-opts
+LOCAL_HEADERS_DIR := $(LWIPOPTS_DIR)
+include $(static-lib.mk)
+
+LOCAL_DIR := $(LWIP_LOCAL_DIR)
+NAME := lwip-port
+LOCAL_HEADERS_DIR := $(LWIPPORT_DIR)
+include $(static-lib.mk)
