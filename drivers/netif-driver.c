@@ -15,8 +15,7 @@
 #include "lwip/stats.h"
 #include "lwip/snmp.h"
 #include "lwip/ethip6.h"
-
-#include <sys/threads.h>
+#include <arch/sys_arch.h>
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,7 +29,7 @@
 struct mdio_bus {
 	const mdio_bus_ops_t *ops;
 	void *arg;
-	handle_t lock;
+	sys_mutex_t *lock;
 };
 
 
@@ -53,7 +52,7 @@ int register_mdio_bus(const mdio_bus_ops_t *ops, void *arg)
 		if (mdio[i].ops)
 			continue;
 
-		if ((err = mutexCreate(&mdio[i].lock)))
+		if ((err = sys_mutex_new(mdio[i].lock)))
 			return err;
 
 		mdio[i].ops = ops;
@@ -140,6 +139,7 @@ int create_netif(char *conf)
 		return -ENOMEM;
 
 	ni = &storage->netif;
+	netif_default = ni;
 	storage->cfg = arg;
 	storage->drv = drv;
 
@@ -178,16 +178,19 @@ int mdio_lock_bus(unsigned bus)
 {
 	const struct mdio_bus *pb = mdio_bus(bus);
 
-	if (pb)
-		return mutexLock(pb->lock);
-	else
+	if (pb) {
+		sys_mutex_lock(pb->lock);
+		return 0;
+	}
+	else {
 		return -ENODEV;
+	}
 }
 
 
 void mdio_unlock_bus(unsigned bus)
 {
-	mutexUnlock(mdio_bus(bus)->lock);
+	sys_mutex_unlock(mdio_bus(bus)->lock);
 }
 
 
@@ -197,9 +200,9 @@ int mdio_setup(unsigned bus, unsigned max_khz, unsigned min_hold_ns, unsigned op
 	int err;
 
 	if (pb) {
-		mutexLock(pb->lock);
+		sys_mutex_lock(pb->lock);
 		err = pb->ops->setup(pb->arg, max_khz, min_hold_ns, opt_preamble);
-		mutexUnlock(pb->lock);
+		sys_mutex_unlock(pb->lock);
 	} else
 		err = -ENODEV;
 
@@ -213,9 +216,9 @@ uint16_t mdio_read(unsigned bus, unsigned addr, uint16_t reg)
 	uint16_t v = 0;
 
 	if (pb) {
-		mutexLock(pb->lock);
+		sys_mutex_lock(pb->lock);
 		v = pb->ops->read(pb->arg, addr, reg);
-		mutexUnlock(pb->lock);
+		sys_mutex_unlock(pb->lock);
 	}
 
 	return v;
@@ -227,8 +230,9 @@ void mdio_write(unsigned bus, unsigned addr, uint16_t reg, uint16_t val)
 	const struct mdio_bus *pb = mdio_bus(bus);
 
 	if (pb) {
-		mutexLock(pb->lock);
+		sys_mutex_lock(pb->lock);
 		pb->ops->write(pb->arg, addr, reg, val);
-		mutexUnlock(pb->lock);
+		sys_mutex_lock(pb->lock);
 	}
 }
+

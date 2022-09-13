@@ -26,6 +26,11 @@ ifneq ($(filter pppos,$(NET_DRIVERS)),)
   endif
 endif
 
+ifeq ("$(TARGET)","host-generic-pc")
+CFLAGS += -Iinclude 
+LOCAL_HEADERS := ../include/netif-driver.h
+endif
+
 NAME := lwip-drivers
 LOCAL_SRCS := $(DRIVERS_SRCS)
 include $(static-lib.mk)
