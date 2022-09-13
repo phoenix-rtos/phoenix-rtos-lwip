@@ -7,7 +7,7 @@
 #
 # set local path manually as we're including other Makefiles here (as an empty var - TOPDIR)
 
-GLOBAL_LOCAL_DIR := $(dir $(lastword $(MAKEFILE_LIST)))
+LWIP_LOCAL_DIR := $(dir $(lastword $(MAKEFILE_LIST)))
 
 include ../phoenix-rtos-build/Makefile.common
 
@@ -27,34 +27,19 @@ ifeq (${LWIP_G3_BUILD}, yes)
 include g3/Makefile
 endif
 
+# port specific definitions
 ifeq ("$(TARGET)","host-generic-pc")
-LWIPOPTS_DIR = include/default-opts/unix
-LWIPPORT_DIR = contrib/ports/unix/port/include
-
-LOCAL_DIR := $(GLOBAL_LOCAL_DIR)
-NAME:= lwip-inc
-LOCAL_HEADERS_DIR := $(LWIPPORT_DIR) 
-include $(static-lib.mk)
-
-LOCAL_DIR := $(GLOBAL_LOCAL_DIR)
-NAME:= lwip-inc2
-LOCAL_HEADERS_DIR := $(LWIPOPTS_DIR) 
-include $(static-lib.mk)
-
-LWIP_SRCS += contrib/ports/unix/port/sys_arch.c contrib/ports/unix/port/perf.c contrib/apps/ping/ping.c
-LOCAL_HEADERS := contrib/apps/ping/ping.h
-DEPS := lwip-inc lwip-inc2
+include contrib/Makefile
+DEPS := lwip-port lwip-opts
 LOCAL_HEADERS_DIR :=  $(LWIPDIR)/include
 else
-LWIPOPTS_DIR ?= include/default-opts
-LWIPPORT_DIR ?= include/
 # don't install include subdir contents, these are actually internal headers
 LOCAL_HEADERS_DIR :=  nothing
 endif
 
 CFLAGS += -Wundef -I$(LWIPPORT_DIR) -I$(LWIPDIR)/include -I$(LWIPOPTS_DIR) 
 
-LOCAL_DIR := $(GLOBAL_LOCAL_DIR)
+LOCAL_DIR := $(LWIP_LOCAL_DIR)
 NAME := lwip-core
 SRCS := $(LWIP_SRCS)
 include $(static-lib.mk)
