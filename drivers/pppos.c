@@ -24,6 +24,7 @@
 #include <sys/threads.h>
 #include <sys/msg.h>
 #include <syslog.h>
+#include <termios.h>
 
 #include <pppos_modem.h>
 
@@ -286,14 +287,17 @@ static int at_send_cmd(int fd, const char* cmd, int timeout_ms)
 // NOTE: this only disconnects the AT modem from the data connection
 // Currently only used in initialisation
 #if PPPOS_DISCONNECT_ON_INIT
-static int at_disconnect(int fd) {
-	// TODO: do it better (finite retries? broken?)
+static int at_disconnect(int fd)
+{
 	int res;
 	int retries = 3;
 	do {
-		serial_write(fd, (u8_t*) "+++", 3);	// ATS2 - escape char (default '+')
-		usleep(1000 * 1000);		// ATS12 - escape prompt delay (default: 1s)
-		res = at_send_cmd(fd, "ATH\r\n", 3000);
+		/* send AT check command before trying to escape PPP */
+		if (at_send_cmd(fd, "AT\r\n", 3000) != AT_RESULT_OK) {
+			serial_write(fd, (u8_t *)"+++", 3);
+			usleep(1000 * 1000);
+		}
+		res = at_send_cmd(fd, AT_DISCONNECT_CMD, 3000);
 	} while (res != AT_RESULT_OK && --retries);
 
 	return res;
