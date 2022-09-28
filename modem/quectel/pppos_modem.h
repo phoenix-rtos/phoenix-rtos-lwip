@@ -18,6 +18,7 @@
 #define PPPOS_USE_AUTH            0
 #define PPPOS_DISCONNECT_ON_INIT  0
 #define AT_CONNECT_CMD            "AT+CGDATA=\"PPP\",1\r\n"
+#define AT_DISCONNECT_CMD         "ATH\r\n"
 #define AT_INIT_CMDS_TIMEOUT_MS   3000
 #define AT_CONNECT_CMD_TIMEOUT_MS 3000
 

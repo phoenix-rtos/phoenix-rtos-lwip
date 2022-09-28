@@ -21,6 +21,7 @@
 #define PPPOS_AUTH_PASSWD         "blank"
 #define PPPOS_DISCONNECT_ON_INIT  0
 #define AT_CONNECT_CMD            "ATDT*99#\r\n"
+#define AT_DISCONNECT_CMD         "ATH\r\n"
 #define AT_INIT_CMDS_TIMEOUT_MS   3000
 #define AT_CONNECT_CMD_TIMEOUT_MS 3000
 

@@ -19,8 +19,9 @@
 #define PPPOS_AUTH_TYPE           PPPAUTHTYPE_CHAP
 #define PPPOS_AUTH_USER           "blank"
 #define PPPOS_AUTH_PASSWD         "blank"
-#define PPPOS_DISCONNECT_ON_INIT  0
+#define PPPOS_DISCONNECT_ON_INIT  1
 #define AT_CONNECT_CMD            "AT+PPPD\r\n"
+#define AT_DISCONNECT_CMD         "AT+RST\r\n"
 #define AT_INIT_CMDS_TIMEOUT_MS   3000
 #define AT_CONNECT_CMD_TIMEOUT_MS 3000
 
