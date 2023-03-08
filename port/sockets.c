@@ -605,6 +605,10 @@ static int socket_ioctl(int sock, unsigned long request, const void* in_data, vo
 	case SIOCADDRT:
 	case SIOCDELRT: {
 		struct rtentry *rt = (struct rtentry *) in_data;
+		if (rt == NULL) {
+			return -EFAULT;
+		}
+
 		struct netif *interface = netif_find(rt->rt_dev);
 		int ret = EOK;
 
