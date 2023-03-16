@@ -142,7 +142,7 @@ static int route_open(int flags)
 
 	if ((entry = rt_table.entries) != NULL) {
 		do {
-			SNPRINTF_APPEND("%2s%u\t%08X\t%08X\t%04X\t%d\t%u\t%d\t%08X\t%d\t%u\t%u\n",
+			SNPRINTF_APPEND("%.2s%u\t%08X\t%08X\t%04X\t%d\t%u\t%d\t%08X\t%d\t%u\t%u\n",
 				entry->netif->name, entry->netif->num,
 				ip4_addr_get_u32(&entry->dst),                                                          /* Destination */
 				ip4_addr_get_u32(entry->flags & RTF_GATEWAY ? &entry->gw : netif_ip4_gw(entry->netif)), /* Gateway */
@@ -161,7 +161,7 @@ static int route_open(int flags)
 		if (ip4_addr_get_u32(netif_ip4_gw(netif)) != 0)
 			flags |= RTF_GATEWAY;
 
-		SNPRINTF_APPEND("%2s%u\t%08X\t%08X\t%04X\t%d\t%u\t%d\t%08X\t%d\t%u\t%u\n",
+		SNPRINTF_APPEND("%.2s%u\t%08X\t%08X\t%04X\t%d\t%u\t%d\t%08X\t%d\t%u\t%u\n",
 			netif->name, netif->num,
 			prefix,                                /* Destination */
 			ip4_addr_get_u32(netif_ip4_gw(netif)), /* Gateway */
@@ -227,28 +227,28 @@ static int ifstatus_open(int flags)
 	size = sizeof(devs_common.ifstatus.buf);
 
 	for (netif = netif_list; netif != NULL; netif = netif->next) {
-		SNPRINTF_APPEND("%2s%d_up=%u\n", netif->name, netif->num, netif_is_up(netif));
-		SNPRINTF_APPEND("%2s%d_link=%u\n", netif->name, netif->num, netif_is_link_up(netif));
-		SNPRINTF_APPEND("%2s%d_ip=%s\n", netif->name, netif->num, inet_ntoa(netif->ip_addr));
+		SNPRINTF_APPEND("%.2s%d_up=%u\n", netif->name, netif->num, netif_is_up(netif));
+		SNPRINTF_APPEND("%.2s%d_link=%u\n", netif->name, netif->num, netif_is_link_up(netif));
+		SNPRINTF_APPEND("%.2s%d_ip=%s\n", netif->name, netif->num, inet_ntoa(netif->ip_addr));
 		if (!netif_is_ppp(netif) && !netif_is_tun(netif)) {
 #if LWIP_DHCP
-			SNPRINTF_APPEND("%2s%d_dhcp=%u\n", netif->name, netif->num, netif_is_dhcp(netif));
+			SNPRINTF_APPEND("%.2s%d_dhcp=%u\n", netif->name, netif->num, netif_is_dhcp(netif));
 #endif
-			SNPRINTF_APPEND("%2s%d_netmask=%s\n", netif->name, netif->num, inet_ntoa(netif->netmask));
-			SNPRINTF_APPEND("%2s%d_gateway=%s\n", netif->name, netif->num, inet_ntoa(netif->gw));
+			SNPRINTF_APPEND("%.2s%d_netmask=%s\n", netif->name, netif->num, inet_ntoa(netif->netmask));
+			SNPRINTF_APPEND("%.2s%d_gateway=%s\n", netif->name, netif->num, inet_ntoa(netif->gw));
 #if LWIP_DHCP_GET_MOBILE_AGENT
 			if (netif_is_dhcp(netif))
-				SNPRINTF_APPEND("%2s%d_mobile_agent=%s\n", netif->name, netif->num, inet_ntoa(netif->mobile_agent));
+				SNPRINTF_APPEND("%.2s%d_mobile_agent=%s\n", netif->name, netif->num, inet_ntoa(netif->mobile_agent));
 #endif
 		}
 		else {
-			SNPRINTF_APPEND("%2s%d_ptp=%s\n", netif->name, netif->num, inet_ntoa(netif->gw));
+			SNPRINTF_APPEND("%.2s%d_ptp=%s\n", netif->name, netif->num, inet_ntoa(netif->gw));
 		}
 
 		if (strncmp("lo", netif->name, sizeof(netif->name)) != 0 && strncmp("wl", netif->name, sizeof(netif->name)) != 0 && strncmp("sc", netif->name, sizeof(netif->name)) != 0) {
 			drv = netif_driver(netif);
 			if (drv != NULL && drv->media != NULL)
-				SNPRINTF_APPEND("%2s%d_media=%s\n", netif->name, netif->num, drv->media(netif));
+				SNPRINTF_APPEND("%.2s%d_media=%s\n", netif->name, netif->num, drv->media(netif));
 		}
 	}
 

@@ -1077,7 +1077,7 @@ static int do_getifaddrs(char *buf, size_t *buflen)
 		dest->ifa_netmask = (struct sockaddr *)(addrdest - buf);
 		addrdest += sizeof(struct sockaddr_in);
 
-		snprintf(strdest, sizeof(netif->name) + 2, "%2s%1u", netif->name, netif->num % 10);
+		snprintf(strdest, sizeof(netif->name) + 2, "%.2s%1u", netif->name, netif->num % 10);
 		dest->ifa_name = (char *)(strdest - buf);
 #if LWIP_IPV6
 		sin6 = (struct sockaddr_in6 *) &sa;

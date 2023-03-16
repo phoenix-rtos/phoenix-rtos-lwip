@@ -183,7 +183,7 @@ static err_t ipsecdev_ip_input(struct pbuf *p, struct netif *netif)
 
 			/* change in-tunnel dst-IP if needed (Virtual IP) */
 			if (!ip_addr_isany(&(ipsecdev->ip_addr)) && ip_addr_cmp(&iph->dest, &ipsecdev->ip_addr) && !ip_addr_isany(&netif->ip_addr)) {
-				IPSEC_LOG_DBG(IPSEC_STATUS_SUCCESS, "%2s%u: DNAT after IPsec: %08lx to %08lx",
+				IPSEC_LOG_DBG(IPSEC_STATUS_SUCCESS, "%.2s%u: DNAT after IPsec: %08lx to %08lx",
 					netif->name, netif->num, lwip_ntohl(iph->dest.addr), lwip_ntohl(netif->ip_addr.addr));
 				ipsecdev_apply_static_nat(iph, netif->ip_addr.addr, 0);
 			}
@@ -280,7 +280,7 @@ static err_t ipsecdev_output(struct netif *netif, struct pbuf *p, const ip4_addr
 	if ((state->flags & IPSEC_FLAGS_ENABLED) == 0)
 		return state->hw_output(state->hw_netif, p, ipaddr);
 
-	IPSEC_LOG_TRC(IPSEC_TRACE_ENTER, "pbuf=%p, netif=%2s%u", p, netif->name, netif->num);
+	IPSEC_LOG_TRC(IPSEC_TRACE_ENTER, "pbuf=%p, netif=%.2s%u", p, netif->name, netif->num);
 
 	if (p->next != NULL) {
 		pbuf_ref(p);
@@ -320,7 +320,7 @@ static err_t ipsecdev_output(struct netif *netif, struct pbuf *p, const ip4_addr
 
 	/* change in-tunnle src-IP (Virtual IP) */
 	if (spd->policy == IPSEC_POLICY_IPSEC && !ip_addr_isany(&ipsecdev->ip_addr) && !ip_addr_cmp(&ip->src, &ipsecdev->ip_addr)) {
-		IPSEC_LOG_DBG(IPSEC_STATUS_SUCCESS, "%2s%u: SNAT before IPsec: %08lx as %08lx",
+		IPSEC_LOG_DBG(IPSEC_STATUS_SUCCESS, "%.2s%u: SNAT before IPsec: %08lx as %08lx",
 			netif->name, netif->num, lwip_ntohl(ip->src.addr), lwip_ntohl(ipsecdev->ip_addr.addr));
 		ipsecdev_apply_static_nat(ip, ipsecdev->ip_addr.addr, 1);
 	}
