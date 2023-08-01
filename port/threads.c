@@ -19,10 +19,6 @@
 
 #include <lwipopts.h>
 
-#ifndef WAITTID_THREAD_PRIO
-#define WAITTID_THREAD_PRIO 3
-#endif
-
 
 typedef struct {
 	rbnode_t linkage;
@@ -36,10 +32,8 @@ typedef struct {
 
 
 static struct {
-	char collector_stack[512] __attribute__((aligned(8)));
 	rbtree_t threads;
 	handle_t lock;
-	handle_t join_cond;
 } global;
 
 
@@ -82,33 +76,6 @@ static void thread_register(thread_data_t *ts)
 }
 
 
-static void thread_waittid_thr(void *arg)
-{
-	thread_data_t *data, s;
-
-	for (;;) {
-		while ((s.tid = threadJoin(-1, 0)) == -EINTR)
-			;
-
-		mutexLock(global.lock);
-		data = lib_treeof(thread_data_t, linkage, lib_rbFind(&global.threads, &s.linkage));
-		if (data != NULL) {
-			lib_rbRemove(&global.threads, &data->linkage);
-			mutexUnlock(global.lock);
-
-			_errno_remove(&data->err);
-			free(data->stack);
-			free(data);
-
-			condBroadcast(global.join_cond);
-		}
-		else {
-			mutexUnlock(global.lock);
-		}
-	}
-}
-
-
 static void thread_main(void *arg)
 {
 	thread_data_t *t = arg;
@@ -118,7 +85,7 @@ static void thread_main(void *arg)
 }
 
 
-int sys_thread_opt_new(const char *name, void (* thread)(void *arg), void *arg, int stacksize, int prio, handle_t *id)
+int sys_thread_opt_new(const char *name, void (*thread)(void *arg), void *arg, int stacksize, int prio, handle_t *id)
 {
 	void *stack;
 	int err;
@@ -155,7 +122,7 @@ int sys_thread_opt_new(const char *name, void (* thread)(void *arg), void *arg, 
 }
 
 
-sys_thread_t sys_thread_new(const char *name, void (* thread)(void *arg), void *arg, int stacksize, int prio)
+sys_thread_t sys_thread_new(const char *name, void (*thread)(void *arg), void *arg, int stacksize, int prio)
 {
 	handle_t id;
 	int err;
@@ -171,24 +138,36 @@ sys_thread_t sys_thread_new(const char *name, void (* thread)(void *arg), void *
 int sys_thread_join(handle_t id)
 {
 	thread_data_t *data, s;
+	int res;
 
-	if (id == gettid())
+	if (id == gettid()) {
 		return -1;
+	}
+
+	do {
+		res = threadJoin(id, 0);
+	} while (res == -EINTR);
+
+	if (res < 0) {
+		return -1;
+	}
 
 	s.tid = id;
 
 	mutexLock(global.lock);
 
-	for (;;) {
-		data = lib_treeof(thread_data_t, linkage, lib_rbFind(&global.threads, &s.linkage));
+	data = lib_treeof(thread_data_t, linkage, lib_rbFind(&global.threads, &s.linkage));
+	if (data != NULL) {
+		lib_rbRemove(&global.threads, &data->linkage);
+		mutexUnlock(global.lock);
 
-		if (data == NULL)
-			break;
-
-		condWait(global.join_cond, global.lock, 0);
+		_errno_remove(&data->err);
+		free(data->stack);
+		free(data);
 	}
-
-	mutexUnlock(global.lock);
+	else {
+		mutexUnlock(global.lock);
+	}
 
 	return 0;
 }
@@ -199,15 +178,9 @@ void init_lwip_threads(void)
 	int err;
 
 	err = mutexCreate(&global.lock);
-	if (err)
-		errout(err, "mutexCreate(lock)");
-
-	err = condCreate(&global.join_cond);
 	if (err) {
-		resourceDestroy(global.lock);
-		errout(err, "condCreate(join_cond)");
+		errout(err, "mutexCreate(lock)");
 	}
 
 	lib_rbInit(&global.threads, thread_cmp, NULL);
-	beginthreadex(thread_waittid_thr, WAITTID_THREAD_PRIO, global.collector_stack, sizeof(global.collector_stack), NULL, NULL);
 }
