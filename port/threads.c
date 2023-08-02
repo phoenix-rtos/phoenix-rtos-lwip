@@ -42,14 +42,15 @@ static int thread_cmp(rbnode_t *n1, rbnode_t *n2)
 	thread_data_t *s1 = lib_treeof(thread_data_t, linkage, n1);
 	thread_data_t *s2 = lib_treeof(thread_data_t, linkage, n2);
 
-	if (s1->tid == s2->tid)
+	if (s1->tid == s2->tid) {
 		return 0;
-
-	else if (s1->tid > s2->tid)
+	}
+	else if (s1->tid > s2->tid) {
 		return 1;
-
-	else
+	}
+	else {
 		return -1;
+	}
 }
 
 
@@ -59,14 +60,15 @@ static void thread_register(thread_data_t *ts)
 
 	s.tid = ts->tid;
 
-	mutexLock(global.lock);
-	if ((old = lib_treeof(thread_data_t, linkage, lib_rbFind(&global.threads, &s.linkage))) != NULL) {
+	(void)mutexLock(global.lock);
+	old = lib_treeof(thread_data_t, linkage, lib_rbFind(&global.threads, &s.linkage));
+	if (old != NULL) {
 		_errno_remove(&old->err);
 		lib_rbRemove(&global.threads, &old->linkage);
 	}
 
-	lib_rbInsert(&global.threads, &ts->linkage);
-	mutexUnlock(global.lock);
+	(void)lib_rbInsert(&global.threads, &ts->linkage);
+	(void)mutexUnlock(global.lock);
 	_errno_new(&ts->err);
 
 	if (old != NULL) {
@@ -92,11 +94,12 @@ int sys_thread_opt_new(const char *name, void (*thread)(void *arg), void *arg, i
 	thread_data_t *ts;
 
 	stack = malloc(stacksize);
-	if (!stack)
+	if (stack == NULL) {
 		bail("no memory for thread: %s\n", name);
+	}
 
 	ts = malloc(sizeof(*ts));
-	if (!ts) {
+	if (ts == NULL) {
 		free(stack);
 		bail("no memory for thread: %s\n", name);
 	}
@@ -105,10 +108,10 @@ int sys_thread_opt_new(const char *name, void (*thread)(void *arg), void *arg, i
 	ts->stack = stack;
 	ts->arg = arg;
 
-	mutexLock(global.lock);
+	(void)mutexLock(global.lock);
 	err = beginthreadex(thread_main, prio, stack, stacksize, ts, &ts->tid);
 
-	if (err) {
+	if (err != 0) {
 		free(stack);
 		free(ts);
 	}
@@ -116,7 +119,7 @@ int sys_thread_opt_new(const char *name, void (*thread)(void *arg), void *arg, i
 		*id = ts->tid;
 	}
 
-	mutexUnlock(global.lock);
+	(void)mutexUnlock(global.lock);
 
 	return err;
 }
@@ -128,8 +131,9 @@ sys_thread_t sys_thread_new(const char *name, void (*thread)(void *arg), void *a
 	int err;
 
 	err = sys_thread_opt_new(name, thread, arg, stacksize, prio, &id);
-	if (err)
+	if (err != 0) {
 		errout(err, "beginthread(%s)", name);
+	}
 
 	return id;
 }
@@ -154,19 +158,19 @@ int sys_thread_join(handle_t id)
 
 	s.tid = id;
 
-	mutexLock(global.lock);
+	(void)mutexLock(global.lock);
 
 	data = lib_treeof(thread_data_t, linkage, lib_rbFind(&global.threads, &s.linkage));
 	if (data != NULL) {
 		lib_rbRemove(&global.threads, &data->linkage);
-		mutexUnlock(global.lock);
+		(void)mutexUnlock(global.lock);
 
 		_errno_remove(&data->err);
 		free(data->stack);
 		free(data);
 	}
 	else {
-		mutexUnlock(global.lock);
+		(void)mutexUnlock(global.lock);
 	}
 
 	return 0;
@@ -178,7 +182,7 @@ void init_lwip_threads(void)
 	int err;
 
 	err = mutexCreate(&global.lock);
-	if (err) {
+	if (err != EOK) {
 		errout(err, "mutexCreate(lock)");
 	}
 
