@@ -6,6 +6,7 @@
 # Copyright 2021 Phoenix Systems
 #
 
-NET_DRIVERS_SUPPORTED := pppou pppos
+NET_DRIVERS_SUPPORTED := enet tuntap
 NET_DRIVERS ?= $(NET_DRIVERS_SUPPORTED)
-PPPOS_MODEM := huawei
+
+DRIVERS_SRCS_enet = imxrt-enet.c imxrt-ephy.c imxrt-gpio.c $(DRIVERS_SRCS_UTIL) hw-debug.c

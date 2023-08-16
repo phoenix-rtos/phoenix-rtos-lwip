@@ -1,10 +1,10 @@
 /*
  * Phoenix-RTOS --- networking stack
  *
- * iMX6ULL ENET network module driver
+ * imxrt1064 ENET network module driver
  *
- * Copyright 2018 Phoenix Systems
- * Author: Michał Mirosław
+ * Copyright 2023 Phoenix Systems
+ * Author: Phoenix Systems
  *
  * %LICENSE%
  */
@@ -16,12 +16,12 @@
 #include "hw-debug.h"
 #include "physmmap.h"
 #include "res-create.h"
-#include "imx6-enet-regs.h"
+#include "imxrt-enet-regs.h"
 
 #include <sys/interrupt.h>
 #include <sys/platform.h>
 #include <sys/threads.h>
-#include <phoenix/arch/imx6ull.h>
+#include <phoenix/arch/imxrt.h>
 #include <stdatomic.h>
 #include <endian.h>
 #include <errno.h>
@@ -32,8 +32,9 @@
 #include <string.h>
 #include <unistd.h>
 
+#define ENET_VERBOSE
 
-#define ENET_CLK_KHZ			(66000 /* IPG */)	// BT_FREQ=0
+#define ENET_CLK_KHZ			(132000 /* IPG */)	// BT_FREQ=0
 
 #define USE_ENET_EXT_DESCRIPTORS	0
 #define USE_RMII			1
@@ -44,8 +45,7 @@
 #define ENET_TX_RING_SIZE		64
 #define ENET_BUFFER_SIZE		(2048 - 64)
 #define MDC_ALWAYS_ON			1
-#define MDIO_DEBUG			0
-#define ENET_VERBOSE
+#define MDIO_DEBUG			1
 
 
 #if USE_ENET_EXT_DESCRIPTORS
@@ -176,17 +176,17 @@ static void enet_start(enet_priv_t *state)
 	enet_printf(state, "regs: %08x %08x %08x %08x %08x %08x %08x %08x",
 		state->mmio->ECR, state->mmio->EIMR, state->mmio->TACC, state->mmio->RACC,
 		state->mmio->TCR, state->mmio->RCR, state->mmio->MRBR, state->mmio->FTRL);
-	enet_printf(state, "regs:   PLL6  ,  CCGR0 ,  GPR1  ,TXCLKMUX,TXCLKPAD,RCLK1SID,OSC24-M0,OSC24-LP");
-	enet_printf(state, "regs: %08x %08x %08x %08x %08x %08x %08x %08x",
-		hwdebug_read(0x20c80e0), hwdebug_read(0x20c4068), hwdebug_read(0x20e4004), hwdebug_read(0x20e00dc),
-		hwdebug_read(0x20e0368), hwdebug_read(0x20e0574), hwdebug_read(0x20c8150), hwdebug_read(0x20c8270));
+	enet_printf(state, "regs:   PLL6  ,  CCGR0 ,  GPR1  ,TXCLKMUX,OSC24-M0,OSC24-LP"); //enet_printf(state, "regs:   PLL6  ,  CCGR0 ,  GPR1  ,TXCLKMUX,TXCLKPAD,RCLK1SID,OSC24-M0,OSC24-LP");
+	enet_printf(state, "regs: %08x %08x %08x %08x %08x %08x",
+		hwdebug_read(0x400d80e0), hwdebug_read(0x400fc068), hwdebug_read(0x400ac004), hwdebug_read(0x401f8448),
+		hwdebug_read(0x400d8150), hwdebug_read(0x400fc054)); //hwdebug_read(0x20e0368), hwdebug_read(0x20e0574), hwdebug_read(0x400d8150), hwdebug_read(0x400fc054));
 #endif
 }
 
 
 static int enet_readFusedMac(uint32_t *buf)
 {
-	volatile uint32_t *va = physmmap(0x21bc000, 0x1000);
+	volatile uint32_t *va = physmmap(0x401f4000, 0x1000);
 
 	if (va == MAP_FAILED)
 		return -ENOMEM;
@@ -202,7 +202,7 @@ static int enet_readFusedMac(uint32_t *buf)
 
 static uint32_t enet_readCpuId(void)
 {
-	volatile uint32_t *va = physmmap(0x21bc000, 0x1000);
+	volatile uint32_t *va = physmmap(0x401f4000, 0x1000);
 	uint32_t res = 0;
 
 	if (va == MAP_FAILED)
@@ -232,14 +232,14 @@ static void enet_readCardMac(enet_priv_t *state)
 
 	mac = (void *)&state->netif->hwaddr;
 
-	if (state->devphys == 0x02188000 /* iMX6ULL.ENET1 */ && !enet_readFusedMac(buf)) {
+	if (state->devphys == 0x402D8000 /* imxrt1064.ENET1 */ && !enet_readFusedMac(buf)) {
 		mac[0] = get_byte(buf[1], 1);
 		mac[1] = get_byte(buf[1], 0);
 		mac[2] = get_byte(buf[0], 3);
 		mac[3] = get_byte(buf[0], 2);
 		mac[4] = get_byte(buf[0], 1);
 		mac[5] = get_byte(buf[0], 0);
-	} else if (state->devphys == 0x020B4000 /* iMX6ULL.ENET2 */ && !enet_readFusedMac(buf)) {
+	} else if (state->devphys == 0x402D4000 /* imxrt1064.ENET2 */ && !enet_readFusedMac(buf)) {
 		mac[0] = get_byte(buf[2], 3);
 		mac[1] = get_byte(buf[2], 2);
 		mac[2] = get_byte(buf[2], 1);
@@ -427,6 +427,9 @@ static void enet_irq_thread(void *arg)
 			state->mmio->EIMR |= ENET_IRQ_RXF | ENET_IRQ_TXF;
 			condWait(state->irq_cond, state->irq_lock, 0);
 		}
+
+		//TODO: remove
+		usleep(100);
 	}
 	mutexUnlock(state->irq_lock);
 
@@ -455,6 +458,10 @@ static int enet_mdioSetup(void *arg, unsigned max_khz, unsigned min_hold_ns, uns
 		state->mscr |= speed;
 		changed = 1;
 	}
+
+		// state->mscr &= ~ENET_MSCR_SPEED_MASK;
+		// state->mscr |= (42 << 1);
+		// changed = 1;
 
 	if (min_hold_ns < 8000000 / ENET_CLK_KHZ)
 		hold = (min_hold_ns * ENET_CLK_KHZ + 999999) / 1000000 - 1;
@@ -517,7 +524,7 @@ static uint16_t enet_mdioIO(enet_priv_t *state, unsigned addr, unsigned reg, uns
 			dev | (reg & 0xFFFF);
 		enet_mdioWait(state);
 		state->mmio->MMFR = (read ? 0x20020000 : 0x10020000) | /* extended MDIO data r/w */
-			dev | (read ? 0 : val & 0xFFFF);
+			dev | (read ? 0 : val & 0xFFFF);	
 	} else { /* clause 22 */
 		state->mmio->MMFR = (read ? 0x60020000 : 0x50020000) | /* standard MDIO data r/w */
 			((addr & NETDEV_MDIO_A_MASK) << 23) |
@@ -540,7 +547,7 @@ static uint16_t enet_mdioRead(void *arg, unsigned addr, uint16_t reg)
 
 	v = enet_mdioIO(state, addr, reg, 0, 1);
 #if MDIO_DEBUG
-	enet_printf(state, "MDIO %02x[%02x] ?= %04x", addr, reg, v);
+	//enet_printf(state, "MDIO %02x[%02x] ?= %04x", addr, reg, v);
 #endif
 	return v;
 }
@@ -552,7 +559,7 @@ static void enet_mdioWrite(void *arg, unsigned addr, uint16_t reg, uint16_t val)
 
 	enet_mdioIO(state, addr, reg, val, 0);
 #if MDIO_DEBUG
-	enet_printf(state, "MDIO %02x[%02x] := %04x", addr, reg, val);
+	// enet_printf(state, "MDIO %02x[%02x] := %04x", addr, reg, val);
 #endif
 }
 
@@ -580,22 +587,30 @@ static int platformctl_seq(const platformctl_t *pctl, size_t n)
 
 static int enet_initMDIO(enet_priv_t *state)
 {
+#ifdef ENET_VERBOSE
+	enet_printf(state, "configuring MDIO pins");
+#endif
+
 	static const platformctl_t pctl_enet1[] = {
-		{ pctl_set, pctl_ioisel, .ioisel = { pctl_isel_enet1_mac0mdio, 0 } },
-		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio1_06, 0, 0 } },
-		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio1_07, 0, 0 } },
+		{ pctl_set, pctl_ioisel, .ioisel = { pctl_isel_enet_mdio, 1 } },
+
+		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_gpio_emc_40, 1, 0, 1, 1, 0, 2, 6, 0 } },
+		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_gpio_emc_41, 1, 0, 1, 1, 0, 2, 6, 0 } },
+
+		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio_emc_40, 1, 4 } }, //enet_mdc
+		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio_emc_41, 1, 4 } }, //enet_mdio
 	};
 	static const platformctl_t pctl_enet2[] = {
-		{ pctl_set, pctl_ioisel, .ioisel = { pctl_isel_enet2_mac0mdio, 0 } },
-		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio1_06, 0, 1 } },
-		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio1_07, 0, 1 } },
+		{ pctl_set, pctl_ioisel, .ioisel = { pctl_isel_enet2_ipp_ind_mac0_mdio, 1 } },
+		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio_b0_01, 0, 8 } },
+		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio_b0_00, 0, 8 } },
 	};
 
 	int err;
 
-	if (state->devphys == 0x02188000 /* iMX6ULL.ENET1 */)
+	if (state->devphys == 0x402D8000 /* imxrt1064.ENET1 */)
 		err = platformctl_seq(pctl_enet1, sizeof(pctl_enet1) / sizeof(*pctl_enet1));
-	else if (state->devphys == 0x020B4000 /* iMX6ULL.ENET2 */)
+	else if (state->devphys == 0x402D4000 /* imxrt1064.ENET2 */)
 		err = platformctl_seq(pctl_enet2, sizeof(pctl_enet2) / sizeof(*pctl_enet2));
 	else
 		err = 0;
@@ -629,61 +644,86 @@ static int enet_clockEnable(enet_priv_t *state)
 static int enet_pinConfig(enet_priv_t *state)
 {
 	static const platformctl_t pctl_enet1[] = {
-		{ pctl_set, pctl_iogpr, .iogpr = { pctl_gpr_enet1_clk, 0 } },
-		{ pctl_set, pctl_iogpr, .iogpr = { pctl_gpr_enet1_tx, 1 } },
-		{ pctl_set, pctl_ioisel, .ioisel = { pctl_isel_enet1_refclk1, 2 } },
-		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_enet1_rx0, 1, 2, 1, 1, 0, 2, 6, 0 } },
-		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_enet1_rx1, 1, 2, 1, 1, 0, 2, 6, 0 } },
-		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_enet1_rxen, 1, 2, 1, 1, 0, 2, 6, 0 } },
-		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_enet1_rxer, 1, 2, 1, 1, 0, 2, 6, 0 } },
-		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_enet1_tx0, 1, 2, 1, 1, 0, 2, 6, 0 } },
-		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_enet1_tx1, 1, 2, 1, 1, 0, 2, 6, 0 } },
-		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_enet1_txen, 1, 2, 1, 1, 0, 2, 6, 0 } },
-		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_enet1_txclk, 1, 0, 0, 0, 0, 0, 6, 1 } },
-		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_enet1_rx0, 0, 0 } },
-		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_enet1_rx1, 0, 0 } },
-		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_enet1_rxen, 0, 0 } },
-		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_enet1_rxer, 0, 0 } },
-		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_enet1_tx0, 0, 0 } },
-		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_enet1_tx1, 0, 0 } },
-		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_enet1_txen, 0, 0 } },
-		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_enet1_txclk, 1, 4 } },
+		{ pctl_set, pctl_iogpr, .iogpr = { pctl_gpr_enet1_clk_sel, 0} },
+		{ pctl_set, pctl_iogpr, .iogpr = { pctl_gpr_enet1_tx_clk_dir, 1 } },
+
+		{ pctl_set, pctl_ioisel, .ioisel = { pctl_isel_enet_txclk, 1 } },
+		{ pctl_set, pctl_ioisel, .ioisel = { pctl_isel_enet0_timer, 2 } },
+		{ pctl_set, pctl_ioisel, .ioisel = { pctl_isel_enet_rxerr, 1 } },
+		{ pctl_set, pctl_ioisel, .ioisel = { pctl_isel_enet_rxen, 1 } },
+		{ pctl_set, pctl_ioisel, .ioisel = { pctl_isel_enet1_rxdata, 1 } },
+		{ pctl_set, pctl_ioisel, .ioisel = { pctl_isel_enet0_rxdata, 1 } },
+		{ pctl_set, pctl_ioisel, .ioisel = { pctl_isel_enet_mdio, 1 } },
+		{ pctl_set, pctl_ioisel, .ioisel = { pctl_isel_enet_ipg_clk_rmi, 1 } },
+
+		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_gpio_b1_04, 1, 2, 1, 1, 0, 2, 6, 0 } }, //enet1_rx0
+		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_gpio_b1_05, 1, 2, 1, 1, 0, 2, 6, 0 } }, //enet1_rx1
+		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_gpio_b1_06, 1, 2, 1, 1, 0, 2, 6, 0 } }, //enet1_rxen
+		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_gpio_b1_11, 1, 2, 1, 1, 0, 2, 6, 0 } }, //enet1_rxer
+		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_gpio_b1_07, 1, 2, 1, 1, 0, 2, 6, 0 } }, //enet1_tx0
+		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_gpio_b1_08, 1, 2, 1, 1, 0, 2, 6, 0 } }, //enet1_tx1
+		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_gpio_b1_09, 1, 2, 1, 1, 0, 2, 6, 0 } }, //enet1_txen
+		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_gpio_b1_10, 1, 2, 1, 1, 0, 2, 6, 0 } }, //enet1_txclk
+		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_gpio_b1_12, 1, 2, 1, 1, 0, 2, 6, 0 } }, //enet_1588_event0_in
+		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_gpio_b1_13, 1, 2, 1, 1, 0, 2, 6, 0 } }, //enet_1588_event0_out
+
+		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio_b1_04, 1, 3 } }, //enet1_rx0
+		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio_b1_05, 1, 3 } }, //enet1_rx1
+		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio_b1_06, 1, 3 } }, //enet1_rxen
+		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio_b1_11, 1, 3 } }, //enet1_rxer
+		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio_b1_07, 1, 3 } }, //enet1_tx0
+		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio_b1_08, 1, 3 } }, //enet1_tx1
+		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio_b1_09, 1, 3 } }, //enet1_txen
+		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio_b1_10, 1, 6 } }, //enet_ref_clk
+		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio_b1_12, 1, 3 } }, //enet_1588_event0_in
+		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio_b1_13, 1, 3 } }, //enet_1588_event0_out
 		// SION(1) = enable clk loopback to ENET module?
 		// (RX does not work without it)
 	};
 	static const platformctl_t pctl_enet2[] = {
-		{ pctl_set, pctl_iogpr, .iogpr = { pctl_gpr_enet2_clk, 0 } },
-		{ pctl_set, pctl_iogpr, .iogpr = { pctl_gpr_enet2_tx, 1 } },
-		{ pctl_set, pctl_ioisel, .ioisel = { pctl_isel_enet2_refclk2, 2 } },
-		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_enet2_rx0, 1, 2, 1, 1, 0, 2, 6, 0 } },
-		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_enet2_rx1, 1, 2, 1, 1, 0, 2, 6, 0 } },
-		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_enet2_rxen, 1, 2, 1, 1, 0, 2, 6, 0 } },
-		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_enet2_rxer, 1, 2, 1, 1, 0, 2, 6, 0 } },
-		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_enet2_tx0, 1, 2, 1, 1, 0, 2, 6, 0 } },
-		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_enet2_tx1, 1, 2, 1, 1, 0, 2, 6, 0 } },
-		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_enet2_txen, 1, 2, 1, 1, 0, 2, 6, 0 } },
-		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_enet2_txclk, 1, 0, 0, 0, 0, 0, 6, 1 } },
-		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_enet2_rx0, 0, 0 } },
-		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_enet2_rx1, 0, 0 } },
-		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_enet2_rxen, 0, 0 } },
-		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_enet2_rxer, 0, 0 } },
-		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_enet2_tx0, 0, 0 } },
-		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_enet2_tx1, 0, 0 } },
-		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_enet2_txen, 0, 0 } },
-		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_enet2_txclk, 1, 4 } },
+		{ pctl_set, pctl_iogpr, .iogpr = { pctl_gpr_enet2_clk_sel, 0 } },
+		{ pctl_set, pctl_iogpr, .iogpr = { pctl_gpr_enet2_tx_clk_dir, 1 } },
+		{ pctl_set, pctl_ioisel, .ioisel = { pctl_isel_enet2_ipg_clk_rmii, 2 } },
+
+		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_gpio_b1_01, 1, 2, 1, 1, 0, 2, 6, 0 } }, //pctl_pad_enet2_rx
+		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_gpio_b1_02, 1, 2, 1, 1, 0, 2, 6, 0 } }, //pctl_pad_enet2_rx1
+		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_gpio_b1_03, 1, 2, 1, 1, 0, 2, 6, 0 } }, //pctl_pad_enet2_rxen
+		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_gpio_b1_00, 1, 2, 1, 1, 0, 2, 6, 0 } }, //pctl_pad_enet2_rxer
+		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_gpio_b1_14, 1, 2, 1, 1, 0, 2, 6, 0 } }, //pctl_pad_enet2_tx0
+		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_gpio_b1_15, 1, 2, 1, 1, 0, 2, 6, 0 } }, //pctl_pad_enet2_tx1
+		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_gpio_b0_14, 1, 2, 1, 1, 0, 2, 6, 0 } }, //pctl_pad_enet2_txen
+		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_gpio_b0_15, 1, 0, 0, 0, 0, 0, 6, 1 } }, //pctl_pad_enet2_txclk
+
+		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio_b1_01, 1, 8 } }, //pctl_mux_enet2_rx0
+		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio_b1_02, 1, 8 } }, //pctl_mux_enet2_rx1
+		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio_b1_03, 1, 8 } }, //pctl_mux_enet2_rxen
+		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio_b1_00, 1, 8 } }, //pctl_mux_enet2_rxer
+		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio_b1_14, 1, 8 } }, //pctl_mux_enet2_tx0
+		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio_b1_15, 1, 8 } }, //pctl_mux_enet2_tx1
+		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio_b0_14, 1, 8 } }, //pctl_mux_enet2_txen
+		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio_b0_15, 1, 8 } }, //pctl_mux_enet2_txclk
 	};
 
 	int err;
 
-	if (state->devphys == 0x02188000 /* iMX6ULL.ENET1 */)
+	if (state->devphys == 0x402D8000 /* imxrt1064.ENET1 */) {
+#ifdef ENET_VERBOSE
+		enet_printf(state, "configure ENET1 pins");
+#endif
 		err = platformctl_seq(pctl_enet1, sizeof(pctl_enet1) / sizeof(*pctl_enet1));
-	else if (state->devphys == 0x020B4000 /* iMX6ULL.ENET2 */)
+	}
+	else if (state->devphys == 0x402D4000 /* imxrt1064.ENET2 */) {
+#ifdef ENET_VERBOSE
+		enet_printf(state, "configure ENET2 pins");
+#endif
 		err = platformctl_seq(pctl_enet2, sizeof(pctl_enet2) / sizeof(*pctl_enet2));
-	else
+	}
+	else {
 		err = 0;
+	}
 
 	if (err < 0) {
-		enet_printf(state, "Can't configure ENET pins\n");
+		enet_printf(state, "Can't configure ENET pins");
 		return err;
 	}
 
@@ -701,6 +741,8 @@ static int enet_initDevice(enet_priv_t *state, int irq, int mdio)
 {
 	// FIXME: cleanup on error
 	int err;
+
+	usleep(1000000);
 
 	snprintf(state->name, sizeof(state->name), "enet@%08x", state->devphys);
 
@@ -730,6 +772,22 @@ static int enet_initDevice(enet_priv_t *state, int irq, int mdio)
 #ifdef ENET_VERBOSE
 	enet_printf(state, "mmio 0x%x irq %d", state->devphys, irq);
 #endif
+
+
+
+	*((uint32_t*)0x400d80e4) =  1 | (1 << 2) | (1 << 13) | (1 << 20) | (1 << 21); //set enet1,enet2 for 25MHz, enable PLL
+	*((uint32_t*)0x400d80e8) = (1 << 12);
+
+	*((uint32_t*)0x400AC004) |= (1 << 23); //set ENET_IPG_CLK_S_EN in (IOMUXC_GPR_GPR1)
+
+	*((uint32_t*)0x401F8448) |= 1; //tx_clk daisy chain alt3
+
+#ifdef ENET_VERBOSE
+	printf("\tPLL_ENET: %08x\n", *((uint32_t*)0x400d80e0));
+	printf("\tCCGR1: %08x\n", *((uint32_t*)0x400FC06C));
+	printf("\tGPR1: %08x\n", *((uint32_t*)0x400AC004));
+#endif
+
 
 	interrupt(irq, enet_irq_handler, state, state->irq_cond, &state->irq_handle);
 	beginthread(enet_irq_thread, 4, state->irq_stack, sizeof(state->irq_stack), state);
