@@ -162,6 +162,10 @@ int create_netif(char *conf)
 		err = storage->drv->init(ni, storage->cfg);
 	}
 
+	netif_set_default(&storage->netif);
+	netif_set_link_up(&storage->netif);
+	netif_set_up(&storage->netif);
+	
 	if (err != ERR_OK)
 		free(ni);
 

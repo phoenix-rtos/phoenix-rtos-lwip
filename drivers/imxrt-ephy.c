@@ -41,12 +41,12 @@ static void ephy_reset(eth_phy_state_t *phy)
 {
 		// TODO: prepare bootstrap pins
 
-		*((uint32_t*)0x401B8000) &= ~(1 << 9); //drive gpio1_09(enet_rst) LOW
+		gpio_set(&phy->reset, 0);
 
 		usleep(phy->reset_hold_time_us);
 		mdio_lock_bus(phy->bus);
 		
-		*((uint32_t*)0x401B8000) |= (1 << 9); //drive gpio1_09(enet_rst) HIGH
+		gpio_set(&phy->reset, 1);
 
 		usleep(phy->reset_release_time_us);
 		mdio_unlock_bus(phy->bus);
@@ -70,17 +70,11 @@ static uint32_t ephy_show_id(eth_phy_state_t *phy)
 	printf("lwip: ephy%u.%u id 0x%08x (vendor 0x%06x model 0x%02x rev %u)\n",
 		phy->bus, phy->addr, phyid, oui, (ret >> 4) & 0x3F, ret & 0x0F);
 
-//TODO: remove
-usleep(10);
-
 	oui = ephy_reg_read(phy, 0x10);
 	ret = ephy_reg_read(phy, 0x11);
 
 	printf("lwip: ephy%u.%u DigCtl 0x%04x AFECtl1 0x%04x\n",
 		phy->bus, phy->addr, oui, ret);
-
-//TODO: remove
-usleep(10);
 
 	return phyid;
 }
@@ -127,7 +121,7 @@ int ephy_link_speed(eth_phy_state_t *phy, int *full_duplex)
 static void ephy_restart_an(eth_phy_state_t *phy)
 {
 	// adv: no-next-page, no-rem-fault, no-pause, no-T4, 100M/10M-FD & 10M-HD, 802.3
-	ephy_reg_write(phy, 4, 0x0161);
+	ephy_reg_write(phy, 4, 0x01e1);
 	// 100M-FD, AN, restart-AN
 	ephy_reg_write(phy, 0, 0x3300);
 }
@@ -140,7 +134,7 @@ static void ephy_link_thread(void *arg)
 	int stat;
 
 	for (;;) {
-		gpio_wait(&phy->irq_gpio, 1, 100000);
+		gpio_wait(&phy->irq_gpio, 1, 10000);
 		// FIXME: thread exit
 
 		stat = ephy_reg_read(phy, 0x1b);
@@ -220,33 +214,17 @@ static int ephy_config(eth_phy_state_t *phy, char *cfg)
 	if (*p++ != ':')
 		return -EINVAL;
 
-	*((uint32_t*)0x401F80E0) &= ~5;
-	*((uint32_t*)0x401F80E0) |= 5; //set enet_rst mux_gpio_ad_b0_09 as gpio1 09
-	*((uint32_t*)0x401F80E0) |= 16; //sion = 1
+	while (p && *p) {
+		cfg = p;
 
-	*((uint32_t*)0x401F82D0) &= ~0xc000; //pus = 0 (pulldown 100k)
-	*((uint32_t*)0x401F82D0) |= 0xc000; //pus = 0 (pulldown 100k)
-
-	*((uint32_t*)0x401F80E4) &= ~5;
-	*((uint32_t*)0x401F80E4) |= 5; //set enet_int mux_gpio_ad_b0_10 as gpio1 10
-	// *((uint32_t*)0x401F80E4) |= 16; //sion = 1
-
-	*((uint32_t*)0x401B8004) |= (1 << 9); //gpio1_09 as output
-	*((uint32_t*)0x401B8004) &= ~(1 << 10); //gpio1_10 as input
-
-	*((uint32_t*)0x401B8000) |= (1 << 9); //drive gpio1_09(enet_rst) HIGH
-
-	// while (p && *p) {
-	// 	cfg = p;
-
-	// 	p = parse_pin_arg(p, "irq:", 4, &phy->irq_gpio, GPIO_INPUT);
-	// 	if (p == cfg)
-	// 		p = parse_pin_arg(p, "reset:", 6, &phy->reset, GPIO_OUTPUT | GPIO_ACTIVE);
-	// 	if (p == cfg) {
-	// 		printf("ephy: unparsed args: %s\n", cfg);
-	// 		return -EINVAL;
-	// 	}
-	// }
+		p = parse_pin_arg(p, "irq:", 4, &phy->irq_gpio, GPIO_INPUT);
+		if (p == cfg)
+			p = parse_pin_arg(p, "reset:", 6, &phy->reset, GPIO_OUTPUT | GPIO_ACTIVE);
+		if (p == cfg) {
+			printf("ephy: unparsed args: %s\n", cfg);
+			return -EINVAL;
+		}
+	}
 
 	return 0;
 }
@@ -278,7 +256,8 @@ int ephy_init(eth_phy_state_t *phy, char *conf, link_state_cb_t cb, void *cb_arg
 	phyid = ephy_show_id(phy);
 
 	if (!phyid || !~phyid) {
-		*((uint32_t*)0x401B8000) |= (1 << 9);
+		// *((uint32_t*)0x401B8000) |= (1 << 9);
+		gpio_set(&phy->reset, 1);
 		return -ENODEV;
 	}
 
@@ -289,21 +268,21 @@ int ephy_init(eth_phy_state_t *phy, char *conf, link_state_cb_t cb, void *cb_arg
 #endif
 
 	ephy_reg_write(phy, 0x1f, 0x8180);
-	
+
 	phy->link_state_callback = cb;
 	phy->link_state_callback_arg = cb_arg;
 	ephy_show_link_state(phy);
 
-	//if (gpio_valid(&phy->irq_gpio)) {
+
 		if ((err = beginthread(ephy_link_thread, 0, phy->th_stack, sizeof(phy->th_stack), phy))) {
-			printf("\terror in ephy_link_thread\n");
-			*((uint32_t*)0x401B8000) &= ~(1 << 9);
+			// *((uint32_t*)0x401B8000) &= ~(1 << 9);
+			gpio_set(&phy->reset, 0);
 			return err;
 		}
 
 		// enable link up/down IRQ signal
 		ephy_reg_write(phy, 0x1b, 0x0500);
-	//}
+
 
 	ephy_restart_an(phy);
 

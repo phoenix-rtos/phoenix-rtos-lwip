@@ -61,17 +61,14 @@ int gpio_wait(imxrt_gpio_info_t *gp, int active, time_t timeout)
 	time_t when, now;
 	uint32_t val;
 
-	// if (!gpio_valid(gp))
-	// 	return -EINVAL;
-
-	// if (gp->flags & GPIO_INVERTED)
-	// 	active = !active;
+	if (!gpio_valid(gp))
+		return -EINVAL;
 
 	gettime(&now, NULL);
 	when = now + timeout;
 
 	for (;;) {
-		val = !!(*((uint32_t*)0x401B8000) & (1 << 10)); //IRQ pin value
+		val = gpio_get(gp);
 
 		if (!active ^ !val)
 			return 0;
@@ -107,15 +104,12 @@ int gpio_init(imxrt_gpio_info_t *gp, const char *arg, unsigned flags)
 		flags |= GPIO_INVERTED;
 	}
 
-	uint32_t pin_number = strtoul(arg, &endp, 0);
-
 	gp->pin = strtoul(arg, &endp, 0);
 
 	if ((*endp != ',' && *endp != ':') || gp->pin >= sizeof(gp->pin) * 8) {
 		return -EINVAL;
 	}
 	
-	// gp->pin = 1u << gp->pin;
 	arg = endp + 1;
 
 	if (!*arg) {

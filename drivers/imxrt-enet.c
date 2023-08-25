@@ -32,7 +32,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#define ENET_VERBOSE
+// /#define ENET_VERBOSE
 
 #define ENET_CLK_KHZ			(132000 /* IPG */)	// BT_FREQ=0
 
@@ -628,6 +628,17 @@ static int enet_initMDIO(enet_priv_t *state)
 
 static int enet_clockEnable(enet_priv_t *state)
 {
+
+	/* set enet1,enet2 for 50MHz, enable PLL */
+	*((uint32_t*)0x400d80e4) = 1 | (1 << 2) | (1 << 13) | (1 << 20) | (1 << 21);
+	*((uint32_t*)0x400d80e8) = (1 << 12);
+
+	/* set ENET_IPG_CLK_S_EN in (IOMUXC_GPR_GPR1) */
+	*((uint32_t*)0x400AC004) |= (1 << 23);
+	
+	/* tx_clk daisy chain alt3 */
+	*((uint32_t*)0x401F8448) |= 1;
+
 	static const platformctl_t pctl_enet_clock = {
 		pctl_set, pctl_devclock, .devclock = { pctl_clk_enet, 3 }
 	};
@@ -772,15 +783,6 @@ static int enet_initDevice(enet_priv_t *state, int irq, int mdio)
 #ifdef ENET_VERBOSE
 	enet_printf(state, "mmio 0x%x irq %d", state->devphys, irq);
 #endif
-
-
-
-	*((uint32_t*)0x400d80e4) =  1 | (1 << 2) | (1 << 13) | (1 << 20) | (1 << 21); //set enet1,enet2 for 25MHz, enable PLL
-	*((uint32_t*)0x400d80e8) = (1 << 12);
-
-	*((uint32_t*)0x400AC004) |= (1 << 23); //set ENET_IPG_CLK_S_EN in (IOMUXC_GPR_GPR1)
-
-	*((uint32_t*)0x401F8448) |= 1; //tx_clk daisy chain alt3
 
 #ifdef ENET_VERBOSE
 	printf("\tPLL_ENET: %08x\n", *((uint32_t*)0x400d80e0));
