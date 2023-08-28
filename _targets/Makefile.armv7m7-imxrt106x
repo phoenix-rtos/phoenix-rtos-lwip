@@ -9,4 +9,4 @@
 NET_DRIVERS_SUPPORTED := enet tuntap
 NET_DRIVERS ?= $(NET_DRIVERS_SUPPORTED)
 
-DRIVERS_SRCS_enet = imxrt-enet.c imxrt-ephy.c imxrt-gpio.c $(DRIVERS_SRCS_UTIL) hw-debug.c
+DRIVERS_SRCS_enet = common-enet.c imxrt-enet.c imxrt-ephy.c imxrt-gpio.c $(DRIVERS_SRCS_UTIL) hw-debug.c
