@@ -26,7 +26,7 @@
 #define MAX_MDIO_BUSSES 1
 #endif
 
-static const ip4_addr_t default_ip = { PP_HTONL(0xAFF0AFE) };
+static const ip4_addr_t default_ip = { PP_HTONL(0xAFF0A96) };
 static const ip4_addr_t default_mask = { PP_HTONL(0xFFFFFF00) };
 static const ip4_addr_t default_gw = { PP_HTONL(0xAFF0A01) };
 struct mdio_bus {

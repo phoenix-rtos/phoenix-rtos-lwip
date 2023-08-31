@@ -34,6 +34,7 @@
 #include <string.h>
 #include <unistd.h>
 
+#define ENET_VERBOSE
 
 #define ENET_CLK_KHZ			(132000 /* IPG */)	// BT_FREQ=0
 
@@ -122,7 +123,7 @@ void enet_start(enet_priv_t *state)
 #endif
 
 	mutexLock(state->irq_lock);
-	state->mmio->EIMR |= ENET_IRQ_EBERR;
+	state->mmio->EIMR |= ENET_IRQ_EBERR | ENET_IRQ_RXF | ENET_IRQ_TXF;
 	mutexUnlock(state->irq_lock);
 
 	state->mmio->ECR = ENET_ECR_REG_MAGIC |
@@ -272,8 +273,13 @@ int enet_irq_handler(unsigned irq, void *arg)
 	events = state->mmio->EIR & (ENET_IRQ_RXF | ENET_IRQ_TXF | ENET_IRQ_EBERR);
 	state->mmio->EIMR &= ~(ENET_IRQ_RXF | ENET_IRQ_TXF);
 
-	if (events & ENET_IRQ_EBERR)
+    printf("\tenet_irq_handler events: %d\n", events);
+
+	if (events & ENET_IRQ_EBERR){
+        //printf("\tstate->drv_exit in handler: %x\n", state->drv_exit);
 		atomic_fetch_or(&state->drv_exit, EV_BUS_ERROR);
+        //printf("\tstate->drv_exit after atomic fetch: %x\n", state->drv_exit);
+    }
 
 	return 0;
 }
@@ -284,6 +290,7 @@ void enet_irq_thread(void *arg)
 {
 	enet_priv_t *state = arg;
 	size_t rx_done = 0;
+    printf("\tenet_irq_thread1 state->drv_exit: %x\n", state->drv_exit);
 
 	mutexLock(state->irq_lock);
 	while (!state->drv_exit) {
@@ -310,6 +317,9 @@ void enet_irq_thread(void *arg)
 
 	if (state->drv_exit & EV_BUS_ERROR)
 		enet_printf(state, "HW signalled memory bus error -- device halted");
+
+
+    printf("\tenet_irq_thread3\n");
 
 	endthread();
 }

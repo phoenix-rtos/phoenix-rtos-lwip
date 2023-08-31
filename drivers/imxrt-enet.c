@@ -205,12 +205,6 @@ static int enet_clockEnable(enet_priv_t *state)
 	*((uint32_t*)0x400d80e4) = 1 | (1 << 2) | (1 << 13) | (1 << 20) | (1 << 21);
 	*((uint32_t*)0x400d80e8) = (1 << 12);
 
-	/* set ENET_IPG_CLK_S_EN in (IOMUXC_GPR_GPR1) */
-	*((uint32_t*)0x400AC004) |= (1 << 23);
-	
-	/* tx_clk daisy chain alt3 */
-	*((uint32_t*)0x401F8448) |= 1;
-
 	static const platformctl_t pctl_enet_clock = {
 		pctl_set, pctl_devclock, .devclock = { pctl_clk_enet, 3 }
 	};
@@ -229,6 +223,7 @@ static int enet_pinConfig(enet_priv_t *state)
 	static const platformctl_t pctl_enet1[] = {
 		{ pctl_set, pctl_iogpr, .iogpr = { pctl_gpr_enet1_clk_sel, 0} },
 		{ pctl_set, pctl_iogpr, .iogpr = { pctl_gpr_enet1_tx_clk_dir, 1 } },
+		{ pctl_set, pctl_iogpr, .iogpr = { pctl_gpr_enet_ipg_clk_s_en, 1 } },
 
 		{ pctl_set, pctl_ioisel, .ioisel = { pctl_isel_enet_txclk, 1 } },
 		{ pctl_set, pctl_ioisel, .ioisel = { pctl_isel_enet0_timer, 2 } },
@@ -241,25 +236,31 @@ static int enet_pinConfig(enet_priv_t *state)
 
 		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_gpio_b1_04, 1, 2, 1, 1, 0, 2, 6, 0 } }, //enet1_rx0
 		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_gpio_b1_05, 1, 2, 1, 1, 0, 2, 6, 0 } }, //enet1_rx1
-		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_gpio_b1_06, 1, 2, 1, 1, 0, 2, 6, 0 } }, //enet1_rxen
-		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_gpio_b1_11, 1, 2, 1, 1, 0, 2, 6, 0 } }, //enet1_rxer
+		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_gpio_b1_06, 1, 2, 1, 1, 0, 2, 6, 0 } }, //enet1_rx_en (crs_dv)
 		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_gpio_b1_07, 1, 2, 1, 1, 0, 2, 6, 0 } }, //enet1_tx0
 		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_gpio_b1_08, 1, 2, 1, 1, 0, 2, 6, 0 } }, //enet1_tx1
 		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_gpio_b1_09, 1, 2, 1, 1, 0, 2, 6, 0 } }, //enet1_txen
-		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_gpio_b1_10, 1, 2, 1, 1, 0, 2, 6, 0 } }, //enet1_txclk
+		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_gpio_b1_10, 1, 0, 0, 0, 0, 0, 6, 1 } }, //enet1_txclk
+		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_gpio_b1_11, 1, 2, 1, 1, 0, 2, 6, 0 } }, //enet1_rxer
 		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_gpio_b1_12, 1, 2, 1, 1, 0, 2, 6, 0 } }, //enet_1588_event0_in
 		{ pctl_set, pctl_iopad, .iopad = { pctl_pad_gpio_b1_13, 1, 2, 1, 1, 0, 2, 6, 0 } }, //enet_1588_event0_out
 
-		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio_b1_04, 1, 3 } }, //enet1_rx0
-		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio_b1_05, 1, 3 } }, //enet1_rx1
-		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio_b1_06, 1, 3 } }, //enet1_rxen
-		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio_b1_11, 1, 3 } }, //enet1_rxer
-		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio_b1_07, 1, 3 } }, //enet1_tx0
-		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio_b1_08, 1, 3 } }, //enet1_tx1
-		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio_b1_09, 1, 3 } }, //enet1_txen
+		// { pctl_set, pctl_iopad, .iopad = { pctl_pad_gpio_ad_b0_10, 1, 0, 1, 1, 0, 2, 6, 0 } }, //irq
+
+		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio_b1_04, 0, 3 } }, //enet1_rx0
+		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio_b1_05, 0, 3 } }, //enet1_rx1
+		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio_b1_06, 0, 3 } }, //enet1_rx_en (crs_dv)
+		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio_b1_07, 0, 3 } }, //enet1_tx0
+		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio_b1_08, 0, 3 } }, //enet1_tx1
+		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio_b1_09, 0, 3 } }, //enet1_txen
 		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio_b1_10, 1, 6 } }, //enet_ref_clk
-		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio_b1_12, 1, 3 } }, //enet_1588_event0_in
-		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio_b1_13, 1, 3 } }, //enet_1588_event0_out
+		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio_b1_11, 0, 3 } }, //enet1_rxer
+		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio_b1_12, 0, 3 } }, //enet_1588_event0_in
+		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio_b1_13, 0, 3 } }, //enet_1588_event0_out
+
+		// { pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio_ad_b0_10, 0, 2 } }, //enet_crs
+
+		// { pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio_ad_b0_10, 1, 5 } }, //irq
 		// SION(1) = enable clk loopback to ENET module?
 		// (RX does not work without it)
 	};
@@ -447,6 +448,8 @@ static int enet_netifInit(struct netif *netif, char *cfg)
 	irq = strtoul((cfg = p), &p, 0);
 	if (!*cfg || (*p && *p++ != ':') || irq < 0)
 		return -EINVAL;
+
+	printf("\t\tirq=%d\n", irq);
 
 	cfg = NULL;
 	while (p && *p) {

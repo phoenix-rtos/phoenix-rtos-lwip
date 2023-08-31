@@ -8,8 +8,8 @@
  *
  * %LICENSE%
  */
-#include "ephy.h"
-#include "gpio.h"
+#include "imxrt-ephy.h"
+#include "imxrt-gpio.h"
 #include "netif-driver.h"
 
 #include <errno.h>
@@ -134,7 +134,11 @@ static void ephy_link_thread(void *arg)
 	int stat;
 
 	for (;;) {
-		gpio_wait(&phy->irq_gpio, 1, 10000);
+		// uint32_t val = gpio_get(&phy->irq_gpio);
+
+		// printf("\t\tmem:%x ctl:%x\n", *((uint32_t*)0x401B8000), val);
+
+		gpio_wait(&phy->irq_gpio, 1, 100000);
 		// FIXME: thread exit
 
 		stat = ephy_reg_read(phy, 0x1b);
@@ -151,7 +155,7 @@ static void ephy_link_thread(void *arg)
 
 
 // ARGS: pfx[-]n:/dev/gpioX[:...]
-static char *parse_pin_arg(char *cfg, const char *pfx, size_t pfx_len, gpio_info_t *pin, unsigned flags)
+static char *parse_pin_arg(char *cfg, const char *pfx, size_t pfx_len, imxrt_gpio_info_t *pin, unsigned flags)
 {
 	char *p;
 	int err;
@@ -226,6 +230,10 @@ static int ephy_config(eth_phy_state_t *phy, char *cfg)
 		}
 	}
 
+	*((uint32_t*)0x401F80E4) &= ~5;
+	*((uint32_t*)0x401F80E4) |= 5; //set enet_int mux_gpio_ad_b0_10 as gpio1 10
+	*((uint32_t*)0x401B8004) &= ~(1 << 10); //gpio1_10 as input
+
 	return 0;
 }
 
@@ -281,7 +289,7 @@ int ephy_init(eth_phy_state_t *phy, char *conf, link_state_cb_t cb, void *cb_arg
 		}
 
 		// enable link up/down IRQ signal
-		ephy_reg_write(phy, 0x1b, 0x0500);
+		ephy_reg_write(phy, 0x1b, 0xff00);
 
 
 	ephy_restart_an(phy);
