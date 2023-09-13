@@ -473,7 +473,7 @@ static void wifi_msg_thread(void *arg)
 
 	for (;;) {
 		msg_t msg = { 0 };
-		unsigned long int rid;
+		msg_rid_t rid;
 
 		if (msgRecv(port, &msg, &rid) < 0)
 			continue;

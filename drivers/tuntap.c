@@ -139,7 +139,7 @@ static void tuntap_mainLoop(void* _state)
 {
 	tuntap_priv_t *state = _state;
 	msg_t msg;
-	unsigned long rid;
+	msg_rid_t rid;
 
 	while (1) {
 		if (msgRecv(state->port, &msg, &rid) < 0) {
