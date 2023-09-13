@@ -824,7 +824,7 @@ static int socket_op(msg_t *msg, int sock)
 static void socket_thread(void *arg)
 {
 	struct sock_start *ss = arg;
-	unsigned long respid;
+	msg_rid_t respid;
 	uint32_t port = ss->port;
 	int sock = ss->sock, err;
 	msg_t msg;
@@ -1114,7 +1114,7 @@ static int do_getifaddrs(char *buf, size_t *buflen)
 
 static void socketsrv_thread(void *arg)
 {
-	unsigned long respid;
+	msg_rid_t respid;
 	size_t sz;
 	msg_t msg;
 	uint32_t port;

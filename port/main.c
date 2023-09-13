@@ -29,7 +29,7 @@
 static void mainLoop(void)
 {
 	msg_t msg = { 0 };
-	unsigned long int rid;
+	msg_rid_t rid;
 	unsigned port;
 
 	if (portCreate(&port) < 0) {
