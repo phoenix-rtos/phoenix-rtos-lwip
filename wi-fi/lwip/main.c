@@ -3,8 +3,8 @@
  *
  * LwIP Wi-Fi
  *
- * Copyright 2021 Phoenix Systems
- * Author: Ziemowit Leszczynski
+ * Copyright 2021-2022 Phoenix Systems
+ * Author: Ziemowit Leszczynski, Artur Miller
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
