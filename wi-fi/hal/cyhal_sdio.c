@@ -307,7 +307,7 @@ cy_rslt_t cyhal_sdio_init(cyhal_sdio_t *obj)
 	memset(&sdio_common, 0, sizeof(sdio_common));
 
 	do {
-		void *ptr = mmap(NULL, _PAGE_SIZE, PROT_WRITE | PROT_READ, MAP_DEVICE, OID_PHYSMEM, USDHC2_ADDR);
+		void *ptr = mmap(NULL, _PAGE_SIZE, PROT_WRITE | PROT_READ, MAP_DEVICE | MAP_PHYSMEM | MAP_ANONYMOUS, -1, USDHC2_ADDR);
 		if (ptr == MAP_FAILED) {
 			cy_log_msg(CYLF_SDIO, CY_LOG_ERR, "failed to mmap SDIO registers\n");
 			break;

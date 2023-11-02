@@ -24,7 +24,7 @@ void *dmammap(size_t sz)
 	if (!sz)
 		return NULL;
 
-	p = mmap(NULL, sz, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_UNCACHED, NULL, 0);
+	p = mmap(NULL, sz, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_UNCACHED, -1, 0);
 	return p != MAP_FAILED ? p : NULL;
 }
 
@@ -40,7 +40,7 @@ volatile void *physmmap(addr_t addr, size_t sz)
 
 	sz = (sz + _PAGE_SIZE - 1) & ~(_PAGE_SIZE - 1);  // NOTE
 
-	va = mmap(NULL, sz, PROT_READ | PROT_WRITE, MAP_DEVICE | MAP_UNCACHED, (void *)-1, addr);
+	va = mmap(NULL, sz, PROT_READ | PROT_WRITE, MAP_DEVICE | MAP_UNCACHED | MAP_PHYSMEM | MAP_ANONYMOUS, -1, addr);
 	return va != MAP_FAILED ? va + offs : va;
 }
 
