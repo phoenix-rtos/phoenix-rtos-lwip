@@ -41,8 +41,10 @@
 #define BYTE_ORDER LITTLE_ENDIAN
 #define lwip_htonl(x) __builtin_bswap32(x)
 #define lwip_htons(x) __builtin_bswap16(x)
-#else
+#elif __BYTE_ORDER == __BIG_ENDIAN
 #define BYTE_ORDER BIG_ENDIAN
+#else
+#error "Unsupported byte order"
 #endif
 
 
