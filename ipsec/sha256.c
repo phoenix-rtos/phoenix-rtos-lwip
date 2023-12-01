@@ -51,7 +51,7 @@
 		(y)[7] = (unsigned char)((x)&255); \
 	} while (0)
 
-#else /* #if __BYTE_ORDER == __LITTLE_ENDIAN */
+#elif __BYTE_ORDER == __LITTLE_ENDIAN
 
 #ifdef LTC_HAVE_BSWAP_BUILTIN
 
@@ -104,6 +104,10 @@
 	} while (0)
 
 #endif
+
+#else /* __BYTE_ORDER */
+
+#error "Unsupported byte order"
 
 #endif
 
