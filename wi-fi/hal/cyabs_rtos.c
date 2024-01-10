@@ -40,7 +40,7 @@ cy_rslt_t cy_rtos_create_thread(cy_thread_t *thread, cy_thread_entry_fn_t entry_
 }
 
 
-void cy_rtos_exit_thread()
+void cy_rtos_exit_thread(void)
 {
 	cy_log_msg(CYLF_RTOS, CY_LOG_DEBUG, "cy_rtos_exit_thread\n");
 
