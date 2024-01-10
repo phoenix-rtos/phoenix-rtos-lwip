@@ -58,7 +58,7 @@ static struct {
 	handle_t cond;
 	handle_t tid;
 
-	uint8_t flags;
+	volatile uint8_t flags;
 	uint32_t idle_timeout;
 	uint32_t idle_current;
 	whd_ssid_t ssid;
@@ -234,9 +234,18 @@ static void wifi_ap_thread(void *arg)
 			break;
 		}
 
+		result = cyhal_sdio_start_irq_thread(cybsp_get_wifi_sdio_obj());
+		if (result != CY_RSLT_SUCCESS) {
+			wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't start IRQ thread\n");
+			cybsp_free();
+			break;
+		}
+
 		result = cybsp_wifi_init_primary(&wifi_common.iface.whd_iface);
 		if (result != CY_RSLT_SUCCESS) {
 			wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't init Wi-Fi interface\n");
+			/* cyhal_sdio_stop_irq_thread can be safely called twice */
+			cyhal_sdio_stop_irq_thread(cybsp_get_wifi_sdio_obj());
 			cybsp_free();
 			break;
 		}
@@ -247,6 +256,7 @@ static void wifi_ap_thread(void *arg)
 		if (result != CY_RSLT_SUCCESS) {
 			wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't add Wi-Fi interface\n");
 			cybsp_wifi_deinit(wifi_common.iface.whd_iface);
+			cyhal_sdio_stop_irq_thread(cybsp_get_wifi_sdio_obj());
 			cybsp_free();
 			break;
 		}
@@ -256,6 +266,7 @@ static void wifi_ap_thread(void *arg)
 			wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't bring up Wi-Fi interface\n");
 			cy_lwip_remove_interface(&wifi_common.iface);
 			cybsp_wifi_deinit(wifi_common.iface.whd_iface);
+			cyhal_sdio_stop_irq_thread(cybsp_get_wifi_sdio_obj());
 			cybsp_free();
 			break;
 		}
@@ -266,6 +277,7 @@ static void wifi_ap_thread(void *arg)
 			cy_lwip_network_down(&wifi_common.iface);
 			cy_lwip_remove_interface(&wifi_common.iface);
 			cybsp_wifi_deinit(wifi_common.iface.whd_iface);
+			cyhal_sdio_stop_irq_thread(cybsp_get_wifi_sdio_obj());
 			cybsp_free();
 			break;
 		}
@@ -276,6 +288,7 @@ static void wifi_ap_thread(void *arg)
 			cy_lwip_network_down(&wifi_common.iface);
 			cy_lwip_remove_interface(&wifi_common.iface);
 			cybsp_wifi_deinit(wifi_common.iface.whd_iface);
+			cyhal_sdio_stop_irq_thread(cybsp_get_wifi_sdio_obj());
 			cybsp_free();
 			break;
 		}
@@ -295,6 +308,7 @@ static void wifi_ap_thread(void *arg)
 		cy_lwip_network_down(&wifi_common.iface);
 		cy_lwip_remove_interface(&wifi_common.iface);
 		cybsp_wifi_deinit(wifi_common.iface.whd_iface);
+		cyhal_sdio_stop_irq_thread(cybsp_get_wifi_sdio_obj());
 		cybsp_free();
 	}
 
@@ -326,8 +340,9 @@ static int wifi_ap_start(void)
 		return -1;
 	}
 
-	while (wifi_common.flags == 0)
+	while (wifi_common.flags == 0) {
 		condWait(wifi_common.cond, wifi_common.lock, 0);
+	}
 
 	flags = wifi_common.flags;
 

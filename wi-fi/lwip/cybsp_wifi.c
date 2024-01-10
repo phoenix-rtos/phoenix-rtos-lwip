@@ -519,6 +519,12 @@ static inline cy_rslt_t _cybsp_wifi_bus_init(void)
 static inline void _cybsp_wifi_bus_detach(void)
 {
 #if defined(WIFI_MODE_SDIO)
+	/* `sdio_irq_thread` must be stopped before we detach bus, because `sdio_common.irq_handler`
+	 * is called by `sdio_irq_thread` and it requires `whd_driver->bus_priv` that is freed by
+	 * `whd_bus_sdio_detach`
+	 * `cyhal_sdio_stop_irq_thread` can be safely called twice
+	 */
+	cyhal_sdio_stop_irq_thread(cybsp_get_wifi_sdio_obj());
 	whd_bus_sdio_detach(whd_drv);
 #elif defined(WIFI_MODE_SPI)
 	whd_bus_spi_detach(whd_drv);

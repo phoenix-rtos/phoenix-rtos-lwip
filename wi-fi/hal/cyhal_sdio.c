@@ -65,7 +65,7 @@ static struct {
 	void *dmaptr;
 	addr_t dmaphys;
 
-	bool irq_enabled;
+	volatile bool irq_enabled;
 
 	handle_t irq_handle;
 	handle_t irq_lock;
@@ -74,7 +74,7 @@ static struct {
 	cyhal_sdio_irq_handler_t irq_handler;
 	void *irq_handler_arg;
 
-	bool irq_thread_finish;
+	volatile bool irq_thread_finish;
 	cy_thread_t irq_thread_id;
 } sdio_common;
 
@@ -258,20 +258,23 @@ static void sdio_irq_thread(void *arg)
 
 		while (1) {
 			finish = sdio_common.irq_thread_finish;
-			if (finish)
+			if (finish) {
 				break;
+			}
 
 			val = *(sdio_common.base + int_status);
-			if (val & (1 << 8))
+			if ((val & (1 << 8)) != 0) {
 				break;
+			}
 
 			condWait(sdio_common.irq_cond, sdio_common.irq_lock, 0);
 		}
 
 		mutexUnlock(sdio_common.irq_lock);
 
-		if (finish)
+		if (finish) {
 			break;
+		}
 
 		// cy_log_msg(CYLF_SDIO, CY_LOG_DEBUG, "got SDIO IRQ\n");
 
@@ -294,6 +297,17 @@ static void sdio_irq_thread(void *arg)
 	}
 
 	cy_rtos_exit_thread();
+}
+
+/* NOTE: obj is ignored - state is kept in sdio_common */
+cy_rslt_t cyhal_sdio_start_irq_thread(cyhal_sdio_t *obj)
+{
+	cy_log_msg(CYLF_SDIO, CY_LOG_DEBUG, "cyhal_sdio_start_irq_thread\n");
+	if (cy_rtos_create_thread(&sdio_common.irq_thread_id, sdio_irq_thread, "SDIO_IRQ", NULL, 1024, 4, NULL) != CY_RSLT_SUCCESS) {
+		cy_log_msg(CYLF_SDIO, CY_LOG_ERR, "failed to start SDIO IRQ handler thread\n");
+		return CYHAL_SDIO_RSLT_ERR_BAD_PARAM;
+	}
+	return CY_RSLT_SUCCESS;
 }
 
 
@@ -331,11 +345,6 @@ cy_rslt_t cyhal_sdio_init(cyhal_sdio_t *obj)
 
 		if (condCreate(&sdio_common.irq_cond) < 0) {
 			cy_log_msg(CYLF_SDIO, CY_LOG_ERR, "failed to create SDIO IRQ handler condition\n");
-			break;
-		}
-
-		if (cy_rtos_create_thread(&sdio_common.irq_thread_id, sdio_irq_thread, "SDIO_IRQ", NULL, 1024, 4, NULL) != CY_RSLT_SUCCESS) {
-			cy_log_msg(CYLF_SDIO, CY_LOG_ERR, "failed to start SDIO IRQ handler thread\n");
 			break;
 		}
 
@@ -398,14 +407,10 @@ cy_rslt_t cyhal_sdio_init(cyhal_sdio_t *obj)
 
 
 /* NOTE: obj is ignored - state is kept in sdio_common */
-void cyhal_sdio_free(cyhal_sdio_t *obj)
+void cyhal_sdio_stop_irq_thread(cyhal_sdio_t *obj)
 {
-	cy_log_msg(CYLF_SDIO, CY_LOG_DEBUG, "cyhal_sdio_free\n");
-
-	/* reset SDIO and set SDIO clock freq to 400000000 / 2 / (256 * 2) = 390625 Hz */
-	reset_all(0x80, 0x1); /* SDCLKFS=0x80 DVS=0x1 */
-
-	if (sdio_common.irq_thread_id) {
+	cy_log_msg(CYLF_SDIO, CY_LOG_DEBUG, "cyhal_sdio_stop_irq_thread\n");
+	if (sdio_common.irq_thread_id != 0) {
 		/* request IRQ thread to finish */
 		mutexLock(sdio_common.irq_lock);
 		sdio_common.irq_thread_finish = true;
@@ -414,23 +419,40 @@ void cyhal_sdio_free(cyhal_sdio_t *obj)
 
 		/* wait for IRQ thread to finish */
 		cy_rtos_join_thread(&sdio_common.irq_thread_id);
+		sdio_common.irq_thread_id = 0;
+	}
+}
+
+
+/* NOTE: obj is ignored - state is kept in sdio_common */
+void cyhal_sdio_free(cyhal_sdio_t *obj)
+{
+	cy_log_msg(CYLF_SDIO, CY_LOG_DEBUG, "cyhal_sdio_free\n");
+
+	/* reset SDIO and set SDIO clock freq to 400000000 / 2 / (256 * 2) = 390625 Hz */
+	reset_all(0x80, 0x1); /* SDCLKFS=0x80 DVS=0x1 */
+
+	if (sdio_common.irq_handle != 0) {
+		resourceDestroy(sdio_common.irq_handle);
+	}
+	if (sdio_common.irq_lock != 0) {
+		resourceDestroy(sdio_common.irq_lock);
+	}
+	if (sdio_common.irq_cond != 0) {
+		resourceDestroy(sdio_common.irq_cond);
 	}
 
-	if (sdio_common.irq_handle)
-		resourceDestroy(sdio_common.irq_handle);
-	if (sdio_common.irq_lock)
-		resourceDestroy(sdio_common.irq_lock);
-	if (sdio_common.irq_cond)
-		resourceDestroy(sdio_common.irq_cond);
-
-	if (sdio_common.cmd_lock)
+	if (sdio_common.cmd_lock != 0) {
 		resourceDestroy(sdio_common.cmd_lock);
+	}
 
-	if (sdio_common.dmaptr)
+	if (sdio_common.dmaptr != NULL) {
 		munmap(sdio_common.dmaptr, DMA_BUFFER_SIZE);
+	}
 
-	if (sdio_common.base)
+	if (sdio_common.base != NULL) {
 		munmap((void *)sdio_common.base, _PAGE_SIZE);
+	}
 
 	memset(&sdio_common, 0, sizeof(sdio_common));
 }

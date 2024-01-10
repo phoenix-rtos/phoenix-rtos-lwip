@@ -175,6 +175,7 @@ typedef void (*cyhal_sdio_irq_handler_t)(void *handler_arg, cyhal_sdio_irq_event
  * @return The status of the init request
  */
 cy_rslt_t cyhal_sdio_init(cyhal_sdio_t *obj);
+cy_rslt_t cyhal_sdio_start_irq_thread(cyhal_sdio_t *obj);
 
 /** Release the SDIO peripheral, not currently invoked. It requires further
  *  resource management.
@@ -182,6 +183,7 @@ cy_rslt_t cyhal_sdio_init(cyhal_sdio_t *obj);
  * @param[in,out] obj The SDIO object
  */
 void cyhal_sdio_free(cyhal_sdio_t *obj);
+void cyhal_sdio_stop_irq_thread(cyhal_sdio_t *obj);
 
 /** Configure the SDIO block.
  *
