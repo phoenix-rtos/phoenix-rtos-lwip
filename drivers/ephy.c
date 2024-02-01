@@ -15,6 +15,7 @@
 #include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -240,6 +241,40 @@ static int ephy_config(eth_phy_state_t *phy, char *cfg)
 			printf("ephy: unparsed args: %s\n", cfg);
 			return -EINVAL;
 		}
+	}
+
+	return 0;
+}
+
+
+/* toggle MACPHY internal loopback for test mode */
+int ephy_enableLoopback(eth_phy_state_t *phy, bool enable)
+{
+	uint16_t bmcr = ephy_reg_read(phy, 0x0);
+	uint16_t phy_ctrl2 = ephy_reg_read(phy, 0x1f);
+
+	if (enable) {
+		/* disable auto-negotiation, enable: full-duplex, 100Mbps, loopback mode */
+		bmcr = (bmcr & ~0x1000) | 0x0100 | 0x2000 | 0x4000;
+		/* force link up, disable transmitter */
+		phy_ctrl2 |= (1 << 11) | (1 << 3);
+	}
+	else {
+		bmcr = (bmcr & ~(0x0100 | 0x2000 | 0x4000)) | 0x1000;
+		phy_ctrl2 &= ~((1 << 11) | (1 << 3));
+	}
+
+	ephy_reg_write(phy, 0x0, bmcr);
+	ephy_reg_write(phy, 0x1f, phy_ctrl2);
+
+	if (ephy_reg_read(phy, 0x0) != bmcr) {
+		printf("ephy: failed to set loopback mode\n");
+		return -1;
+	}
+
+	if (ephy_reg_read(phy, 0x1f) != phy_ctrl2) {
+		printf("ephy: failed to force link up\n");
+		return -1;
 	}
 
 	return 0;

@@ -10,6 +10,7 @@
  */
 #include "arch/cc.h"
 #include "lwip/etharp.h"
+#include "lwip/netif.h"
 #include "netif-driver.h"
 #include "bdring.h"
 #include "ephy.h"
@@ -72,6 +73,13 @@ typedef struct
 	char name[32];
 
 	eth_phy_state_t phy;
+
+	struct {
+#define SELFTEST_RESOURCES(s) &(s)->selfTest.rx_lock, 2, ~0x1
+		handle_t rx_lock;
+		handle_t rx_cond;
+		unsigned int rx_valid; /* -1: received invalid packet, 0: no packet received, 1: received valid packet */
+	} selfTest;
 
 	uint32_t irq_stack[1024] __attribute__((aligned(16))), mdio_stack[1024];
 } enet_priv_t;
@@ -199,6 +207,7 @@ static int enet_readFusedMac(uint32_t *buf)
 
 	return 0;
 }
+
 
 static uint32_t enet_readCpuId(void)
 {
@@ -793,6 +802,136 @@ static void enet_setLinkState(void *arg, int state)
 	}
 }
 
+
+#define _TP_ETHTYPE "\x05\xDD" /* eth frame type 0x05DD is undefined */
+#define _TP_10DIG   "0123456789"
+#define TEST_PACKET "ddddddssssss" _TP_ETHTYPE \
+	_TP_10DIG _TP_10DIG _TP_10DIG _TP_10DIG _TP_10DIG _TP_10DIG _TP_10DIG
+#define TEST_PACKET_LEN (sizeof((TEST_PACKET)) - 1)
+
+
+/* self-test RX input function */
+static err_t test_netif_input(struct pbuf *p, struct netif *netif)
+{
+	uint8_t buf[TEST_PACKET_LEN]; /* used only if pbuf is fragmented (should not happen) */
+	enet_priv_t *priv = netif->state;
+
+	bool is_valid_pkt = true;
+
+	/* verify contents */
+	if ((p->len != TEST_PACKET_LEN + ETH_PAD_SIZE)) {
+#ifdef ENET_VERBOSE
+		enet_printf(priv, "self-test RX: invalid packet length");
+#endif
+		is_valid_pkt = false;
+	}
+	uint8_t *data = pbuf_get_contiguous(p, buf, sizeof(buf), TEST_PACKET_LEN, ETH_PAD_SIZE);
+	if (data == NULL || memcmp(TEST_PACKET, data, TEST_PACKET_LEN) != 0) {
+#ifdef ENET_VERBOSE
+		if (data == NULL) {
+			data = p->payload;
+		}
+		enet_printf(priv, "self-test RX: invalid packet contents");
+		enet_printf(priv, "0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x",
+			data[0], data[1], data[2], data[3],
+			data[4], data[5], data[6], data[7]);
+#endif
+		is_valid_pkt = false;
+	}
+	pbuf_free(p);
+
+	mutexLock(priv->selfTest.rx_lock);
+	priv->selfTest.rx_valid = is_valid_pkt ? 1 : -1;
+	mutexUnlock(priv->selfTest.rx_lock);
+	condBroadcast(priv->selfTest.rx_cond);
+
+	return ERR_OK;
+}
+
+
+/* MACPHY self-test procedure (internal loopback) */
+static int enet_phySelfTest(struct netif *netif)
+{
+	enet_priv_t *priv = netif->state;
+	int err;
+
+	if ((err = create_mutexcond_bulk(SELFTEST_RESOURCES(priv))) != 0) {
+		return err;
+	}
+
+	/* setup self-test (local loopback mode & force linkup) */
+	if (ephy_enableLoopback(&priv->phy, true) < 0) {
+		ephy_enableLoopback(&priv->phy, false);
+		resourceDestroy(priv->selfTest.rx_cond);
+		resourceDestroy(priv->selfTest.rx_lock);
+		return -1;
+	}
+
+	/* enable promisicious mode to allow invalid MAC in pseudo-ETH test packet */
+	priv->mmio->RCR |= ENET_RCR_PROM;
+
+	/* enable MIB counters (mmio->stats) */
+	priv->mmio->MIBC = 0;
+
+	/* override netif->input */
+	netif_input_fn old_input = netif->input;
+	netif->input = &test_netif_input;
+
+	int ret = 0;
+	do {
+		struct pbuf *p = pbuf_alloc(PBUF_RAW, TEST_PACKET_LEN + ETH_PAD_SIZE, PBUF_RAM);
+		memset(p->payload, 0, ETH_PAD_SIZE);
+		pbuf_take_at(p, TEST_PACKET, TEST_PACKET_LEN, ETH_PAD_SIZE);
+
+		/* try to send and receive packets */
+		mutexLock(priv->selfTest.rx_lock);
+		priv->selfTest.rx_valid = 0;
+		if (enet_netifOutput(netif, p) != ERR_OK) { /* frees pbuf internally */
+			enet_printf(priv, "failed to send test packet");
+			ret = -1;
+			mutexUnlock(priv->selfTest.rx_lock);
+			break;
+		}
+
+		err = 0;
+		while ((err != -ETIME) && (priv->selfTest.rx_valid == 0)) {
+			/* TX -> RX takes ~4ms, wait for 100ms just to be sure */
+			err = condWait(priv->selfTest.rx_cond, priv->selfTest.rx_lock, 100 * 1000);
+		}
+		mutexUnlock(priv->selfTest.rx_lock);
+
+#ifdef ENET_VERBOSE
+		enet_printf(priv, "stats: TX: PACKETS=%u CRC_ALIGN=%u OK=%u",
+			priv->mmio->stats.RMON_T_PACKETS,
+			priv->mmio->stats.RMON_T_CRC_ALIGN,
+			priv->mmio->stats.IEEE_T_FRAME_OK);
+
+		enet_printf(priv, "stats: RX: PACKETS=%u CRC_ALIGN=%u OK=%u",
+			priv->mmio->stats.RMON_R_PACKETS,
+			priv->mmio->stats.RMON_R_CRC_ALIGN,
+			priv->mmio->stats.IEEE_R_FRAME_OK);
+#endif
+		if ((err < 0) || (priv->selfTest.rx_valid != 1)) {
+			ret = -1;
+		}
+
+		/* successfully received */
+	} while (0);
+
+	/* restore normal mode */
+	netif->input = old_input;
+	priv->mmio->RCR &= ~ENET_RCR_PROM;
+	priv->mmio->MIBC = (1u << 31);
+	ephy_enableLoopback(&priv->phy, false);
+
+	/* destroy selftest resources */
+	resourceDestroy(priv->selfTest.rx_cond);
+	resourceDestroy(priv->selfTest.rx_lock);
+
+	return ret;
+}
+
+
 // ARGS: enet:base:irq[:no-mdio][:PHY:[bus.]addr[:config]]
 static int enet_netifInit(struct netif *netif, char *cfg)
 {
@@ -838,9 +977,16 @@ static int enet_netifInit(struct netif *netif, char *cfg)
 		return err;
 
 	if (cfg) {
-		err = ephy_init(&priv->phy, cfg, enet_setLinkState, (void*) priv->netif);
-		if (err)
+		err = ephy_init(&priv->phy, cfg, board_rev, enet_setLinkState, (void *)priv->netif);
+		if (err < 0) {
 			enet_printf(priv, "WARN: PHY init failed: %s (%d)", strerror(err), err);
+			return err;
+		}
+
+		err = enet_phySelfTest(netif);
+		if (err < 0) {
+			enet_printf(priv, "WARN: PHY autotest failed");
+		}
 	}
 
 	return 0;
