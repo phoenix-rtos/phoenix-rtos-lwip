@@ -15,6 +15,7 @@
 
 #include <sys/types.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 typedef void (*link_state_cb_t)(void* arg, int state);
 
@@ -34,5 +35,8 @@ typedef struct {
 
 int ephy_init(eth_phy_state_t *phy, char *conf, link_state_cb_t cb, void *cb_arg);
 int ephy_link_speed(eth_phy_state_t *phy, int *full_duplex);
+
+/* toggle MACPHY internal loopback for test mode */
+int ephy_enableLoopback(eth_phy_state_t *phy, bool enable);
 
 #endif /* NET_EPHY_H_ */

@@ -125,8 +125,69 @@ struct enet_regs {
 #define ENET_RACC_IPDIS		BIT(1)		// discard frames with IPv4 checksum error
 #define ENET_RACC_PADREM	BIT(0)		// remove ethernet payload padding from short IP frames
 	R_RESERVED(0x1C8, 0x200);
-	uint32_t		stats[64];	// various stats counters (32-bit each)
+
+	union {
+		uint32_t rawstats[64];  // various stats counters (32-bit each)
 #define ENET_VALID_COUTERS	0x01FFFFFE1FFFFFFFull
+		struct {
+			uint32_t RMON_T_DROP;        /* Count of frames not cntd correctly */
+			uint32_t RMON_T_PACKETS;     /* RMON TX packet count */
+			uint32_t RMON_T_BC_PKT;      /* RMON TX broadcast pkts */
+			uint32_t RMON_T_MC_PKT;      /* RMON TX multicast pkts */
+			uint32_t RMON_T_CRC_ALIGN;   /* RMON TX pkts with CRC align err */
+			uint32_t RMON_T_UNDERSIZE;   /* RMON TX pkts < 64 bytes, good CRC */
+			uint32_t RMON_T_OVERSIZE;    /* RMON TX pkts > MAX_FL bytes good CRC */
+			uint32_t RMON_T_FRAG;        /* RMON TX pkts < 64 bytes, bad CRC */
+			uint32_t RMON_T_JAB;         /* RMON TX pkts > MAX_FL bytes, bad CRC */
+			uint32_t RMON_T_COL;         /* RMON TX collision count */
+			uint32_t RMON_T_P64;         /* RMON TX 64 byte pkts */
+			uint32_t RMON_T_P65TO127;    /* RMON TX 65 to 127 byte pkts */
+			uint32_t RMON_T_P128TO255;   /* RMON TX 128 to 255 byte pkts */
+			uint32_t RMON_T_P256TO511;   /* RMON TX 256 to 511 byte pkts */
+			uint32_t RMON_T_P512TO1023;  /* RMON TX 512 to 1023 byte pkts */
+			uint32_t RMON_T_P1024TO2047; /* RMON TX 1024 to 2047 byte pkts */
+			uint32_t RMON_T_P_GTE2048;   /* RMON TX pkts > 2048 bytes */
+			uint32_t RMON_T_OCTETS;      /* RMON TX octets */
+			uint32_t IEEE_T_DROP;        /* Count of frames not counted correctly */
+			uint32_t IEEE_T_FRAME_OK;    /* Frames tx'd OK */
+			uint32_t IEEE_T_1COL;        /* Frames tx'd with single collision */
+			uint32_t IEEE_T_MCOL;        /* Frames tx'd with multiple collision */
+			uint32_t IEEE_T_DEF;         /* Frames tx'd after deferral delay */
+			uint32_t IEEE_T_LCOL;        /* Frames tx'd with late collision */
+			uint32_t IEEE_T_EXCOL;       /* Frames tx'd with excessive collisions */
+			uint32_t IEEE_T_MACERR;      /* Frames tx'd with TX FIFO underrun */
+			uint32_t IEEE_T_CSERR;       /* Frames tx'd with carrier sense err */
+			uint32_t IEEE_T_SQE;         /* Frames tx'd with SQE err */
+			uint32_t IEEE_T_FDXFC;       /* Flow control pause frames tx'd */
+			uint32_t IEEE_T_OCTETS_OK;   /* Octet count for frames tx'd w/o err */
+			uint32_t __reserved3[3];
+			uint32_t RMON_R_PACKETS;     /* RMON RX packet count */
+			uint32_t RMON_R_BC_PKT;      /* RMON RX broadcast pkts */
+			uint32_t RMON_R_MC_PKT;      /* RMON RX multicast pkts */
+			uint32_t RMON_R_CRC_ALIGN;   /* RMON RX pkts with CRC alignment err */
+			uint32_t RMON_R_UNDERSIZE;   /* RMON RX pkts < 64 bytes, good CRC */
+			uint32_t RMON_R_OVERSIZE;    /* RMON RX pkts > MAX_FL bytes good CRC */
+			uint32_t RMON_R_FRAG;        /* RMON RX pkts < 64 bytes, bad CRC */
+			uint32_t RMON_R_JAB;         /* RMON RX pkts > MAX_FL bytes, bad CRC */
+			uint32_t RMON_R_RESVD_O;     /* Reserved */
+			uint32_t RMON_R_P64;         /* RMON RX 64 byte pkts */
+			uint32_t RMON_R_P65TO127;    /* RMON RX 65 to 127 byte pkts */
+			uint32_t RMON_R_P128TO255;   /* RMON RX 128 to 255 byte pkts */
+			uint32_t RMON_R_P256TO511;   /* RMON RX 256 to 511 byte pkts */
+			uint32_t RMON_R_P512TO1023;  /* RMON RX 512 to 1023 byte pkts */
+			uint32_t RMON_R_P1024TO2047; /* RMON RX 1024 to 2047 byte pkts */
+			uint32_t RMON_R_P_GTE2048;   /* RMON RX pkts > 2048 bytes */
+			uint32_t RMON_R_OCTETS;      /* RMON RX octets */
+			uint32_t IEEE_R_DROP;        /* Count frames not counted correctly */
+			uint32_t IEEE_R_FRAME_OK;    /* Frames rx'd OK */
+			uint32_t IEEE_R_CRC;         /* Frames rx'd with CRC err */
+			uint32_t IEEE_R_ALIGN;       /* Frames rx'd with alignment err */
+			uint32_t IEEE_R_MACERR;      /* Receive FIFO overflow count */
+			uint32_t IEEE_R_FDXFC;       /* Flow control pause frames rx'd */
+			uint32_t IEEE_R_OCTETS_OK;   /* Octet cnt for frames rx'd w/o err */
+			uint32_t __reserved7[7];
+		} stats;
+	};
 	R_RESERVED(0x300, 0x400);
 	uint32_t		ATCR;		// timer command
 	uint32_t		ATVR;		// timer value
