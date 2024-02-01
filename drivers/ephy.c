@@ -280,8 +280,49 @@ int ephy_enableLoopback(eth_phy_state_t *phy, bool enable)
 	return 0;
 }
 
-int ephy_init(eth_phy_state_t *phy, char *conf, link_state_cb_t cb, void *cb_arg)
+
+/* Try to set alternative MAC PHY config (alternative configurations within the same PHY ID).
+ * returns:
+ *   > 0 if alternative config has been set
+ *     0 if no alternative config with this ID
+ *   < 0 if alternative config setting has failed
+ */
+static int ephy_setAltConfig(eth_phy_state_t *phy, int cfg_id)
 {
+	/* NOTE: assuming KSZ8081 RNA/RND PHY! */
+
+	/* CFG id:
+	 * 0: KSZ8081 RND with 50 MHz RMII input clock (PHY_CTRL2[7] = 0)
+	 * 1: KSZ8081 RNA with 50 MHz RMII input clock (PHY_CTRL2[7] = 1)
+	 */
+
+
+	/* try to set alternative MII clock frequency */
+	uint16_t phy_ctrl2 = ephy_reg_read(phy, 0x1f);
+
+	if (cfg_id == 0) {
+		phy_ctrl2 &= ~(1 << 7);
+	}
+	else if (cfg_id == 1) {
+		phy_ctrl2 |= (1 << 7);
+	}
+	else {
+		return 0; /* unknown config ID */
+	}
+
+	ephy_reg_write(phy, 0x1f, phy_ctrl2);
+	if (ephy_reg_read(phy, 0x1f) != phy_ctrl2) {
+		printf("ephy: failed to set alternative clock\n");
+		return -1;
+	}
+
+	return 1;
+}
+
+
+int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb_t cb, void *cb_arg)
+{
+	(void)board_rev;
 	uint32_t phyid;
 	int err;
 
@@ -315,9 +356,16 @@ int ephy_init(eth_phy_state_t *phy, char *conf, link_state_cb_t cb, void *cb_arg
 	/* make address 0 not broadcast, disable NAND-tree mode */
 	ephy_reg_write(phy, 0x16, 0x0202);
 
-#ifndef EPHY_KSZ8081RND
-	/* 50MHz RMII clock; keep auto-MDI-X */
-	ephy_reg_write(phy, 0x1f, 0x8180);
+	ephy_setAltConfig(phy, 0); /* KSZ8081 RND - default config */
+
+#ifdef LWIP_EPHY_INIT_HOOK
+	LWIP_EPHY_INIT_HOOK(phy, phyid, board_rev);
+#endif
+
+#if defined(EPHY_KSZ8081RNA)
+	ephy_setAltConfig(phy, 1);
+#elif defined(EPHY_KSZ8081RND)
+	ephy_setAltConfig(phy, 0);
 #endif
 
 	phy->link_state_callback = cb;
