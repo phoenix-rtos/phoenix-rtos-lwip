@@ -33,7 +33,7 @@ typedef struct {
 } eth_phy_state_t;
 
 
-int ephy_init(eth_phy_state_t *phy, char *conf, link_state_cb_t cb, void *cb_arg);
+int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb_t cb, void *cb_arg);
 int ephy_link_speed(eth_phy_state_t *phy, int *full_duplex);
 
 /* toggle MACPHY internal loopback for test mode */

@@ -232,6 +232,23 @@ static inline uint8_t get_byte(uint32_t v, int i)
 }
 
 
+static uint8_t enet_readBoardRev(void)
+{
+	volatile uint32_t *va = physmmap(0x21bc000, 0x1000);
+	uint32_t res = 0;
+
+	if (va == MAP_FAILED)
+		return 0;
+
+	/* note: keep in sync with imx6ull-otp */
+	res = va[0x100 + 4 * 0x27];
+
+	physunmap(va, 0x1000);
+
+	return (res >> 24) + 1;
+}
+
+
 static void enet_readCardMac(enet_priv_t *state)
 {
 	static const struct eth_addr zero_eth = { { 0, 0, 0, 0, 0, 0 } };
@@ -977,6 +994,8 @@ static int enet_netifInit(struct netif *netif, char *cfg)
 		return err;
 
 	if (cfg) {
+		uint8_t board_rev = enet_readBoardRev();
+
 		err = ephy_init(&priv->phy, cfg, board_rev, enet_setLinkState, (void *)priv->netif);
 		if (err < 0) {
 			enet_printf(priv, "WARN: PHY init failed: %s (%d)", strerror(err), err);

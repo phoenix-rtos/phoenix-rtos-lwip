@@ -1,7 +1,9 @@
 # Makefile for lwip drivers to be included
 
-# TODO: make every driver a separate component?
-ifneq ($(EPHY_KSZ8081RND),)
+ifeq ($(EPHY_KSZ8081),RNA)
+  LOCAL_CFLAGS := -DEPHY_KSZ8081RNA
+endif
+ifeq ($(EPHY_KSZ8081),RND)
   LOCAL_CFLAGS := -DEPHY_KSZ8081RND
 endif
 
