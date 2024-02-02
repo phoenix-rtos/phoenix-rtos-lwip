@@ -13,7 +13,7 @@
 #define PHOENIX_CYHAL_UTILS_H_
 
 #include <sys/platform.h>
-#include <phoenix/arch/imx6ull.h>
+#include <phoenix/arch/armv7a/imx6ull/imx6ull.h>
 
 
 int cyhal_utils_set_iomux(int mux, char mode);
