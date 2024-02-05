@@ -412,7 +412,7 @@ static int wifi_dev_close(void)
 }
 
 
-static int wifi_dev_read(char *data, size_t size, offs_t offset)
+static int wifi_dev_read(char *data, size_t size, off_t offset)
 {
 	int cnt;
 
