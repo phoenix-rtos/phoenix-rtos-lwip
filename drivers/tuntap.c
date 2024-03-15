@@ -87,7 +87,7 @@ static err_t tap_output_cb(struct netif *netif, struct pbuf *p)
 }
 
 
-static int _tuntap_write(tuntap_priv_t *state, void *data, size_t size)
+static int _tuntap_write(tuntap_priv_t *state, const void *data, size_t size)
 {
 	struct pbuf *p;
 
@@ -149,28 +149,33 @@ static void tuntap_mainLoop(void* _state)
 
 		mutexLock(state->lock);
 		switch (msg.type) {
-		case mtOpen:
-			state->netif->flags |= NETIF_FLAG_LINK_UP;
-			break;
-		case mtClose:
-			state->netif->flags &= ~NETIF_FLAG_LINK_UP;
-			break;
-		case mtWrite:
-			msg.o.io.err = _tuntap_write(state, msg.i.data, msg.i.size);
-			break;
-		case mtRead:
-			msg.o.io.err = _tuntap_read(state, msg.o.data, msg.o.size);
-			break;
-		case mtGetAttr:
-			if (msg.i.attr.type != atPollStatus) {
-				msg.o.attr.err = -EINVAL;
+			case mtOpen:
+				state->netif->flags |= NETIF_FLAG_LINK_UP;
 				break;
-			}
-			msg.o.attr.val = POLLOUT;
-			if (!fifo_is_empty(state->queue))
-				msg.o.attr.val |= POLLIN;
-			msg.o.attr.err = EOK;
-			break;
+			case mtClose:
+				state->netif->flags &= ~NETIF_FLAG_LINK_UP;
+				break;
+			case mtWrite:
+				msg.o.err = _tuntap_write(state, msg.i.data, msg.i.size);
+				break;
+			case mtRead:
+				msg.o.err = _tuntap_read(state, msg.o.data, msg.o.size);
+				break;
+			case mtGetAttr:
+				if (msg.i.attr.type != atPollStatus) {
+					msg.o.err = -EINVAL;
+					break;
+				}
+				msg.o.attr.val = POLLOUT;
+				if (!fifo_is_empty(state->queue)) {
+					msg.o.attr.val |= POLLIN;
+				}
+				msg.o.err = EOK;
+				break;
+
+			default:
+				msg.o.err = -EINVAL;
+				break;
 		}
 		mutexUnlock(state->lock);
 

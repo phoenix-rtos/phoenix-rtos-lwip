@@ -495,23 +495,23 @@ static void wifi_msg_thread(void *arg)
 
 		switch (msg.type) {
 			case mtOpen:
-				msg.o.io.err = wifi_dev_open(msg.i.openclose.flags);
+				msg.o.err = wifi_dev_open(msg.i.openclose.flags);
 				break;
 
 			case mtClose:
-				msg.o.io.err = wifi_dev_close();
+				msg.o.err = wifi_dev_close();
 				break;
 
 			case mtRead:
-				msg.o.io.err = wifi_dev_read(msg.o.data, msg.o.size, msg.i.io.offs);
+				msg.o.err = wifi_dev_read(msg.o.data, msg.o.size, msg.i.io.offs);
 				break;
 
 			case mtWrite:
-				msg.o.io.err = wifi_dev_write(msg.i.data, msg.i.size);
+				msg.o.err = wifi_dev_write(msg.i.data, msg.i.size);
 				break;
 
 			default:
-				msg.o.io.err = -EINVAL;
+				msg.o.err = -EINVAL;
 				break;
 		}
 
