@@ -663,8 +663,7 @@ static void do_socket_ioctl(msg_t *msg, int sock)
 	void *out_data = NULL;
 	const void *in_data = ioctl_unpackEx(msg, &request, NULL, &out_data);
 
-	int err = socket_ioctl(sock, request, in_data, out_data);
-	ioctl_setResponseErr(msg, request, err);
+	msg->o.err = socket_ioctl(sock, request, in_data, out_data);
 }
 
 
@@ -696,21 +695,21 @@ static int socket_op(msg_t *msg, int sock)
 				smo->ret = -EINVAL;
 				break;
 			case mtRead:
-				msg->o.io.err = map_errno(key_sockets_recv(sock, msg->o.data, msg->o.size, 0));
+				msg->o.err = map_errno(key_sockets_recv(sock, msg->o.data, msg->o.size, 0));
 				break;
 			case mtWrite:
-				msg->o.io.err = map_errno(key_sockets_send(sock, msg->i.data, msg->i.size, 0));
+				msg->o.err = map_errno(key_sockets_send(sock, msg->i.data, msg->i.size, 0));
 				break;
 			case mtGetAttr:
 				if (msg->i.attr.type != atPollStatus) {
-					msg->o.attr.err = -EINVAL;
+					msg->o.err = -EINVAL;
 					break;
 				}
 				msg->o.attr.val = key_sockets_poll(sock, msg->i.attr.val, 0);
-				msg->o.attr.err = (msg->o.attr.val < 0) ? msg->o.attr.val : EOK;
+				msg->o.err = (msg->o.attr.val < 0) ? msg->o.attr.val : EOK;
 				break;
 			case mtClose:
-				msg->o.io.err = map_errno(key_sockets_close(sock));
+				msg->o.err = map_errno(key_sockets_close(sock));
 				return 1;
 			case sockmGetSockName:
 				smo->ret = -EINVAL;
@@ -796,26 +795,26 @@ static int socket_op(msg_t *msg, int sock)
 			break;
 		case mtRead:
 			if (msg->o.size <= SSIZE_MAX)
-				msg->o.io.err = map_errno(lwip_read(sock, msg->o.data, msg->o.size));
+				msg->o.err = map_errno(lwip_read(sock, msg->o.data, msg->o.size));
 			else
-				msg->o.io.err = -EINVAL;
+				msg->o.err = -EINVAL;
 			break;
 		case mtWrite:
 			if (msg->i.size <= SSIZE_MAX)
-				msg->o.io.err = map_errno(lwip_write(sock, msg->i.data, msg->i.size));
+				msg->o.err = map_errno(lwip_write(sock, msg->i.data, msg->i.size));
 			else
-				msg->o.io.err = -EINVAL;
+				msg->o.err = -EINVAL;
 			break;
 		case mtGetAttr:
 			if (msg->i.attr.type != atPollStatus) {
-				msg->o.attr.err = -EINVAL;
+				msg->o.err = -EINVAL;
 				break;
 			}
 			msg->o.attr.val = poll_one(&polls, msg->i.attr.val, 0);
-			msg->o.attr.err = (msg->o.attr.val < 0) ? msg->o.attr.val : EOK;
+			msg->o.err = (msg->o.attr.val < 0) ? msg->o.attr.val : EOK;
 			break;
 		case mtClose:
-			msg->o.io.err = map_errno(lwip_close(sock));
+			msg->o.err = map_errno(lwip_close(sock));
 			return 1;
 		case mtDevCtl:
 			do_socket_ioctl(msg, sock);
@@ -1146,21 +1145,21 @@ static void socketsrv_thread(void *arg)
 				if (smi->socket.domain == AF_KEY) {
 #if LWIP_IPSEC
 					if ((sock = key_sockets_socket(smi->socket.domain, type, smi->socket.protocol)) < 0) {
-						msg.o.lookup.err = -errno;
+						msg.o.err = -errno;
 					}
 					else {
-						msg.o.lookup.err = wrap_key_socket(&msg.o.lookup.dev.port, sock, smi->socket.type);
+						msg.o.err = wrap_key_socket(&msg.o.lookup.dev.port, sock, smi->socket.type);
 						msg.o.lookup.fil = msg.o.lookup.dev;
 					}
 #else
-					msg.o.lookup.err = -EINVAL;
+					msg.o.err = -EINVAL;
 #endif /* LWIP_IPSEC */
 					break;
 				}
 				if ((sock = lwip_socket(smi->socket.domain, type, smi->socket.protocol)) < 0)
-					msg.o.lookup.err = -errno;
+					msg.o.err = -errno;
 				else {
-					msg.o.lookup.err = wrap_socket(&msg.o.lookup.dev.port, sock, smi->socket.type);
+					msg.o.err = wrap_socket(&msg.o.lookup.dev.port, sock, smi->socket.type);
 					msg.o.lookup.fil = msg.o.lookup.dev;
 				}
 				break;
@@ -1204,7 +1203,7 @@ static void socketsrv_thread(void *arg)
 				smo->sys.err = smo->ret == EAI_SYSTEM ? errno : 0;
 				break;
 			default:
-				msg.o.io.err = -EINVAL;
+				msg.o.err = -EINVAL;
 		}
 
 		msgRespond(port, &msg, respid);

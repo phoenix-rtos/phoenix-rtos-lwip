@@ -46,19 +46,19 @@ static void mainLoop(void)
 
 		switch (msg.type) {
 			case mtOpen:
-				msg.o.io.err = dev_open(msg.i.openclose.oid.id, msg.i.openclose.flags);
+				msg.o.err = dev_open(msg.oid.id, msg.i.openclose.flags);
 				break;
 
 			case mtClose:
-				msg.o.io.err = dev_close(msg.i.openclose.oid.id);
+				msg.o.err = dev_close(msg.oid.id);
 				break;
 
 			case mtRead:
-				msg.o.io.err = dev_read(msg.i.openclose.oid.id, msg.o.data, msg.o.size, msg.i.io.offs);
+				msg.o.err = dev_read(msg.oid.id, msg.o.data, msg.o.size, msg.i.io.offs);
 				break;
 
 			case mtWrite:
-				msg.o.io.err = dev_write(msg.i.openclose.oid.id, msg.i.data, msg.i.size, msg.i.io.offs);
+				msg.o.err = dev_write(msg.oid.id, msg.i.data, msg.i.size, msg.i.io.offs);
 				break;
 
 			default:
