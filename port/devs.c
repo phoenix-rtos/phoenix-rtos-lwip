@@ -558,9 +558,9 @@ static int pf_close(void)
 }
 
 
-static int pf_write(char *data, size_t size)
+static int pf_write(const void *data, size_t size)
 {
-	pfrule_array_t *input = (pfrule_array_t *)data;
+	const pfrule_array_t *input = data;
 
 	if (input == NULL || !size || size != input->len * sizeof(pfrule_t) + sizeof(pfrule_array_t))
 		return -EINVAL;
@@ -714,7 +714,7 @@ int dev_read(id_t id, void *data, size_t size, size_t offset)
 }
 
 
-int dev_write(id_t id, void *data, size_t size, size_t offset)
+int dev_write(id_t id, const void *data, size_t size, size_t offset)
 {
 	switch (id) {
 #if LWIP_ROUTE_DEV

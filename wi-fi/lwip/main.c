@@ -426,7 +426,7 @@ static int wifi_dev_read(char *data, size_t size, off_t offset)
 }
 
 
-static int wifi_dev_write(char *data, size_t size)
+static int wifi_dev_write(const char *data, size_t size)
 {
 	if (size >= 8 && strncmp("timeout ", data, 8) == 0) {
 		wifi_ap_set_idle_timeout(data + 8, size - 8);

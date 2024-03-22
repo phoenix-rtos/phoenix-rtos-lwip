@@ -261,7 +261,7 @@ static int _pf_processRule(pfrule_t *rule)
 }
 
 
-int pf_rulesUpdate(pfrule_array_t *array)
+int pf_rulesUpdate(const pfrule_array_t *array)
 {
 	pfrule_t *newlist = NULL, *listhead = NULL, *newrule;
 	size_t i;
