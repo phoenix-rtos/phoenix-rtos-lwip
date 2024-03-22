@@ -1130,7 +1130,7 @@ static void socketsrv_thread(void *arg)
 	int err, sock, type;
 #if LWIP_DNS
 	struct addrinfo hint = { 0 };
-	char *node, *serv;
+	const char *node, *serv;
 #endif
 
 	port = (unsigned)arg;

@@ -23,7 +23,7 @@ int pf_filterIn(struct pbuf *pbuf, struct netif *netif);
 int pf_filterOut(struct pbuf *pbuf, struct netif *netif);
 
 
-int pf_rulesUpdate(pfrule_array_t *array);
+int pf_rulesUpdate(const pfrule_array_t *array);
 
 
 void init_filters(void);
