@@ -83,8 +83,8 @@ static void rtl_chipReset(rtl_priv_t *state)
 	state->mmio->CPCR = RTL_CMD_TX_MODE_CP|RTL_CMD_RX_MODE_CP|RTL_CMD_RX_CSUM|RTL_CMD_RX_VLAN|RTL_CMD_PCI_MULRW;
 
 	/* clear RX multicast filter */
-	state->mmio->MAR[0] = 0;
-	state->mmio->MAR[1] = 0;
+	state->mmio->MAR[0] = 0xffffffff;
+	state->mmio->MAR[1] = 0xffffffff;
 }
 
 
