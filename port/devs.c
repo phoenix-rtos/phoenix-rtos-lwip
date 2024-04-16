@@ -230,6 +230,13 @@ static int ifstatus_open(int flags)
 		SNPRINTF_APPEND("%.2s%d_up=%u\n", netif->name, netif->num, netif_is_up(netif));
 		SNPRINTF_APPEND("%.2s%d_link=%u\n", netif->name, netif->num, netif_is_link_up(netif));
 		SNPRINTF_APPEND("%.2s%d_ip=%s\n", netif->name, netif->num, inet_ntoa(netif->ip_addr));
+#if LWIP_IPV6
+		for (int i = 0; i < LWIP_IPV6_NUM_ADDRESSES; i++) {
+			if (netif->ip6_addr_state[i] != IP6_ADDR_INVALID) {
+				SNPRINTF_APPEND("%.2s%d_ipv6_%d=%s\n", netif->name, netif->num, i, inet6_ntoa(netif->ip6_addr[i]));
+			}
+		}
+#endif /* LWIP_IPV6 */
 		if (!netif_is_ppp(netif) && !netif_is_tun(netif)) {
 #if LWIP_DHCP
 			SNPRINTF_APPEND("%.2s%d_dhcp=%u\n", netif->name, netif->num, netif_is_dhcp(netif));

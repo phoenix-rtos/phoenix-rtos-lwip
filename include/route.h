@@ -19,6 +19,9 @@
 #include <lwip/ip4_addr.h>
 
 
+/* TODO: add routing for IPv6 */
+
+
 typedef struct _rt_entry {
 	struct _rt_entry *next;
 	struct _rt_entry *prev;

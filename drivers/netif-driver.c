@@ -78,6 +78,9 @@ static err_t netif_dev_init(struct netif *netif)
 		netif->hwaddr_len = ETH_HWADDR_LEN;
 		netif->flags = NETIF_FLAG_UP | NETIF_FLAG_LINK_UP | NETIF_FLAG_BROADCAST |
 		NETIF_FLAG_ETHARP | NETIF_FLAG_ETHERNET;
+#if LWIP_IPV6 && LWIP_IPV6_MLD
+		netif->flags |= NETIF_FLAG_MLD6;
+#endif /* LWIP_IPV6 && LWIP_IPV6_MLD */
 
 		netif->name[0] = 'e';
 		netif->name[1] = 'n';
@@ -146,6 +149,14 @@ int create_netif(char *conf)
 	if (!is_ppp) {
 		err = netifapi_netif_add(ni, NULL, NULL, NULL,
 			(char *)storage + sz, netif_dev_init, tcpip_input);
+#if LWIP_IPV6
+		if (err == ERR_OK) {
+#if LWIP_IPV6_AUTOCONFIG
+			netif_set_ip6_autoconfig_enabled(ni, 1);
+#endif /* LWIP_IPV6_AUTOCONFIG */
+			netif_create_ip6_linklocal_address(ni, 1);
+		}
+#endif /* LWIP_IPV6 */
 	} else {
 		ni->state = (char *)storage + sz;
 		err = storage->drv->init(ni, storage->cfg);
