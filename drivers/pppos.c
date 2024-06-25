@@ -713,7 +713,7 @@ static int pppos_netifInit(struct netif *netif, char *cfg)
 	for (; (next = cfg_get_next_arg(cfg)); cfg = next) {
 		if (!strncmp(cfg, "/dev/", 5)) {
 			state->serialat_fn = cfg;
-			log_info("config device: ", cfg);
+			log_info("config device: %s", cfg);
 			continue;
 		}
 

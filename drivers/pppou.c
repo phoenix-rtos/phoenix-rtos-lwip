@@ -551,7 +551,7 @@ static int pppou_netifInit(struct netif *netif, char *cfg)
 
 		if (!strncmp(cfg, "/dev/", 5)) {
 			state->serial_dev = cfg;
-			log_info("config device: ", cfg);
+			log_info("config device: %s", cfg);
 			continue;
 		}
 
