@@ -87,3 +87,7 @@
 #define LWIP_DHCP_AUTOIP_COOP_TRIES 3
 #define LWIP_SO_RCVTIMEO 1
 #define ifreq lwip_ifreq
+
+#define LWIP_DEBUG 1
+#define TCP_DEBUG LWIP_DBG_ON
+#define TCP_INPUT_DEBUG LWIP_DBG_ON
