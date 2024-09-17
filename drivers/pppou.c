@@ -15,6 +15,8 @@
 
 #include <netif/ppp/pppapi.h>
 
+#include <netif.h>
+
 #include <errno.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -58,7 +60,7 @@ enum cfg_flag_e {
 typedef struct
 {
 	struct netif *netif;
-	ppp_pcb* ppp;
+	ppp_pcb *ppp;
 
 	const char *serial_dev;
 	speed_t serial_speed;
@@ -91,10 +93,10 @@ typedef struct
 
 #endif
 
-#define PPPOU_READ_DATA_TIMEOUT_STEP_MS  10
+#define PPPOU_READ_DATA_TIMEOUT_STEP_MS 10
 
-#define PPPOU_TRYOPEN_SERIALDEV_SEC      3
-#define PPPOU_CONNECT_RETRY_SEC          5
+#define PPPOU_TRYOPEN_SERIALDEV_SEC 3
+#define PPPOU_CONNECT_RETRY_SEC     5
 
 
 /****** serial handling ******/
@@ -116,13 +118,26 @@ static speed_t serial_speed_from_string(const char *str)
 {
 	/* table is lexically sorted by `str` */
 	static const struct serial_speed_s stab[] = {
-		{ "0", B0 },           { "110", B110 },       { "115200", B115200 },
-		{ "1200", B1200 },     { "134", B134 },       { "150", B150 },
-		{ "1800", B1800 },     { "19200", B19200 },   { "200", B200 },
-		{ "230400", B230400 }, { "2400", B2400 },     { "300", B300 },
-		{ "38400", B38400 },   { "460800", B460800 }, { "4800", B4800 },
-		{ "50", B50 },         { "57600", B57600 },   { "600", B600 },
-		{ "75", B75 },         { "9600", B9600 },
+		{ "0", B0 },
+		{ "110", B110 },
+		{ "115200", B115200 },
+		{ "1200", B1200 },
+		{ "134", B134 },
+		{ "150", B150 },
+		{ "1800", B1800 },
+		{ "19200", B19200 },
+		{ "200", B200 },
+		{ "230400", B230400 },
+		{ "2400", B2400 },
+		{ "300", B300 },
+		{ "38400", B38400 },
+		{ "460800", B460800 },
+		{ "4800", B4800 },
+		{ "50", B50 },
+		{ "57600", B57600 },
+		{ "600", B600 },
+		{ "75", B75 },
+		{ "9600", B9600 },
 	};
 
 	struct serial_speed_s *sptr;
@@ -222,7 +237,7 @@ static int serial_write(int fd, const u8_t *data, u32_t len)
 		retries = 0;
 		continue;
 
-retry:
+	retry:
 		if (retries >= WRITE_MAX_RETRIES) {
 			return off;
 		}
@@ -268,87 +283,86 @@ static void pppou_link_status_cb(ppp_pcb *pcb, int err_code, void *ctx)
 	log_debug("%s : status", __func__);
 	mutexLock(state->lock);
 
-	switch(err_code) {
-		case PPPERR_NONE:               /* No error. */
-			{
-				state->conn_state = CONN_STATE_CONNECTED;
+	switch (err_code) {
+		case PPPERR_NONE: /* No error. */
+		{
+			state->conn_state = CONN_STATE_CONNECTED;
 
-				log_info("ppp_link_status_cb: PPPERR_NONE");
+			log_info("ppp_link_status_cb: PPPERR_NONE");
 #if LWIP_IPV4
-				log_info("   our_ip4addr = %s", ip4addr_ntoa(netif_ip4_addr(pppif)));
-				log_info("   his_ip4addr = %s", ip4addr_ntoa(netif_ip4_gw(pppif)));
-				log_info("   netmask     = %s", ip4addr_ntoa(netif_ip4_netmask(pppif)));
+			log_info("   our_ip4addr = %s", ip4addr_ntoa(netif_ip4_addr(pppif)));
+			log_info("   his_ip4addr = %s", ip4addr_ntoa(netif_ip4_gw(pppif)));
+			log_info("   netmask     = %s", ip4addr_ntoa(netif_ip4_netmask(pppif)));
 #if LWIP_DNS
-				log_info("   dns0_addr   = %s", ipaddr_ntoa(dns_getserver(0)));
-				log_info("   dns1_addr   = %s", ipaddr_ntoa(dns_getserver(1)));
+			log_info("   dns0_addr   = %s", ipaddr_ntoa(dns_getserver(0)));
+			log_info("   dns1_addr   = %s", ipaddr_ntoa(dns_getserver(1)));
 #endif /* LWIP_DNS */
 
 #endif /* LWIP_IPV4 */
 #if LWIP_IPV6
-				log_info("   our_ip6addr = %s", ip6addr_ntoa(netif_ip6_addr(pppif, 0)));
+			log_info("   our_ip6addr = %s", ip6addr_ntoa(netif_ip6_addr(pppif, 0)));
 #endif /* LWIP_IPV6 */
 
 #if PPP_IPV6_SUPPORT
-				log_info("   our6_ipaddr = %s\n\r", ip6addr_ntoa(netif_ip6_addr(pppif, 0)));
+			log_info("   our6_ipaddr = %s\n\r", ip6addr_ntoa(netif_ip6_addr(pppif, 0)));
 #endif /* PPP_IPV6_SUPPORT */
-			}
-			break;
+		} break;
 
-		case PPPERR_PARAM:             /* Invalid parameter. */
+		case PPPERR_PARAM: /* Invalid parameter. */
 			log_info("ppp_link_status_cb: PPPERR_PARAM");
 			/* TODO: error? */
 			break;
 
-		case PPPERR_OPEN:              /* Unable to open PPP session. */
+		case PPPERR_OPEN: /* Unable to open PPP session. */
 			log_info("ppp_link_status_cb: PPPERR_OPEN");
 			break;
 
-		case PPPERR_DEVICE:            /* Invalid I/O device for PPP. */
+		case PPPERR_DEVICE: /* Invalid I/O device for PPP. */
 			log_info("ppp_link_status_cb: PPPERR_DEVICE");
 			serial_close(state->fd);
 			state->fd = -1;
 			break;
 
-		case PPPERR_ALLOC:             /* Unable to allocate resources. */
+		case PPPERR_ALLOC: /* Unable to allocate resources. */
 			log_info("ppp_link_status_cb: PPPERR_ALLOC");
 			/* TODO: broken */
 			break;
 
-		case PPPERR_USER:              /* User interrupt. */
+		case PPPERR_USER: /* User interrupt. */
 			log_info("ppp_link_status_cb: PPPERR_USER");
 			state->conn_state = CONN_STATE_DISCONNECTED;
 			break;
 
-		case PPPERR_CONNECT:           /* Connection lost. */
+		case PPPERR_CONNECT: /* Connection lost. */
 			log_info("ppp_link_status_cb: PPPERR_CONNECT");
 			state->conn_state = CONN_STATE_DISCONNECTED;
 			break;
 
-		case PPPERR_AUTHFAIL:          /* Failed authentication challenge. */
+		case PPPERR_AUTHFAIL: /* Failed authentication challenge. */
 			log_info("ppp_link_status_cb: PPPERR_AUTHFAIL");
 			state->conn_state = CONN_STATE_DISCONNECTED;
 			break;
 
-		case PPPERR_PROTOCOL:          /* Failed to meet protocol. */
+		case PPPERR_PROTOCOL: /* Failed to meet protocol. */
 			log_info("ppp_link_status_cb: PPPERR_PROTOCOL");
 			state->conn_state = CONN_STATE_DISCONNECTED;
 			break;
 
-		case PPPERR_PEERDEAD:          /* Connection timeout. */
+		case PPPERR_PEERDEAD: /* Connection timeout. */
 			log_info("ppp_link_status_cb: PPPERR_PEERDEAD");
 			state->conn_state = CONN_STATE_DISCONNECTED;
 			break;
 
-		case PPPERR_IDLETIMEOUT:       /* Idle Timeout. */
+		case PPPERR_IDLETIMEOUT: /* Idle Timeout. */
 			log_info("ppp_link_status_cb: PPPERR_IDLETIMEOUT");
 			break;
 
-		case PPPERR_CONNECTTIME:       /* Max connect time reached */
+		case PPPERR_CONNECTTIME: /* Max connect time reached */
 			log_info("ppp_link_status_cb: PPPERR_CONNECTTIME");
 			state->conn_state = CONN_STATE_DISCONNECTED;
 			break;
 
-		case PPPERR_LOOPBACK:          /* Loopback detected */
+		case PPPERR_LOOPBACK: /* Loopback detected */
 			log_info("ppp_link_status_cb: PPPERR_LOOPBACK");
 			break;
 
@@ -368,8 +382,7 @@ static void pppou_do_rx(pppou_priv_t *state)
 	int len;
 	u8_t buffer[1024];
 
-	while (state->conn_state != CONN_STATE_DISCONNECTED
-			&& state->conn_state != CONN_STATE_DISCONNECTING) {
+	while (state->conn_state != CONN_STATE_DISCONNECTED && state->conn_state != CONN_STATE_DISCONNECTING) {
 		len = read(state->fd, buffer, sizeof(buffer));
 		if (len > 0) {
 			/* Pass received raw characters from PPPoU to be decoded through lwIP
@@ -482,7 +495,7 @@ static int pppou_netifDown(pppou_priv_t *state)
 static pppou_priv_t *pppou_netifState(struct netif *netif)
 {
 	struct netif_alloc *s = (void *)netif;
-	pppou_priv_t *state = (void *) ((char *)s + ((sizeof(*s) + (_Alignof(pppou_priv_t) - 1)) & ~(_Alignof(pppou_priv_t) - 1)));
+	pppou_priv_t *state = (void *)((char *)s + ((sizeof(*s) + (_Alignof(pppou_priv_t) - 1)) & ~(_Alignof(pppou_priv_t) - 1)));
 	return state;
 }
 
@@ -591,6 +604,9 @@ static int pppou_netifInit(struct netif *netif, char *cfg)
 			return ERR_IF; /* TODO: maybe permanent broken state? */
 		}
 		netif->flags &= ~NETIF_FLAG_UP;
+#if LWIP_IPV6 && LWIP_IPV6_MLD
+		netif->flags |= NETIF_FLAG_MLD6;
+#endif /* LWIP_IPV6 && LWIP_IPV6_MLD */
 		ppp_set_netif_statuscallback(state->ppp, pppou_statusCallback);
 #if LWIP_DNS
 		ppp_set_usepeerdns(state->ppp, 1);
@@ -598,6 +614,13 @@ static int pppou_netifInit(struct netif *netif, char *cfg)
 		if (!(flags & CFG_FLAG_NO_DEFAULT_ROUTE))
 			ppp_set_default(state->ppp);
 	}
+
+#if LWIP_IPV6
+#if LWIP_IPV6_AUTOCONFIG
+	netif_set_ip6_autoconfig_enabled(netif, 1);
+#endif /* LWIP_IPV6_AUTOCONFIG */
+	netif_create_ip6_linklocal_address(netif, 1);
+#endif /* LWIP_IPV6 */
 
 	beginthread(pppou_mainLoop, 4, (void *)state->main_loop_stack, sizeof(state->main_loop_stack), state);
 
@@ -638,8 +661,7 @@ static netif_driver_t pppou_drv = {
 };
 
 
-__constructor__(1000)
-void register_driver_pppou(void)
+__constructor__(1000) void register_driver_pppou(void)
 {
 	register_netif_driver(&pppou_drv);
 }
