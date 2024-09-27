@@ -101,7 +101,7 @@ static uint32_t ephy_show_id(eth_phy_state_t *phy)
 static void ephy_show_link_state(eth_phy_state_t *phy)
 {
 	uint16_t bctl, bstat, adv, lpa, pc1, pc2;
-	int speed, full_duplex;
+	int speed, full_duplex = 0;
 
 	bctl = ephy_reg_read(phy, 0x00);
 	bstat = ephy_reg_read(phy, 0x01);
@@ -119,7 +119,7 @@ static void ephy_show_link_state(eth_phy_state_t *phy)
 
 
 	printf("lwip: ephy%u.%u link is %s %uMbps/%s (ctl %04x, status %04x, adv %04x, lpa %04x, pctl %04x,%04x)\n",
-		phy->bus, phy->addr, linkup ? "UP  " : "DOWN", speed, full_duplex ? "Full" : "Half",
+		phy->bus, phy->addr, linkup ? "UP  " : "DOWN", speed, (full_duplex != 0) ? "Full" : "Half",
 		bctl, bstat, adv, lpa, pc1, pc2);
 }
 
