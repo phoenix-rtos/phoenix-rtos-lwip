@@ -33,6 +33,8 @@ CFLAGS += -Wundef -Iinclude -Ilib-lwip/src/include -I"$(LWIPOPTS_DIR)"
 
 NAME := lwip-core
 SRCS := $(LWIP_SRCS)
+# Disabling warnings from lib-lwip, as their code does not comply with these rules for now.
+LOCAL_CFLAGS += -Wno-char-subscripts -Wno-format-zero-length
 # don't install include subdir contents, these are actually internal headers
 LOCAL_HEADER_DIR := nothing
 include $(static-lib.mk)
