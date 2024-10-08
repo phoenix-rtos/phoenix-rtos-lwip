@@ -270,10 +270,8 @@ static int socket_ioctl6(int sock, unsigned long request, const void *in_data, v
 			}
 
 			inet6_addr_to_ip6addr(&ip6addr, &sin6.sin6_addr);
-			if ((idx = netif_get_ip6_addr_match(netif, &ip6addr)) < 0) {
-				if (netif_add_ip6_address(netif, &ip6addr, &idx) != ERR_OK) {
-					return -ENOMEM;
-				}
+			if (netif_add_ip6_address(netif, &ip6addr, &idx) != ERR_OK) { /* If this function succeeds then idx >= 0 */
+				return -ENOMEM;
 			}
 
 			netif_ip6_addr_set_pref_life(netif, idx, in6_ifreq->ifra_lifetime.preferred);
