@@ -188,6 +188,7 @@ static int socket_ioctl6(int sock, unsigned long request, const void *in_data, v
 			struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)&in6_ifreq->ifr_ifru.ifru_addr;
 			ip6_addr_t ip6addr;
 			s8_t idx;
+			u8_t uidx;
 			int *flags;
 			struct in6_addrlifetime *lifetime;
 
@@ -205,6 +206,7 @@ static int socket_ioctl6(int sock, unsigned long request, const void *in_data, v
 			if (idx < 0) {
 				return -ENXIO;
 			}
+			uidx = (u8_t)idx;
 
 			switch (request) {
 				case SIOCGIFNETMASK_IN6:
@@ -212,12 +214,12 @@ static int socket_ioctl6(int sock, unsigned long request, const void *in_data, v
 					break;
 				case SIOCGIFAFLAG_IN6:
 					flags = &in6_ifreq->ifr_ifru.ifru_flags6;
-					*flags = netif_ip6_flags(netif, idx);
+					*flags = netif_ip6_flags(netif, uidx);
 					break;
 				case SIOCGIFALIFETIME_IN6:
 					lifetime = (struct in6_addrlifetime *)&in6_ifreq->ifr_ifru.ifru_lifetime;
-					lifetime->preferred = netif_ip6_addr_pref_life(netif, idx);
-					lifetime->expire = netif_ip6_addr_valid_life(netif, idx);
+					lifetime->preferred = netif_ip6_addr_pref_life(netif, uidx);
+					lifetime->expire = netif_ip6_addr_valid_life(netif, uidx);
 					break;
 			}
 			return EOK;
@@ -257,6 +259,7 @@ static int socket_ioctl6(int sock, unsigned long request, const void *in_data, v
 			struct sockaddr_in6 sin6;
 			ip6_addr_t ip6addr;
 			s8_t idx;
+			u8_t uidx;
 
 			if (netif == NULL) {
 				return -ENXIO;
@@ -274,8 +277,10 @@ static int socket_ioctl6(int sock, unsigned long request, const void *in_data, v
 				return -ENOMEM;
 			}
 
-			netif_ip6_addr_set_pref_life(netif, idx, in6_ifreq->ifra_lifetime.preferred);
-			netif_ip6_addr_set_valid_life(netif, idx, in6_ifreq->ifra_lifetime.expire);
+			uidx = (u8_t)idx;
+
+			netif_ip6_addr_set_pref_life(netif, uidx, in6_ifreq->ifra_lifetime.preferred);
+			netif_ip6_addr_set_valid_life(netif, uidx, in6_ifreq->ifra_lifetime.expire);
 			/* Ignore flags and netmask */
 
 			return EOK;
