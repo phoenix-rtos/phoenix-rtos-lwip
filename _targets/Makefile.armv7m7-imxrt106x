@@ -3,9 +3,11 @@
 #
 # iMX RT1064 target
 #
-# Copyright 2021 Phoenix Systems
+# Copyright 2021, 2024 Phoenix Systems
 #
 
-NET_DRIVERS_SUPPORTED := pppou pppos
+NET_DRIVERS_SUPPORTED := pppou pppos enet
 NET_DRIVERS ?= $(NET_DRIVERS_SUPPORTED)
 PPPOS_MODEM ?= huawei
+
+DRIVERS_SRCS_enet = imx-enet.c ephy.c imxrt106x-gpio.c $(DRIVERS_SRCS_UTIL)
