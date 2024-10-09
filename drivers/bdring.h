@@ -36,7 +36,6 @@ typedef struct net_bufdesc_ops_ {
 
 	size_t desc_size;
 	size_t ring_alignment;
-	size_t pkt_buf_sz;
 	size_t max_tx_frag;
 } net_bufdesc_ops_t;
 

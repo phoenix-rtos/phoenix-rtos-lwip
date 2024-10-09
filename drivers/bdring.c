@@ -189,7 +189,7 @@ size_t net_refillRx(net_bufdesc_ring_t *ring, size_t ethpad)
 	n = 0;
 	i = ring->tail;
 	nxt = (i + 1) & ring->last;  // NOTE: 2^n ring size verified in net_initRings
-	sz = ring->ops->pkt_buf_sz;
+	sz = net_maxDMAPbufSize;
 
 	while (nxt != atomic_load(&ring->head)) {
 		p = net_allocDMAPbuf(&pa, sz);

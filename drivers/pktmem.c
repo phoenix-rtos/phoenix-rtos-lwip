@@ -17,28 +17,55 @@
 #include <string.h>
 
 
-#define CACHE_LINE_SIZE 64
-#define PAGE_SIZE       4096
+// FIXME: transfer CACHE_LINE_SIZE to appropriate file with platform-specific definitions
+#if defined(__ARM_ARCH_7EM__)
+#define CACHE_LINE_SIZE    32
+#define PKT_BUF_ALLOC_SIZE (3 * PAGE_SIZE)
+#define PKT_BUF_SIZE       (PKT_BUF_ALLOC_SIZE - 12 /* sizeof(buf_page_head_t) (without alignment) */)
+#else
+#define CACHE_LINE_SIZE    64
+#define PKT_BUF_ALLOC_SIZE PAGE_SIZE
+#define PKT_BUF_SIZE       (2048 - CACHE_LINE_SIZE)
+#endif
 
 #define TRUE_LRU 0
 
 
-#define PKT_BUF_SIZE       (2048 - CACHE_LINE_SIZE)
-#define PKT_BUF_CNT        (size_t)((PAGE_SIZE - CACHE_LINE_SIZE) / PKT_BUF_SIZE)
-#define PKT_BUF_IDX        11 /* log2(PAGE_SIZE) - ceil(log2(PKT_BUF_CNT)) */
-#define PKT_BUF_CACHE_SIZE 16
+#if PAGE_SIZE < PKT_BUF_SIZE
+#define PKT_BUF_CNT              1
+#define PKT_BUF_WHICH(p)         0
+#define PKT_BUF_PAGE_HEAD_OFFSET (PKT_BUF_ALLOC_SIZE - CACHE_LINE_SIZE)
+#define PKT_BUF_PACKET_OFFSET    0
 
+typedef struct _buf_page_head {
+	uint32_t rsvd[5]; /* NOTE: aligned access */
+	uint32_t free_mask;
+	struct _buf_page_head *next;
+	struct _buf_page_head *prev;
+} buf_page_head_t;
+#else
+#define PKT_BUF_CNT              (size_t)((PAGE_SIZE - CACHE_LINE_SIZE) / PKT_BUF_SIZE)
+#define _NEXT_POW2(x)            (((x) <= 2) ? (x) : ((1ull << 32) >> __builtin_clz((x) - 1)))
+#define PKT_BUF_IDX              (__builtin_ctz(PAGE_SIZE) - __builtin_ctz(_NEXT_POW2(PKT_BUF_CNT))) /* log2(PAGE_SIZE) - ceil(log2(PKT_BUF_CNT)) */
+#define PKT_BUF_WHICH(p)         (((size_t)(p) & (PAGE_SIZE - 1)) >> PKT_BUF_IDX)
+#define PKT_BUF_PAGE_HEAD_OFFSET 0
+#define PKT_BUF_PACKET_OFFSET    CACHE_LINE_SIZE
 
 typedef struct _buf_page_head {
 	unsigned free_mask;
 	struct _buf_page_head *next;
 	struct _buf_page_head *prev;
 } buf_page_head_t;
+#endif
+
+#define PKT_BUF_CACHE_SIZE 16
+#define PKT_BUF_FREE_MASK  ((1 << PKT_BUF_CNT) - 1)
 
 
 static buf_page_head_t pkt_buf_lru = { .next = &pkt_buf_lru, .prev = &pkt_buf_lru };
 static unsigned pkt_bufs_free;
 
+const size_t net_maxDMAPbufSize = PKT_BUF_SIZE;
 
 static void net_listAdd(buf_page_head_t *ph, buf_page_head_t *after)
 {
@@ -64,19 +91,19 @@ static void net_listDel(buf_page_head_t *ph)
 
 static void net_freePktBuf(void *p)
 {
-	buf_page_head_t *ph = (void *)((uintptr_t)p & ~(PAGE_SIZE - 1));
-	unsigned which = ((size_t)p & (PAGE_SIZE - 1)) >> PKT_BUF_IDX;
+	buf_page_head_t *ph = (void *)((uintptr_t)p & ~(PAGE_SIZE - 1)) + PKT_BUF_PAGE_HEAD_OFFSET;
+	unsigned which = PKT_BUF_WHICH(p);
 	unsigned old_mask;
 
 	old_mask = ph->free_mask;
 	ph->free_mask |= 1 << which;
 	++pkt_bufs_free;
 
-	if (pkt_bufs_free > PKT_BUF_CACHE_SIZE && ph->free_mask == (1 << PKT_BUF_CNT) - 1) {
+	if (pkt_bufs_free > PKT_BUF_CACHE_SIZE && ph->free_mask == PKT_BUF_FREE_MASK) {
 		if (old_mask != 0) {
 			net_listDel(ph);
 		}
-		munmap(ph, PAGE_SIZE);
+		munmap((void *)ph - PKT_BUF_PAGE_HEAD_OFFSET, PKT_BUF_ALLOC_SIZE);
 		pkt_bufs_free -= PKT_BUF_CNT;
 		return;
 	}
@@ -114,14 +141,15 @@ static ssize_t net_allocPktBuf(void **bufp)
 	if (pkt_bufs_free == 0) {
 		SYS_ARCH_UNPROTECT(old_level);
 
-		ph = dmammap(PAGE_SIZE);
+		ph = dmammap(PKT_BUF_ALLOC_SIZE);
 		if (ph == NULL) {
 			printf("mmap: no memory?\n");
 			return 0;
 		}
+		ph = (void *)ph + PKT_BUF_PAGE_HEAD_OFFSET;
 
 		memset(ph, 0, CACHE_LINE_SIZE);
-		ph->free_mask = (1 << PKT_BUF_CNT) - 1;
+		ph->free_mask = PKT_BUF_FREE_MASK;
 
 		SYS_ARCH_PROTECT(old_level);
 		net_listAdd(ph, &pkt_buf_lru);
@@ -140,7 +168,7 @@ static ssize_t net_allocPktBuf(void **bufp)
 
 	SYS_ARCH_UNPROTECT(old_level);
 
-	*bufp = (void *)ph + CACHE_LINE_SIZE + i * PKT_BUF_SIZE;
+	*bufp = (void *)ph + PKT_BUF_PACKET_OFFSET + i * PKT_BUF_SIZE - PKT_BUF_PAGE_HEAD_OFFSET;
 
 	return PKT_BUF_SIZE;
 }
