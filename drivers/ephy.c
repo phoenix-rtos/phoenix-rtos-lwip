@@ -3,8 +3,8 @@
  *
  * Ethernet PHY common routines
  *
- * Copyright 2018 Phoenix Systems
- * Author: Michał Mirosław
+ * Copyright 2018, 2024 Phoenix Systems
+ * Author: Michał Mirosław, Julian Uziembło
  *
  * %LICENSE%
  */
@@ -266,6 +266,7 @@ static int ephy_config(eth_phy_state_t *phy, char *cfg)
 		phy->addr = strtoul(cfg, &p, 0);
 	}
 	else {
+		printf("lwip: ephy: WARN: setting default bus 0\n");
 		phy->bus = 0;
 	}
 
@@ -376,7 +377,6 @@ static int ephy_setAltConfig(eth_phy_state_t *phy, int cfg_id)
 
 int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb_t cb, void *cb_arg)
 {
-	(void)board_rev;
 	uint32_t phyid;
 	int err;
 
@@ -400,6 +400,7 @@ int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb
 
 	err = mdio_setup(phy->bus, 2500 /* kHz */, 10 /* ns */, 0 /* with-preamble */);
 	if (err != 0) {
+		ephy_printf(phy, "Couldn't init MDIO: %s (%d)", strerror(-err), err);
 		return err;
 	}
 
@@ -407,6 +408,7 @@ int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb
 
 	phyid = ephy_readPhyId(phy);
 	if (phyid == 0u || phyid == ~0u) {
+		ephy_printf(phy, "Couldn't read PHY ID");
 		gpio_set(&phy->reset, 1);
 		return -ENODEV;
 	}
@@ -416,11 +418,18 @@ int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb
 	/* make address 0 not broadcast, disable NAND-tree mode */
 	ephy_regWrite(phy, EPHY_16_OMSOR, (1u << 1) | (1u << 9));
 
-	ephy_setAltConfig(phy, 0); /* KSZ8081 RND - default config */
+	err = ephy_setAltConfig(phy, 0); /* KSZ8081 RND - default config */
+	if (err <= 0) {
+		ephy_printf(phy, "Couldn't set default config");
+		return -ENODEV;
+	}
 
 #ifdef LWIP_EPHY_INIT_HOOK
 	LWIP_EPHY_INIT_HOOK(phy, phyid, board_rev);
+#else
+	(void)board_rev;
 #endif
+
 
 #if defined(EPHY_KSZ8081RNA) || defined(EPHY_KSZ8081RNB)
 	ephy_setAltConfig(phy, 1);
@@ -441,6 +450,10 @@ int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb
 
 		/* enable link up/down IRQ signal */
 		ephy_regWrite(phy, EPHY_1B_ICSR, (1u << 8) | (1u << 10));
+	}
+	else {
+		ephy_printf(phy, "WARN: irq_gpio not valid, could not start PHY IRQ thread");
+		return -ENODEV;
 	}
 
 	ephy_restartAN(phy);
