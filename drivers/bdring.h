@@ -44,7 +44,7 @@ typedef struct net_bufdesc_ops_ {
 struct net_bufdesc_ring_ {
 	volatile void *ring;
 	struct pbuf **bufp;
-	volatile unsigned head, tail;
+	volatile atomic_uint head, tail;
 	unsigned last;
 	addr_t phys;
 	const net_bufdesc_ops_t *ops;

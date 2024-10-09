@@ -108,8 +108,8 @@ int net_initRings(net_bufdesc_ring_t *rings, const size_t *sizes, size_t nrings,
 	for (i = 0; i < nrings; ++i) {
 		rings[i].ring = p;
 		rings[i].bufp = bufp;
-		rings[i].head = 0;
-		rings[i].tail = 0;
+		atomic_init(&rings[i].head, 0);
+		atomic_init(&rings[i].tail, 0);
 		rings[i].last = sizes[i] - 1;
 		rings[i].phys = phys;
 		rings[i].ops = ops;
@@ -133,11 +133,11 @@ size_t net_receivePackets(net_bufdesc_ring_t *ring, struct netif *ni, unsigned e
 
 	mutexLock(ring->lock);
 	n = 0;
-	i = ring->head;
+	i = atomic_load(&ring->head);
 	pkt = NULL;
 
 	for (;;) {
-		if (i == ring->tail) {
+		if (i == atomic_load(&ring->tail)) {
 			break;
 		}
 
@@ -174,7 +174,7 @@ size_t net_receivePackets(net_bufdesc_ring_t *ring, struct netif *ni, unsigned e
 		++n;
 	}
 
-	ring->head = i;
+	atomic_store(&ring->head, i);
 	mutexUnlock(ring->lock);
 	return n;
 }
@@ -192,7 +192,7 @@ size_t net_refillRx(net_bufdesc_ring_t *ring, size_t ethpad)
 	nxt = (i + 1) & ring->last; /* NOTE: 2^n ring size verified in net_initRings */
 	sz = ring->ops->pkt_buf_sz;
 
-	while (nxt != ring->head) {
+	while (nxt != atomic_load(&ring->head)) {
 		p = net_allocDMAPbuf(&pa, sz);
 		if (p == NULL) {
 			break;
@@ -208,7 +208,7 @@ size_t net_refillRx(net_bufdesc_ring_t *ring, size_t ethpad)
 		++n;
 	}
 
-	ring->tail = i;
+	atomic_store(&ring->tail, i);
 	mutexUnlock(ring->lock);
 	return n;
 }
@@ -220,7 +220,7 @@ size_t net_reapTxFinished(net_bufdesc_ring_t *ring)
 	mutexLock(ring->lock);
 
 	n = 0;
-	i = ring->tail;
+	i = atomic_load(&ring->tail);
 	head = atomic_load(&ring->head);
 	while (i != head) {
 		if (ring->ops->nextTxDone(ring, i) == 0) {
@@ -297,7 +297,7 @@ size_t net_transmitPacket(net_bufdesc_ring_t *ring, struct pbuf *p)
 	mutexLock(ring->lock);
 	/* NOTE: 2^n ring size verified in net_initRings */
 	n = atomic_load(&ring->tail); /* access tail once - it may be advanced by tx_done thread */
-	i = ring->head;
+	i = atomic_load(&ring->head);
 	n = (n - i - 1) & ring->last;
 	if (n > MAX_TX_FRAGMENTS) {
 		n = MAX_TX_FRAGMENTS;
