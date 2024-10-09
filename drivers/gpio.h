@@ -28,7 +28,10 @@ enum {
 
 typedef struct gpio_info_ {
 	unsigned flags;
-	int fd;
+	union {
+		int fd;
+		int id;
+	};
 	uint32_t pin;
 } gpio_info_t;
 
