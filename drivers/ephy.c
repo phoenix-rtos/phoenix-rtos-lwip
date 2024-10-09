@@ -48,6 +48,19 @@ enum {
 };
 
 
+static inline void ephy_printf(eth_phy_state_t *phy, const char *format, ...)
+{
+	char buf[192];
+	va_list arg;
+
+	va_start(arg, format);
+	vsnprintf(buf, sizeof(buf), format, arg);
+	va_end(arg);
+
+	printf("lwip: ephy%u.%u: %s\n", phy->bus, phy->addr, buf);
+}
+
+
 static uint16_t ephy_reg_read(eth_phy_state_t *phy, uint16_t reg)
 {
 	return mdio_read(phy->bus, phy->addr, reg);
@@ -86,7 +99,7 @@ static void ephy_reset(eth_phy_state_t *phy)
 		}
 
 		if ((res & (1 << 15)) != 0) {
-			printf("lwip: ephy%u.%u soft-reset timed out\n", phy->bus, phy->addr);
+			ephy_printf(phy, "soft-reset timed out");
 		}
 	}
 }
@@ -107,16 +120,15 @@ static uint32_t ephy_readPhyId(eth_phy_state_t *phy)
 	oui |= (ret & 0xFC00) << (18 - 10);
 
 	/*
-		printf("lwip: ephy%u.%u id 0x%08x (vendor 0x%06x model 0x%02x rev %u)\n",
-			phy->bus, phy->addr, phyid, oui, (ret >> 4) & 0x3F, ret & 0x0F);
+		ephy_printf(phy, "id 0x%08x (vendor 0x%06x model 0x%02x rev %u)",
+			phyid, oui, (ret >> 4) & 0x3F, ret & 0x0F);
 	*/
 
 	oui = ephy_reg_read(phy, EPHY_10_DIGITAL_RESV_CTRL);
 	ret = ephy_reg_read(phy, EPHY_11_AFE_CTRL1);
 
 	/*
-		printf("lwip: ephy%u.%u DigCtl 0x%04x AFECtl1 0x%04x\n",
-			phy->bus, phy->addr, oui, ret);
+		ephy_printf(phy, "DigCtl 0x%04x AFECtl1 0x%04x", oui, ret);
 	*/
 
 	return phyid;
@@ -143,8 +155,8 @@ static void ephy_setLinkState(eth_phy_state_t *phy)
 		phy->link_state_callback(phy->link_state_callback_arg, linkup);
 	}
 
-	printf("lwip: ephy%u.%u link is %s %uMbps/%s (ctl %04x, status %04x, adv %04x, lpa %04x, pctl %04x,%04x)\n",
-		phy->bus, phy->addr, linkup ? "UP  " : "DOWN", speed, full_duplex ? "Full" : "Half", bctl, bstat, adv, lpa, pc1, pc2);
+	ephy_printf(phy, "link is %s %uMbps/%s (ctl %04x, status %04x, adv %04x, lpa %04x, pctl %04x,%04x)",
+		linkup ? "UP  " : "DOWN", speed, full_duplex ? "Full" : "Half", bctl, bstat, adv, lpa, pc1, pc2);
 }
 
 
@@ -189,7 +201,7 @@ static void ephy_link_thread(void *arg)
 		}
 	}
 
-	printf("lwip ephy%u.%u thread finished.\n", phy->bus, phy->addr);
+	ephy_printf(phy, "thread finished.");
 	endthread();
 }
 
@@ -302,12 +314,12 @@ int ephy_enableLoopback(eth_phy_state_t *phy, bool enable)
 	ephy_reg_write(phy, EPHY_1F_PHY_CTRL2, phy_ctrl2);
 
 	if (ephy_reg_read(phy, EPHY_00_BASIC_CONTROL) != bmcr) {
-		printf("lwip: ephy: failed to set loopback mode\n");
+		ephy_printf(phy, "failed to set loopback mode");
 		return -1;
 	}
 
 	if (ephy_reg_read(phy, EPHY_1F_PHY_CTRL2) != phy_ctrl2) {
-		printf("lwip: ephy: failed to force link up\n");
+		ephy_printf(phy, "failed to force link up");
 		return -1;
 	}
 
@@ -346,7 +358,7 @@ static int ephy_setAltConfig(eth_phy_state_t *phy, int cfg_id)
 
 	ephy_reg_write(phy, EPHY_1F_PHY_CTRL2, phy_ctrl2);
 	if (ephy_reg_read(phy, EPHY_1F_PHY_CTRL2) != phy_ctrl2) {
-		printf("lwip: ephy: failed to set clock\n");
+		ephy_printf(phy, "failed to set clock");
 		return -1;
 	}
 
