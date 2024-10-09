@@ -35,13 +35,13 @@
 #define MDIO_DEBUG    0
 #define ENET_SELFTEST 0
 
+#define ENET_MAX_PKT_SZ               1984 /* DMA aligned */
 #define ENET_USE_ENHANCED_DESCRIPTORS 0
 #define ENET_RMII_MODE                1
 #define ENET_ENABLE_FLOW_CONTROL      1
 #define ENET_PROMISC_MODE             0
 #define ENET_ENABLE_RX_PAD_REMOVE     1
 #define ENET_DIS_RX_ON_TX             1 /* usually: 0 in half-duplex, 1 in full-duplex */
-#define ENET_BUFFER_SIZE              (2048 - 64)
 #define ENET_MDC_ALWAYS_ON            1 /* NOTE: should be always ON, otherwise unreliable*/
 
 #define MDIO_TIMEOUT 0
@@ -170,8 +170,8 @@ static void enet_start(enet_state_t *state)
 	//	addr_t ecr_pa = (addr_t)&((struct enet_regs *)state->phys)->ECR;
 	// FIXME: last_will(ECR = ENET_ECR_MAGIC_VAL | ENET_ECR_RESET);
 
-	state->mmio->MRBR = ENET_BUFFER_SIZE;  // FIXME: coerce with net_allocPktBuf()
-	state->mmio->FTRL = BIT(14) - 1;       // FIXME: truncation to just above link MTU
+	state->mmio->MRBR = ENET_MAX_PKT_SZ;
+	state->mmio->FTRL = BIT(14) - 1;  // FIXME: truncation to just above link MTU
 
 	state->mmio->RCR = ENET_RCR_MAX_FL_NO_VLAN_VAL << ENET_RCR_MAX_FL_SHIFT |
 			ENET_RCR_CRCFWD | ENET_RCR_PAUFWD |
@@ -438,8 +438,8 @@ static const net_bufdesc_ops_t enet_ring_ops = {
 	.nextTxDone = enet_nextTxDone,
 	.fillTxDesc = enet_fillTxDesc,
 	.desc_size = sizeof(enet_buf_desc_t),
+	.pkt_buf_sz = ENET_MAX_PKT_SZ,
 	.ring_alignment = 64,
-	.pkt_buf_sz = ENET_BUFFER_SIZE,
 	.max_tx_frag = 0xFFFF,
 };
 
