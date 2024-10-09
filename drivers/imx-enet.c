@@ -483,7 +483,7 @@ static void enet_irq_thread(void *arg)
 static int enet_mdioSetup(void *arg, unsigned max_khz, unsigned min_hold_ns, unsigned opt_preamble)
 {
 	enet_state_t *state = arg;
-	int speed, hold;
+	unsigned speed, hold;
 #if ENET_DEBUG
 	bool changed = 0;
 #endif
@@ -507,8 +507,8 @@ static int enet_mdioSetup(void *arg, unsigned max_khz, unsigned min_hold_ns, uns
 #endif
 	}
 
-	if (min_hold_ns < 8 * 1000 * 1000 / ENET_CLK_KHZ) {
-		hold = (min_hold_ns * ENET_CLK_KHZ + (1000 * 1000 - 1)) / (1000 * 1000) - 1;
+	if (min_hold_ns < (8 * 1000 * 1000) / ENET_CLK_KHZ) {
+		hold = ((uint64_t)min_hold_ns * ENET_CLK_KHZ + ((1000 * 1000) - 1)) / (1000 * 1000) - 1;
 	}
 	else {
 		hold = ENET_MSCR_HOLDTIME_MASK >> ENET_MSCR_HOLDTIME_SHIFT;
