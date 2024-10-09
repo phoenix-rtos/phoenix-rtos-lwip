@@ -14,7 +14,6 @@
 #include "lwip/pbuf.h"
 #include "lwip/sys.h"
 
-#include <stdio.h>
 #include <string.h>
 
 
@@ -26,7 +25,7 @@
 
 #define PKT_BUF_SIZE       (2048 - CACHE_LINE_SIZE)
 #define PKT_BUF_CNT        (size_t)((PAGE_SIZE - CACHE_LINE_SIZE) / PKT_BUF_SIZE)
-#define PKT_BUF_IDX        11  // log2(PAGE_SIZE) - ceil(log2(PKT_BUF_CNT))
+#define PKT_BUF_IDX        11 /* log2(PAGE_SIZE) - ceil(log2(PKT_BUF_CNT)) */
 #define PKT_BUF_CACHE_SIZE 16
 
 
@@ -74,16 +73,18 @@ static void net_freePktBuf(void *p)
 	++pkt_bufs_free;
 
 	if (pkt_bufs_free > PKT_BUF_CACHE_SIZE && ph->free_mask == (1 << PKT_BUF_CNT) - 1) {
-		if (old_mask)
+		if (old_mask != 0) {
 			net_listDel(ph);
+		}
 		munmap(ph, PAGE_SIZE);
 		pkt_bufs_free -= PKT_BUF_CNT;
 		return;
 	}
 
-	if (old_mask) {
-		if (!TRUE_LRU || pkt_buf_lru.next == ph)
+	if (old_mask != 0) {
+		if (!TRUE_LRU || pkt_buf_lru.next == ph) {
 			return;
+		}
 		net_listDel(ph);
 	}
 
@@ -110,11 +111,11 @@ static ssize_t net_allocPktBuf(void **bufp)
 	unsigned i;
 
 	SYS_ARCH_PROTECT(old_level);
-	if (!pkt_bufs_free) {
+	if (pkt_bufs_free == 0) {
 		SYS_ARCH_UNPROTECT(old_level);
 
 		ph = dmammap(PAGE_SIZE);
-		if (!ph) {
+		if (ph == NULL) {
 			printf("mmap: no memory?\n");
 			return 0;
 		}
@@ -132,8 +133,10 @@ static ssize_t net_allocPktBuf(void **bufp)
 
 	i = __builtin_ctz(ph->free_mask);
 	--pkt_bufs_free;
-	if (!(ph->free_mask &= ~(1 << i)))
+	ph->free_mask &= ~(1 << i);
+	if (ph->free_mask == 0) {
 		net_listDel(ph);
+	}
 
 	SYS_ARCH_UNPROTECT(old_level);
 
@@ -150,24 +153,25 @@ struct pbuf *net_allocDMAPbuf(addr_t *pa, size_t sz)
 	size_t bsz;
 
 	bsz = net_allocPktBuf(&data);
-	if (!bsz)
+	if (bsz == 0) {
 		return NULL;
+	}
 
 	*pa = mphys(data, &bsz);
 
-	if (bsz < sz)
-		goto free_ret;
+	if (bsz < sz) {
+		net_freePktBuf(data);
+		return NULL;
+	}
 
 	pc = mem_malloc(sizeof(*pc));
-	if (!pc)
-		goto free_ret;
+	if (pc == NULL) {
+		net_freePktBuf(data);
+		return NULL;
+	}
 
 	pc->custom_free_function = net_freeDMAPbuf;
 	return pbuf_alloced_custom(PBUF_RAW, sz, PBUF_REF, pc, data, bsz);
-
-free_ret:
-	net_freePktBuf(data);
-	return NULL;
 }
 
 
@@ -177,20 +181,22 @@ struct pbuf *net_makeDMAPbuf(struct pbuf *p)
 	addr_t pa;
 	err_t err;
 
-	if (p->flags & PBUF_FLAG_IS_CUSTOM) {
+	if ((p->flags & PBUF_FLAG_IS_CUSTOM) != 0) {
 		pbuf_ref(p);
 		return p;
 	}
 
 	q = net_allocDMAPbuf(&pa, p->tot_len + ETH_PAD_SIZE);
-	if (!q)
-		return q;
+	if (q == NULL) {
+		return NULL;
+	}
 
 	pbuf_header(q, -ETH_PAD_SIZE);
 	err = pbuf_copy(q, p);
 
-	if (!err)
+	if (err == 0) {
 		return q;
+	}
 
 	pbuf_free(q);
 
