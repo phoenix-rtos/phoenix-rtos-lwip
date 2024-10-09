@@ -488,8 +488,9 @@ static int enet_mdioSetup(void *arg, unsigned max_khz, unsigned min_hold_ns, uns
 #endif
 	}
 
-	if (min_hold_ns < 8 * 1000 * 1000 / ENET_CLK_KHZ) {
-		hold = (min_hold_ns * ENET_CLK_KHZ + (1000 * 1000 - 1)) / (1000 * 1000) - 1;
+	/* hold can be at most 8 internal module clock cycles */
+	if (min_hold_ns < (8 * 1000 * 1000 /* == 8 internal module clock cycles */) / ENET_CLK_KHZ) {
+		hold = ((int64_t)min_hold_ns * ENET_CLK_KHZ + ((1000 * 1000) - 1)) / (1000 * 1000) - 1;
 	}
 	else {
 		hold = ENET_MSCR_HOLDTIME_MASK >> ENET_MSCR_HOLDTIME_SHIFT;
