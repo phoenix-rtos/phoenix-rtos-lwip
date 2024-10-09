@@ -1,7 +1,7 @@
 /*
  * Phoenix-RTOS --- networking stack
  *
- * GPIO wrapper
+ * GPIO wrapper for iMX 6ULL
  *
  * Copyright 2018 Phoenix Systems
  * Author: Michał Mirosław
