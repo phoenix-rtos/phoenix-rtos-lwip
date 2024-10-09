@@ -63,6 +63,10 @@ int net_initRings(net_bufdesc_ring_t *rings, const size_t *sizes, size_t nrings,
 		--align;
 	}
 
+	if (net_initPktMem(ops->pkt_buf_sz) < 0) {
+		return -EINVAL;
+	}
+
 	// FIXME: check for overflows
 	nb = 0;
 	sz = 0;
