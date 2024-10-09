@@ -171,10 +171,6 @@ int gpio_wait(gpio_info_t *gp, int active, time_t timeout)
 		return -EINVAL;
 	}
 
-	if ((gp->flags & GPIO_INVERTED) != 0) {
-		active = !active;
-	}
-
 	gettime(&now, NULL);
 	when = now + timeout;
 
