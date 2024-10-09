@@ -14,6 +14,7 @@
 #include <sys/types.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <time.h>
 
 enum {
 	GPIO_INVERTED = 1 << 0,
