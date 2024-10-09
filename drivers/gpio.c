@@ -18,87 +18,108 @@
 #include <time.h>
 #include <unistd.h>
 #include <sys/time.h>
+#include <limits.h>
+
+#define GPIO_MAX_PIN (31)
 
 
-#define GPIO_IMX6_ULL
-
-
-static int gpio_do_set(gpio_info_t *gp, int val)
+static int gpio_doSet(const gpio_info_t *gp, int val)
 {
 	uint32_t data[2];
 
-	data[0] = val ? gp->gpio_pin : 0;
-	data[1] = gp->gpio_pin;
+	data[0] = val ? gp->pin : 0;
+	data[1] = gp->pin;
 
 	val = write(gp->fd, data, sizeof(data));
-	if (val == sizeof(data))
+	if (val == sizeof(data)) {
 		return 0;
-	if (val >= 0)
+	}
+	if (val >= 0) {
 		return -EIO;
+	}
 	return -errno;
 }
 
 
-int gpio_set(gpio_info_t *gp, int active)
+int gpio_set(const gpio_info_t *gp, int active)
 {
-	if (!gpio_valid(gp))
+	if (!gpio_valid(gp)) {
 		return -EINVAL;
+	}
 
-	if (gp->flags & GPIO_INVERTED)
+	if ((gp->flags & GPIO_INVERTED) != 0) {
 		active = !active;
+	}
 
-	return gpio_do_set(gp, active);
+	return gpio_doSet(gp, active);
 }
 
 
-uint32_t gpio_get(gpio_info_t *gp)
+int gpio_get(const gpio_info_t *gp)
 {
 	uint32_t data[1];
 	int err;
 
-	if (!gpio_valid(gp))
-		return 0;
+	if (!gpio_valid(gp)) {
+		return -EINVAL;
+	}
 
 	err = read(gp->fd, data, sizeof(data));
-	if (err != sizeof(data))
-		return 0;
+	if (err < 0) {
+		return -errno;
+	}
+	if (err != sizeof(data)) {
+		return -EIO;
+	}
 
-	if (gp->flags & GPIO_INVERTED)
+	if ((gp->flags & GPIO_INVERTED) != 0) {
 		data[0] = ~data[0];
+	}
 
-	return data[0] & gp->gpio_pin;
+	return !!(data[0] & gp->pin);
 }
 
 
-int gpio_wait(gpio_info_t *gp, int active, time_t timeout)
+int gpio_wait(const gpio_info_t *gp, int active, time_t timeout)
 {
 	time_t when, now;
-	uint32_t val;
+	int val;
 
-	if (!gpio_valid(gp))
+	if (!gpio_valid(gp)) {
 		return -EINVAL;
+	}
 
-	if (gp->flags & GPIO_INVERTED)
+	if ((gp->flags & GPIO_INVERTED) != 0) {
 		active = !active;
+	}
 
-	gettime(&now, NULL);
-	when = now + timeout;
+	if (timeout != 0) {
+		gettime(&now, NULL);
+		when = now + timeout;
+	}
 
 	for (;;) {
 		val = gpio_get(gp);  // FIXME: in gpiosrv
-		if (!active ^ !val)
-			return 0;
-
-		if (timeout) {
-			gettime(&now, NULL);
-			if (now >= when)
-				return -ETIME;
-			now = when - now;
-			if (now > 100000)
-				now = 100000;
+		if (val < 0) {
+			return val;
 		}
-		else
+		if (!!active == !!val) {
+			return 0;
+		}
+
+		if (timeout != 0) {
+			gettime(&now, NULL);
+			if (now >= when) {
+				return -ETIME;
+			}
+			now = when - now;
+			if (now > 100000) {
+				now = 100000;
+			}
+		}
+		else {
 			now = 100000;
+		}
 
 		usleep(now);
 	}
@@ -109,71 +130,82 @@ int gpio_init(gpio_info_t *gp, const char *arg, unsigned flags)
 {
 	char buf[64];
 	char *endp;
-	int err, fd = -1;
+	int err, port_fd;
+
+	if (arg == NULL || strlen(arg) == 0) {
+		return -EINVAL;
+	}
 
 	if (*arg == '-') {
 		++arg;
-		flags ^= GPIO_INVERTED;
+		flags |= GPIO_INVERTED;
 	}
 
 	gpio_close(gp);
 
-	gp->gpio_pin = strtoul(arg, &endp, 0);
-	if ((*endp != ',' && *endp != ':') || gp->gpio_pin >= sizeof(gp->gpio_pin) * 8)
-		return -EINVAL;
-	gp->gpio_pin = 1u << gp->gpio_pin;
-	arg = endp + 1;
-	if (!*arg)
-		return -EINVAL;
-	if (strlen(arg) > sizeof(buf) - 6)
-		return -EINVAL;
-
 	gp->flags = flags & ~(GPIO_ACTIVE | GPIO_INITIALIZED);
 
-#ifdef GPIO_IMX6_ULL
-	imx6ull_gpio_config(arg, gp->gpio_pin, gp->flags);
-#endif
+	errno = 0;
+	gp->pin = strtoul(arg, &endp, 0);
+	if (errno != 0 || endp == arg || gp->pin == ULONG_MAX) {
+		return -EINVAL;
+	}
+	if ((*endp != ',' && *endp != ':') || gp->pin > GPIO_MAX_PIN) {
+		return -EINVAL;
+	}
+
+	gp->pin = 1u << gp->pin;
+	arg = endp + 1;
+	if (*arg == '\0') {
+		return -EINVAL;
+	}
+	if (strlen(arg) > sizeof(buf) - 6) {
+		return -EINVAL;
+	}
+
+	err = imx6ull_gpio_config(arg, gp->pin, gp->flags);
+	if (err < 0) {
+		return err;
+	}
 
 	snprintf(buf, sizeof(buf), "%s/port", arg);
 	gp->fd = open(buf, O_RDWR);
-	if (gp->fd < 0)
-		goto open_error;
-
-	if (flags & GPIO_OUTPUT) {
-		err = gpio_do_set(gp, !!(flags & GPIO_ACTIVE) ^ !!(flags & GPIO_INVERTED));
-		if (err)
-			printf("gpio: WARN: can't pre-set pin: %s (%d; fd = %d)\n", strerror(err), err, gp->fd);
+	if (gp->fd < 0) {
+		err = -errno;
+		printf("gpio: can't open '%s': %s (%d)\n", buf, strerror(errno), -errno);
+		return err;
 	}
 
-	fd = gp->fd;
+	if ((flags & GPIO_OUTPUT) != 0) {
+		err = gpio_doSet(gp, !!(flags & GPIO_ACTIVE) ^ !!(flags & GPIO_INVERTED));
+		if (err != 0) {
+			printf("gpio: WARN: can't pre-set pin: %s (%d; fd = %d)\n", strerror(-err), err, gp->fd);
+		}
+	}
+
+	port_fd = gp->fd; /* save gpio port file descriptor */
 
 	snprintf(buf, sizeof(buf), "%s/dir", arg);
 	gp->fd = open(buf, O_RDWR);
-	if (gp->fd < 0)
-		goto open_error;
+	if (gp->fd < 0) {
+		err = -errno;
+		printf("gpio: can't open '%s': %s (%d)\n", buf, strerror(-err), err);
+		close(port_fd);
+		return err;
+	}
 
-	err = gpio_do_set(gp, flags & GPIO_OUTPUT);
-	if (err)
-		printf("gpio: can't configure pin direction: %s (%d; fd = %d)\n", strerror(err), err, gp->fd);
+	err = gpio_doSet(gp, flags & GPIO_OUTPUT);
+	if (err != 0) {
+		printf("gpio: can't configure pin direction: %s (%d; fd = %d)\n", strerror(-err), err, gp->fd);
+		close(gp->fd);
+		close(port_fd);
+		return err;
+	}
 
-	close(gp->fd);
-
-	if (err)
-		goto init_error;
-
-	gp->fd = fd;
+	gp->fd = port_fd; /* restore gpio port file descriptor */
 	gp->flags |= GPIO_INITIALIZED;
 
 	return 0;
-
-open_error:
-	err = -errno;
-	printf("gpio: can't open '%s': %s (%d)\n", buf, strerror(err), err);
-
-init_error:
-	if (fd >= 0)
-		close(fd);
-	return err;
 }
 
 
@@ -181,8 +213,9 @@ int gpio_close(gpio_info_t *gp)
 {
 	int err;
 
-	if (!gpio_valid(gp))
+	if (!gpio_valid(gp)) {
 		return -EINVAL;
+	}
 
 	err = close(gp->fd);
 	gp->flags = 0;
