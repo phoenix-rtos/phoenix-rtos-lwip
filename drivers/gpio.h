@@ -37,14 +37,11 @@ int gpio_set(const gpio_info_t *gp, int active);
 int gpio_get(const gpio_info_t *gp);
 int gpio_wait(const gpio_info_t *gp, int active, time_t timeout);
 int gpio_init(gpio_info_t *gp, const char *arg, unsigned flags);
-int gpio_close(gpio_info_t *gp);
 
 
 static inline bool gpio_valid(const gpio_info_t *gp)
 {
 	return !!(gp->flags & GPIO_INITIALIZED);
 }
-
-int imx6ull_gpio_config(const char *name, uint32_t mask, unsigned flags);
 
 #endif /* NET_GPIO_H_ */
