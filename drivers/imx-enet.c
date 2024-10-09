@@ -17,7 +17,7 @@
 #include "hw-debug.h"
 #include "physmmap.h"
 #include "res-create.h"
-#include "imx6-enet-regs.h"
+#include "imx-enet-regs.h"
 
 #include <sys/interrupt.h>
 #include <sys/platform.h>
