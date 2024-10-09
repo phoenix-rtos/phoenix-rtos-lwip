@@ -61,7 +61,7 @@ typedef struct
 	volatile struct enet_regs *mmio;
 
 	struct netif *netif;
-	unsigned drv_exit;
+	_Atomic volatile unsigned drv_exit;
 
 #define PRIV_RESOURCES(s) &(s)->irq_lock, 3, ~0x03
 	handle_t irq_lock, tx_lock;
@@ -385,7 +385,7 @@ static void enet_fillRxDesc(const net_bufdesc_ring_t *ring, size_t i, addr_t pa,
 #if ENET_USE_ENHANCED_DESCRIPTORS
 	desc->yflags = ENET_RXDY_INT;
 #endif
-	atomic_store(&desc->flags, ENET_DESC_RDY | wrap);
+	atomic_store(&desc->flags, ENET_DESC_RDY | wrap); /* NOTE: memory sync */
 }
 
 
@@ -424,7 +424,7 @@ static void enet_fillTxDesc(const net_bufdesc_ring_t *ring, size_t i, addr_t pa,
 	desc->yflags = yflags;
 #endif
 
-	atomic_store(&desc->flags, flags);
+	atomic_store(&desc->flags, flags); /* NOTE: memory sync */
 }
 
 
@@ -481,9 +481,11 @@ static void enet_irq_thread(void *arg)
 {
 	enet_state_t *state = arg;
 	size_t rx_done = 0;
+	unsigned exit;
 
 	mutexLock(state->irq_lock);
-	while (state->drv_exit == 0) {
+	exit = atomic_load(&state->drv_exit);
+	while (exit == 0) {
 		state->mmio->EIR = ENET_IRQ_RXF;
 		rx_done = net_receivePackets(&state->rx, state->netif, ETH_PAD_SIZE);
 		if (rx_done > 0 || net_rxFullyFilled(&state->rx) == 0) {
@@ -498,10 +500,11 @@ static void enet_irq_thread(void *arg)
 			state->mmio->EIMR |= ENET_IRQ_RXF | ENET_IRQ_TXF;
 			condWait(state->irq_cond, state->irq_lock, 0);
 		}
+		exit = atomic_load(&state->drv_exit);
 	}
 	mutexUnlock(state->irq_lock);
 
-	if ((state->drv_exit & EV_BUS_ERROR) != 0) {
+	if ((exit & EV_BUS_ERROR) != 0) {
 		enet_printf(state, "HW signalled memory bus error -- device halted");
 	}
 
@@ -979,6 +982,8 @@ static int enet_initDevice(enet_state_t *state, int irq, int mdio)
 	if (err != 0) {
 		return err;
 	}
+
+	atomic_init(&state->drv_exit, 0x0);
 
 	err = enet_clockEnable(state);
 	if (err < 0) {
