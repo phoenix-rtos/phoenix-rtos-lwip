@@ -1,10 +1,10 @@
 /*
  * Phoenix-RTOS --- networking stack
  *
- * i.MX 6ULL built-in ENET register and structure definitions
+ * i.MX 6ULL/RT106x built-in ENET register and structure definitions
  *
- * Copyright 2018 Phoenix Systems
- * Author: Michał Mirosław
+ * Copyright 2018, 2024 Phoenix Systems
+ * Author: Michał Mirosław, Julian Uziembło
  *
  * %LICENSE%
  */
@@ -13,15 +13,17 @@
 
 #include <stdint.h>
 /*
+ * ENET registers must be read and written with 32-bit accesses
+ *
+ * i.MX RT106x:
+ * ENET  base: 0x402D8000  irq 130  (@AIPS-1)
+ * ENET2 base: 0x402D4000  irq 152  (@AIPS-4)
+ *
  * iMX6UL / iMX6ULL:
- *	ENET1: base 0x0218_8000  irq 150  (@AIPS-2)
- *	ENET2: base 0x020B_4000  irq 152  (@AIPS-1)
- * all register accesses are required to be U32
+ * ENET1: base 0x02188000  irq 150  (@AIPS-2)
+ * ENET2: base 0x020B4000  irq 152  (@AIPS-1)
  */
 
-typedef struct {
-	uint32_t S, C; /* 1588 control/status + compare capture */
-} timer_control_t;
 
 #define R_RESERVED(start, end) uint32_t rsvd_##start##_##end[(end - start) / sizeof(uint32_t)] /* reserved address */
 #define BIT(i)                 (1u << (i))                                                     /* bitmask for single bit */
@@ -49,10 +51,12 @@ struct enet_regs {
 #define ENET_IRQ_TS_TIMER BIT(15) /* timer wrapped */
 	R_RESERVED(0x00C, 0x010);
 	uint32_t RDAR; /* RX new desc trigger command */
+#define ENET_RDAR_RDAR BIT(24)
 	uint32_t TDAR; /* TX new desc trigger command */
+#define ENET_TDAR_TDAR BIT(24)
 	R_RESERVED(0x018, 0x024);
-	uint32_t ECR; /* ethernet control	[desc format, endianness, reset, ...] */
-#define ENET_ECR_MAGIC_VAL 0x70000000
+	uint32_t ECR;                     /* ethernet control	[desc format, endianness, reset, ...] */
+#define ENET_ECR_MAGIC_VAL 0x70000000 /* Magic number that has to be written to ECR on every write (imxrt106x: RM 41.5.1.6.4) */
 #define ENET_ECR_DBSWP     BIT(8)
 #define ENET_ECR_DBGEN     BIT(6)
 #define ENET_ECR_EN1588    BIT(4)
@@ -88,26 +92,29 @@ struct enet_regs {
 #define ENET_MSCR_MII_SPEED_MASK  BITS(ENET_MSCR_MII_SPEED_SHIFT, 6)
 	R_RESERVED(0x048, 0x064);
 	uint32_t MIBC; /* MIB control */
+#define ENET_MIBC_MIB_DIS   BIT(31)
+#define ENET_MIBC_MIB_IDLE  BIT(30)
+#define ENET_MIBC_MIB_CLEAR BIT(29)
 	R_RESERVED(0x068, 0x084);
 	uint32_t RCR;                             /* RX control */
 #define ENET_RCR_GRS                  BIT(31) /* [ro] RX stopped */
 #define ENET_RCR_NLC                  BIT(30) /* payloach check enable */
-#define ENET_RCR_MAX_FL_SHIFT         16
+#define ENET_RCR_MAX_FL_SHIFT         (16)
+#define ENET_RCR_MAX_FL_WITH_VLAN_VAL (1522)       /* recommended val from RM (with VLAN) */
+#define ENET_RCR_MAX_FL_NO_VLAN_VAL   (1518)       /* recommended val from RM (no VLAN) */
 #define ENET_RCR_MAX_FL_MASK          BITS(16, 29) /* max RX frame length */
-#define ENET_RCR_MAX_FL_NO_VLAN_VAL   ((1518) << ENET_RCR_MAX_FL_SHIFT)
-#define ENET_RCR_MAX_FL_WITH_VLAN_VAL ((1522) << ENET_RCR_MAX_FL_SHIFT)
-#define ENET_RCR_CFEN                 BIT(15) /* discard non-PAUSE MAC control frames */
-#define ENET_RCR_CRCFWD               BIT(14) /* strip FCS from received frame data */
-#define ENET_RCR_PAUFWD               BIT(13) /* forward PAUSE frames to user */
-#define ENET_RCR_PADEN                BIT(12) /* remove padding for short packets (forces CRCFWD=1) */
-#define ENET_RCR_RMII_10T             BIT(9)  /* RMII 10Mbps mode (vs 100Mbps when clear) */
-#define ENET_RCR_RMII_MODE            BIT(8)  /* RMII mode (vs MII when clear) */
-#define ENET_RCR_FCE                  BIT(5)  /* process incoming PAUSE frames (iow. enable flow control for tx) */
-#define ENET_RCR_BR_REJ               BIT(4)  /* discard broadcast frames (unless in PROMISC) */
-#define ENET_RCR_PROM                 BIT(3)  /* PROMISC mode (== receive-all) */
-#define ENET_RCR_MII_MODE             BIT(2)  /* MII mode (required to be set) */
-#define ENET_RCR_DRT                  BIT(1)  /* half-duplex mode */
-#define ENET_RCR_LOOP                 BIT(0)  /* MII loopback mode (requires: MII_MODE=1, RMII_MODE=0, DRT=0, clocks for MII provided) */
+#define ENET_RCR_CFEN                 BIT(15)      /* discard non-PAUSE MAC control frames */
+#define ENET_RCR_CRCFWD               BIT(14)      /* strip FCS from received frame data */
+#define ENET_RCR_PAUFWD               BIT(13)      /* forward PAUSE frames to user */
+#define ENET_RCR_PADEN                BIT(12)      /* remove padding for short packets (forces CRCFWD=1) */
+#define ENET_RCR_RMII_10T             BIT(9)       /* RMII 10Mbps mode (vs 100Mbps when clear) */
+#define ENET_RCR_RMII_MODE            BIT(8)       /* RMII mode (vs MII when clear) */
+#define ENET_RCR_FCE                  BIT(5)       /* process incoming PAUSE frames (iow. enable flow control for tx) */
+#define ENET_RCR_BR_REJ               BIT(4)       /* discard broadcast frames (unless in PROMISC) */
+#define ENET_RCR_PROM                 BIT(3)       /* PROMISC mode (== receive-all) */
+#define ENET_RCR_MII_MODE             BIT(2)       /* MII mode (required to be set) */
+#define ENET_RCR_DRT                  BIT(1)       /* half-duplex mode */
+#define ENET_RCR_LOOP                 BIT(0)       /* MII loopback mode (requires: MII_MODE=1, RMII_MODE=0, DRT=0, clocks for MII provided) */
 	R_RESERVED(0x088, 0x0C4);
 	uint32_t TCR;                 /* TX control */
 #define ENET_TCR_CRCFWD    BIT(9) /* don't ever append FCS to transmitted frame data */
@@ -119,6 +126,8 @@ struct enet_regs {
 	R_RESERVED(0x0C8, 0x0E4);
 	uint32_t PALR; /* MAC address lower bytes */
 	uint32_t PAUR; /* MAC address upper bytes + EtherType for PAUSE frames */
+#define ENET_PAUR_TYPE_MASK      BITS(0, 15)
+#define ENET_PAUR_TYPE_RESET_VAL (0x8808)
 	uint32_t OPD;  /* pause duration (for TXed pauses) */
 	uint32_t TXIC; /* TX irq coalescing */
 	R_RESERVED(0x0F4, 0x100);
@@ -152,13 +161,26 @@ struct enet_regs {
 #define ENET_RACC_PRODIS  BIT(2) /* discard frames with TCP/UDP/ICMP checksum error */
 #define ENET_RACC_IPDIS   BIT(1) /* discard frames with IPv4 checksum error */
 #define ENET_RACC_PADREM  BIT(0) /* remove ethernet payload padding from short IP frames */
-	R_RESERVED(0x1C8, 0x200);
+	R_RESERVED(0x01c8, 0x0200);
 
 	union {
 		uint32_t rawstats[64]; /* various stats counters (32-bit each) */
-#define ENET_VALID_COUTERS 0x01FFFFFE1FFFFFFFull
 		struct {
-			uint32_t RMON_T_DROP;        /* Count of frames not cntd correctly */
+#if defined(__CPU_IMX6ULL)
+
+#define ENET_VALID_COUTERS 0x01FFFFFE1FFFFFFFull
+			uint32_t RMON_T_DROP; /* Count of frames not cntd correctly */
+
+#elif defined(__CPU_IMXRT106X)
+
+#define ENET_VALID_COUNTER 0x01FFFDFE3FFBFFFEull
+			R_RESERVED(0x0200, 0x0204);
+
+#else
+
+#error "Unsupported TARGET"
+
+#endif
 			uint32_t RMON_T_PACKETS;     /* RMON TX packet count */
 			uint32_t RMON_T_BC_PKT;      /* RMON TX broadcast pkts */
 			uint32_t RMON_T_MC_PKT;      /* RMON TX multicast pkts */
@@ -176,18 +198,30 @@ struct enet_regs {
 			uint32_t RMON_T_P1024TO2047; /* RMON TX 1024 to 2047 byte pkts */
 			uint32_t RMON_T_P_GTE2048;   /* RMON TX pkts > 2048 bytes */
 			uint32_t RMON_T_OCTETS;      /* RMON TX octets */
-			uint32_t IEEE_T_DROP;        /* Count of frames not counted correctly */
-			uint32_t IEEE_T_FRAME_OK;    /* Frames tx'd OK */
-			uint32_t IEEE_T_1COL;        /* Frames tx'd with single collision */
-			uint32_t IEEE_T_MCOL;        /* Frames tx'd with multiple collision */
-			uint32_t IEEE_T_DEF;         /* Frames tx'd after deferral delay */
-			uint32_t IEEE_T_LCOL;        /* Frames tx'd with late collision */
-			uint32_t IEEE_T_EXCOL;       /* Frames tx'd with excessive collisions */
-			uint32_t IEEE_T_MACERR;      /* Frames tx'd with TX FIFO underrun */
-			uint32_t IEEE_T_CSERR;       /* Frames tx'd with carrier sense err */
-			uint32_t IEEE_T_SQE;         /* Frames tx'd with SQE err */
-			uint32_t IEEE_T_FDXFC;       /* Flow control pause frames tx'd */
-			uint32_t IEEE_T_OCTETS_OK;   /* Octet count for frames tx'd w/o err */
+#if defined(__CPU_IMX6ULL)
+
+			uint32_t IEEE_T_DROP; /* Count of frames not counted correctly */
+
+#elif defined(__CPU_IMXRT106X)
+
+			R_RESERVED(0x0248, 0x024c);
+
+#else
+
+#error "Unsupported TARGET"
+
+#endif
+			uint32_t IEEE_T_FRAME_OK;  /* Frames tx'd OK */
+			uint32_t IEEE_T_1COL;      /* Frames tx'd with single collision */
+			uint32_t IEEE_T_MCOL;      /* Frames tx'd with multiple collision */
+			uint32_t IEEE_T_DEF;       /* Frames tx'd after deferral delay */
+			uint32_t IEEE_T_LCOL;      /* Frames tx'd with late collision */
+			uint32_t IEEE_T_EXCOL;     /* Frames tx'd with excessive collisions */
+			uint32_t IEEE_T_MACERR;    /* Frames tx'd with TX FIFO underrun */
+			uint32_t IEEE_T_CSERR;     /* Frames tx'd with carrier sense err */
+			uint32_t IEEE_T_SQE;       /* Frames tx'd with SQE err */
+			uint32_t IEEE_T_FDXFC;     /* Flow control pause frames tx'd */
+			uint32_t IEEE_T_OCTETS_OK; /* Octet count for frames tx'd w/o err */
 			R_RESERVED(0x0278, 0x0284);
 			uint32_t RMON_R_PACKETS;   /* RMON RX packet count */
 			uint32_t RMON_R_BC_PKT;    /* RMON RX broadcast pkts */
@@ -225,8 +259,15 @@ struct enet_regs {
 	uint32_t ATINC;  /* timer increment (base increment value per ts_clk, correction increment value) */
 	uint32_t ATSTMP; /* last TX timestamp (for last frame with TxBD[TS] set) */
 	R_RESERVED(0x41C, 0x604);
-	uint32_t TGSR;           /* timer flags (channel 0-3) */
-	timer_control_t TC_R[4]; /* timer flags (channel 0-3) */
+	uint32_t TGSR; /* timer flags (channel 0-3) */
+	uint32_t TCSR0;
+	uint32_t TCCR0;
+	uint32_t TCSR1;
+	uint32_t TCCR1;
+	uint32_t TCSR2;
+	uint32_t TCCR2;
+	uint32_t TCSR3;
+	uint32_t TCCR3;
 	R_RESERVED(0x628, 0x800);
 };
 
@@ -243,9 +284,14 @@ typedef struct
 
 typedef struct
 {
-	/* first 3 same as enet_short_desc_t */
-	uint16_t len, flags;
-	uint32_t addr;
+	/* first 3 same as enet_legacy_desc_t */
+	union {
+		struct {
+			uint16_t len, flags;
+			uint32_t addr;
+		};
+		enet_legacy_desc_t legacy;
+	};
 	uint16_t xflags, yflags;
 	uint16_t csum, proto; /* csum: IP payload (iow excluding IP header) */
 	uint16_t rsvd1, dflags;
