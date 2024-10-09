@@ -894,9 +894,9 @@ static err_t enet_testNetifInput(struct pbuf *p, struct netif *netif)
 
 	/* verify contents */
 	if (p->len != (TEST_PACKET_LEN + ETH_PAD_SIZE)) {
-#if ENET_DEBUG
 		enet_printf(state, "self-test RX: invalid packet length");
-#endif
+		enet_printf(state, "expected: %zuB", (TEST_PACKET_LEN + ETH_PAD_SIZE));
+		enet_printf(state, "actual:   %uB", p->len);
 		is_valid_pkt = false;
 	}
 	uint8_t *data = pbuf_get_contiguous(p, buf, sizeof(buf), TEST_PACKET_LEN, ETH_PAD_SIZE);
@@ -906,9 +906,24 @@ static err_t enet_testNetifInput(struct pbuf *p, struct netif *netif)
 			data = p->payload;
 		}
 		enet_printf(state, "self-test RX: invalid packet contents");
-		enet_printf(state, "0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x",
-				data[0], data[1], data[2], data[3],
-				data[4], data[5], data[6], data[7]);
+
+		enet_printf(state, "expected:");
+		for (int i = 0; i < TEST_PACKET_LEN; i++) {
+			if (i != 0 && i % 16 == 0) {
+				printf("\n");
+			}
+			printf("%02x ", TEST_PACKET[i]);
+		}
+		printf("\n");
+
+		enet_printf(state, "actual:");
+		for (int i = 0; i < p->len; i++) {
+			if (i != 0 && i % 16 == 0) {
+				printf("\n");
+			}
+			printf("%02x ", data[i]);
+		}
+		printf("\n");
 #endif
 		is_valid_pkt = false;
 	}
