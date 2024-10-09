@@ -3,8 +3,8 @@
  *
  * Ethernet PHY common routines
  *
- * Copyright 2018 Phoenix Systems
- * Author: Michał Mirosław
+ * Copyright 2018, 2024 Phoenix Systems
+ * Author: Michał Mirosław, Julian Uziembło
  *
  * %LICENSE%
  */
@@ -22,8 +22,8 @@
 #include <sys/msg.h>
 #include <sys/threads.h>
 
+#define EPHY_DEBUG 0
 
-// #define EPHY_KSZ8081RND
 
 enum {
 	EPHY_00_BASIC_CONTROL = 0x00,
@@ -60,6 +60,12 @@ static inline void ephy_printf(eth_phy_state_t *phy, const char *format, ...)
 	printf("lwip: ephy%u.%u: %s\n", phy->bus, phy->addr, buf);
 }
 
+#if EPHY_DEBUG
+#define ephy_debug_printf(phy, ...) ephy_printf(phy, __VA_ARGS__)
+#else
+#define ephy_debug_printf(...)
+#endif
+
 
 static uint16_t ephy_reg_read(eth_phy_state_t *phy, uint16_t reg)
 {
@@ -77,6 +83,7 @@ static void ephy_reg_write(eth_phy_state_t *phy, uint16_t reg, uint16_t val)
 static void ephy_reset(eth_phy_state_t *phy)
 {
 	if (gpio_valid(&phy->reset)) {
+		ephy_debug_printf(phy, "ephy_reset: start hardware reset...");
 		// TODO: prepare bootstrap pins
 		gpio_set(&phy->reset, 1);
 		usleep(phy->reset_hold_time_us);
@@ -84,9 +91,12 @@ static void ephy_reset(eth_phy_state_t *phy)
 		gpio_set(&phy->reset, 0);
 		usleep(phy->reset_release_time_us);
 		mdio_unlock_bus(phy->bus);
+		ephy_debug_printf(phy, "ephy_reset: hardware reset complete.");
 	}
 	else {
 		int res = 0, retries = 10;
+
+		ephy_debug_printf(phy, "ephy_reset: start software reset...");
 
 		ephy_reg_write(phy, EPHY_00_BASIC_CONTROL, 1 << 15);
 		usleep(phy->reset_release_time_us);
@@ -94,6 +104,7 @@ static void ephy_reset(eth_phy_state_t *phy)
 		while (retries-- > 0) {
 			res = ephy_reg_read(phy, EPHY_00_BASIC_CONTROL);
 			if ((~res & (1 << 15)) != 0) {
+				ephy_debug_printf(phy, "ephy_reset: software reset complete.");
 				break;
 			}
 		}
@@ -156,7 +167,7 @@ static void ephy_setLinkState(eth_phy_state_t *phy)
 	}
 
 	ephy_printf(phy, "link is %s %uMbps/%s (ctl %04x, status %04x, adv %04x, lpa %04x, pctl %04x,%04x)",
-		linkup ? "UP  " : "DOWN", speed, full_duplex ? "Full" : "Half", bctl, bstat, adv, lpa, pc1, pc2);
+			linkup ? "UP  " : "DOWN", speed, full_duplex ? "Full" : "Half", bctl, bstat, adv, lpa, pc1, pc2);
 }
 
 
@@ -190,14 +201,17 @@ static void ephy_link_thread(void *arg)
 {
 	eth_phy_state_t *phy = arg;
 	uint16_t stat;
+	int err;
 
 	for (;;) {
-		gpio_wait(&phy->irq_gpio, 1, 0);
+		err = gpio_wait(&phy->irq_gpio, 1, 0);
 		// FIXME: thread exit
 
-		stat = ephy_reg_read(phy, EPHY_1B_IRQ_CTRL_STATUS);
-		if ((stat & 0xFF) != 0) {
-			ephy_setLinkState(phy);
+		if (err == 0) {
+			stat = ephy_reg_read(phy, EPHY_1B_IRQ_CTRL_STATUS);
+			if ((stat & 0xFF) != 0) {
+				ephy_setLinkState(phy);
+			}
 		}
 	}
 
@@ -260,6 +274,7 @@ static int ephy_config(eth_phy_state_t *phy, char *cfg)
 		phy->addr = strtoul(cfg, &p, 0);
 	}
 	else {
+		printf("lwip: ephy: WARN: setting default bus 0\n");
 		phy->bus = 0;
 	}
 
@@ -323,6 +338,8 @@ int ephy_enableLoopback(eth_phy_state_t *phy, bool enable)
 		return -1;
 	}
 
+	ephy_debug_printf(phy, "loopback %s", enable ? "enabled" : "disabled");
+
 	return 0;
 }
 
@@ -362,13 +379,14 @@ static int ephy_setAltConfig(eth_phy_state_t *phy, int cfg_id)
 		return -1;
 	}
 
+	ephy_debug_printf(phy, "clock set successfully");
+
 	return 1;
 }
 
 
 int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb_t cb, void *cb_arg)
 {
-	(void)board_rev;
 	uint32_t phyid;
 	int err;
 
@@ -376,8 +394,10 @@ int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb
 
 	err = ephy_config(phy, conf);
 	if (err != 0) {
+		printf("lwip: ephy: Couldn't configure PHY: %s (%d)", strerror(err), err);
 		return -EINVAL;
 	}
+	ephy_debug_printf(phy, "PHY configured");
 
 	/* for KSZ8081RNA/D, KSZ8081RNB:
 	 * MDC max. 10MHz, std. 2.5MHz
@@ -390,6 +410,7 @@ int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb
 
 	err = mdio_setup(phy->bus, 2500 /* kHz */, 10 /* ns */, 0 /* with-preamble */);
 	if (err != 0) {
+		ephy_printf(phy, "Couldn't init MDIO: %s (%d)", strerror(err), err);
 		return err;
 	}
 
@@ -397,6 +418,7 @@ int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb
 
 	phyid = ephy_readPhyId(phy);
 	if (phyid == 0u || phyid == ~0u) {
+		ephy_printf(phy, "Couldn't read PHY ID");
 		gpio_set(&phy->reset, 1);
 		return -ENODEV;
 	}
@@ -406,11 +428,18 @@ int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb
 	/* make address 0 not broadcast, disable NAND-tree mode */
 	ephy_reg_write(phy, EPHY_16_OP_MODE_STRAP_OVERRIDE, (1 << 1) | (1 << 9));
 
-	ephy_setAltConfig(phy, 0); /* KSZ8081 RND - default config */
+	err = ephy_setAltConfig(phy, 0); /* KSZ8081 RND - default config */
+	if (err <= 0) {
+		ephy_printf(phy, "Couldn't set default config");
+		return -ENODEV;
+	}
 
 #ifdef LWIP_EPHY_INIT_HOOK
 	LWIP_EPHY_INIT_HOOK(phy, phyid, board_rev);
+#else
+	(void)board_rev;
 #endif
+
 
 #if defined(EPHY_KSZ8081RNA) || defined(EPHY_KSZ8081RNB)
 	ephy_setAltConfig(phy, 1);
@@ -432,8 +461,14 @@ int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb
 		/* enable link up/down IRQ signal */
 		ephy_reg_write(phy, EPHY_1B_IRQ_CTRL_STATUS, (1 << 8) | (1 << 10));
 	}
+	else {
+		ephy_printf(phy, "WARN: irq_gpio not valid, could not start PHY IRQ thread");
+		return -ENODEV;
+	}
 
 	ephy_restart_an(phy);
+
+	ephy_debug_printf(phy, "Successfully initialized PHY");
 
 	return 0;
 }

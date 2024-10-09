@@ -22,6 +22,8 @@
 #include "imxrt-multi.h"
 #include "lwipopts.h"
 
+#define GPIO_DEBUG 0
+
 
 static oid_t multidrv;
 

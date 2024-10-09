@@ -6,6 +6,9 @@ endif
 ifeq ($(EPHY_KSZ8081),RND)
   LOCAL_CFLAGS := -DEPHY_KSZ8081RND
 endif
+ifeq ($(EPHY_KSZ8081),RNB)
+  LOCAL_CFLAGS := -DEPHY_KSZ8081RNB
+endif
 
 # make possible to specify defalult APN name externally
 ifneq ($(PPPOS_DEFAULT_APN),)
