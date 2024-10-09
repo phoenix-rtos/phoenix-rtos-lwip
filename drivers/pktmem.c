@@ -17,16 +17,31 @@
 #include <string.h>
 
 
+// FIXME: transfer CACHE_LINE_SIZE to appropriate file with platform-specific definitions
+#if defined(__ARM_ARCH_7EM__)
+#define CACHE_LINE_SIZE 32
+#define PKT_BUF_SIZE    ((3 * PAGE_SIZE) - CACHE_LINE_SIZE)
+#else
 #define CACHE_LINE_SIZE 64
-#define PAGE_SIZE       4096
+#define PKT_BUF_SIZE    (2048 - CACHE_LINE_SIZE)
+#endif
 
 #define TRUE_LRU 0
 
 
-#define PKT_BUF_SIZE       (2048 - CACHE_LINE_SIZE)
+#if PAGE_SIZE < PKT_BUF_SIZE
+#define PKT_BUF_CNT        1
+#define PKT_BUF_ALLOC_SIZE PKT_BUF_SIZE
+#define PKT_BUF_WHICH(p)   0
+#else
 #define PKT_BUF_CNT        (size_t)((PAGE_SIZE - CACHE_LINE_SIZE) / PKT_BUF_SIZE)
+#define PKT_BUF_ALLOC_SIZE PAGE_SIZE
 #define PKT_BUF_IDX        11 /* log2(PAGE_SIZE) - ceil(log2(PKT_BUF_CNT)) */
+#define PKT_BUF_WHICH(p)   (((size_t)p & (PAGE_SIZE - 1)) >> PKT_BUF_IDX)
+#endif
+
 #define PKT_BUF_CACHE_SIZE 16
+#define PKT_BUF_FREE_MASK  ((1 << PKT_BUF_CNT) - 1)
 
 
 typedef struct _buf_page_head {
@@ -39,6 +54,7 @@ typedef struct _buf_page_head {
 static buf_page_head_t pkt_buf_lru = { .next = &pkt_buf_lru, .prev = &pkt_buf_lru };
 static unsigned pkt_bufs_free;
 
+const size_t net_maxDMAPbufSize = PKT_BUF_SIZE;
 
 static void net_listAdd(buf_page_head_t *ph, buf_page_head_t *after)
 {
@@ -65,18 +81,18 @@ static void net_listDel(buf_page_head_t *ph)
 static void net_freePktBuf(void *p)
 {
 	buf_page_head_t *ph = (void *)((uintptr_t)p & ~(PAGE_SIZE - 1));
-	unsigned which = ((size_t)p & (PAGE_SIZE - 1)) >> PKT_BUF_IDX;
+	unsigned which = PKT_BUF_WHICH(p);
 	unsigned old_mask;
 
 	old_mask = ph->free_mask;
 	ph->free_mask |= 1 << which;
 	++pkt_bufs_free;
 
-	if (pkt_bufs_free > PKT_BUF_CACHE_SIZE && ph->free_mask == (1 << PKT_BUF_CNT) - 1) {
+	if (pkt_bufs_free > PKT_BUF_CACHE_SIZE && ph->free_mask == PKT_BUF_FREE_MASK) {
 		if (old_mask != 0) {
 			net_listDel(ph);
 		}
-		munmap(ph, PAGE_SIZE);
+		munmap(ph, PKT_BUF_ALLOC_SIZE);
 		pkt_bufs_free -= PKT_BUF_CNT;
 		return;
 	}
@@ -114,14 +130,14 @@ static ssize_t net_allocPktBuf(void **bufp)
 	if (pkt_bufs_free == 0) {
 		SYS_ARCH_UNPROTECT(old_level);
 
-		ph = dmammap(PAGE_SIZE);
+		ph = dmammap(PKT_BUF_ALLOC_SIZE);
 		if (ph == NULL) {
 			printf("mmap: no memory?\n");
 			return 0;
 		}
 
 		memset(ph, 0, CACHE_LINE_SIZE);
-		ph->free_mask = (1 << PKT_BUF_CNT) - 1;
+		ph->free_mask = PKT_BUF_FREE_MASK;
 
 		SYS_ARCH_PROTECT(old_level);
 		net_listAdd(ph, &pkt_buf_lru);

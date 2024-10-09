@@ -182,7 +182,6 @@ static const net_bufdesc_ops_t rtl_ring_ops = {
 
 	/* desc_size */		sizeof(rtl_buf_desc_t),
 	/* ring_alignment */	64,
-	/* pkt_buf_sz */	1524,	/* <= RXCMD_SZ_MASK */
 	/* max_tx_frag */	TXCMD_SZ_MASK,
 };
 

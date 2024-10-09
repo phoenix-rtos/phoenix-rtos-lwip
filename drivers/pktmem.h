@@ -12,11 +12,13 @@
 #define NET_PKTMEM_H_
 
 #include <stdint.h>
+#include <unistd.h>
 
 
 struct pbuf;
 
 
+extern const size_t net_maxDMAPbufSize;
 struct pbuf *net_allocDMAPbuf(addr_t *pa, size_t sz);
 struct pbuf *net_makeDMAPbuf(struct pbuf *p);
 
