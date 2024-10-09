@@ -287,7 +287,8 @@ typedef struct
 	/* first 3 same as enet_legacy_desc_t */
 	union {
 		struct {
-			uint16_t len, flags;
+			uint16_t len;
+			uint16_t flags;
 			uint32_t addr;
 		};
 		enet_legacy_desc_t legacy;
