@@ -23,6 +23,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 
 
 #define MAX_TX_FRAGMENTS 8
@@ -41,9 +42,9 @@
  */
 
 
-static int is_power_of_2(size_t n)
+static inline bool net_isPowerOf2(size_t n)
 {
-	return !(n & (n - 1));
+	return (n & (n - 1)) == 0;
 }
 
 
@@ -55,53 +56,60 @@ int net_initRings(net_bufdesc_ring_t *rings, const size_t *sizes, size_t nrings,
 	void *p;
 
 	align = ops->ring_alignment;
-	if (align) {
-		if (!is_power_of_2(align))
+	if (align != 0) {
+		if (!net_isPowerOf2(align)) {
 			return -EINVAL;
+		}
 		--align;
 	}
 
 	// FIXME: check for overflows
-	nb = sz = 0;
+	nb = 0;
+	sz = 0;
 	for (i = 0; i < nrings; ++i) {
+		if (!net_isPowerOf2(sizes[i])) {
+			return -EINVAL;
+		}
+
 		nb += sizes[i];
 		sz += sizes[i] * ops->desc_size;
-		sz = (sz + align) & ~align;
-
-		if (!is_power_of_2(sizes[i]))
-			return -EINVAL;
+		sz = (sz + align - 1) & ~(align - 1);
 	}
 
 	bufp = calloc(nb, sizeof(*bufp));
-	if (!bufp)
+	if (bufp == NULL) {
 		return -ENOMEM;
+	}
 
 	p = dmammap(sz);
-	if (!p) {
+	if (p == NULL) {
 		free(bufp);
 		return -ENOMEM;
 	}
 
 	psz = sz;
 	phys = mphys(p, &psz);
-	if ((psz != sz) || (phys & align)) {
-		if (psz != sz)
+	if ((psz != sz) || ((phys & align) != 0)) {
+		if (psz != sz) {
 			printf("ERROR: got non-contiguous ring buffer (%zu/%zu segment)\n", psz, sz);
-		else
+		}
+		else {
 			printf("ERROR: got unaligned ring buffer (at 0x%zx, align mask: 0x%zx)\n", (size_t)phys, align);
+		}
 		munmap(p, sz);
 		free(bufp);
-		return -ENODEV;
+		return -ENOMEM;
 	}
 
-	/*printf("descriptor rings: virt 0x%zx phys 0x%zx\n", (size_t)p, (size_t)phys);*/
+	/* printf("descriptor rings: virt 0x%zx phys 0x%zx\n", (size_t)p, (size_t)phys); */
 
 	memset(p, 0, sz);
 
 	for (i = 0; i < nrings; ++i) {
 		rings[i].ring = p;
 		rings[i].bufp = bufp;
-		rings[i].head = rings[i].tail = 0;
+		rings[i].head = 0;
+		rings[i].tail = 0;
 		rings[i].last = sizes[i] - 1;
 		rings[i].phys = phys;
 		rings[i].ops = ops;
@@ -129,26 +137,31 @@ size_t net_receivePackets(net_bufdesc_ring_t *ring, struct netif *ni, unsigned e
 	pkt = NULL;
 
 	for (;;) {
-		if (i == ring->tail)
+		if (i == ring->tail) {
 			break;
+		}
 
 		sz = ring->ops->nextRxBufferSize(ring, i);
-		if (!sz)
+		if (sz == 0) {
 			break;
+		}
 
 		p = ring->bufp[i];
 		p->tot_len = p->len = sz;
 
-		if (!pkt)
+		if (pkt == NULL) {
 			pkt = p;
-		else
+		}
+		else {
 			pbuf_cat(pkt, p);
+		}
 
 		if (ring->ops->pktRxFinished(ring, i)) {
 			pbuf_header_force(p, ETH_PAD_SIZE - ethpad);
 #ifdef LWIP_HOOK_ETH_INPUT
-			if (LWIP_HOOK_ETH_INPUT(p, ni))
+			if (LWIP_HOOK_ETH_INPUT(p, ni)) {
 				pbuf_free(p);
+			}
 			else
 #endif
 			{
@@ -181,8 +194,9 @@ size_t net_refillRx(net_bufdesc_ring_t *ring, size_t ethpad)
 
 	while (nxt != ring->head) {
 		p = net_allocDMAPbuf(&pa, sz);
-		if (!p)
+		if (p == NULL) {
 			break;
+		}
 
 		pbuf_header_force(p, ethpad - ETH_PAD_SIZE);
 
@@ -209,10 +223,11 @@ size_t net_reapTxFinished(net_bufdesc_ring_t *ring)
 	i = ring->tail;
 	head = atomic_load(&ring->head);
 	while (i != head) {
-		if (!ring->ops->nextTxDone(ring, i))
+		if (ring->ops->nextTxDone(ring, i) == 0) {
 			break;
+		}
 
-		if (ring->bufp[i]) {
+		if (ring->bufp[i] != NULL) {
 			pbuf_free(ring->bufp[i]);
 			ring->bufp[i] = NULL;
 		}
@@ -221,8 +236,9 @@ size_t net_reapTxFinished(net_bufdesc_ring_t *ring)
 		++n;
 	}
 
-	if (n)
+	if (n > 0) {
 		atomic_store(&ring->tail, i);
+	}
 
 	mutexUnlock(ring->lock);
 	return n;
@@ -237,11 +253,12 @@ static size_t net_fillFragments(struct pbuf *p, addr_t *pa, size_t *psz, size_t 
 	sz = p->tot_len;
 	n = fragsz = 0;
 
-	while (sz) {
-		if (++n >= max_n)
+	while (sz != 0) {
+		if (++n >= max_n) {
 			return 0;
+		}
 
-		if (!fragsz) {
+		if (fragsz == 0) {
 			fragsz = p->len;
 			data = p->payload;
 		}
@@ -251,10 +268,12 @@ static size_t net_fillFragments(struct pbuf *p, addr_t *pa, size_t *psz, size_t 
 		sz -= *psz;
 		fragsz -= *psz;
 
-		if (!fragsz)
+		if (fragsz == 0) {
 			p = p->next;
-		else
+		}
+		else {
 			data += *psz;
+		}
 
 		++psz, ++pa;
 	}
@@ -271,19 +290,21 @@ size_t net_transmitPacket(net_bufdesc_ring_t *ring, struct pbuf *p)
 	int last;
 
 	p = net_makeDMAPbuf(p);
-	if (!p)
+	if (p == NULL) {
 		return 0;
+	}
 
 	mutexLock(ring->lock);
 	/* NOTE: 2^n ring size verified in net_initRings */
 	n = atomic_load(&ring->tail); /* access tail once - it may be advanced by tx_done thread */
 	i = ring->head;
 	n = (n - i - 1) & ring->last;
-	if (n > MAX_TX_FRAGMENTS)
+	if (n > MAX_TX_FRAGMENTS) {
 		n = MAX_TX_FRAGMENTS;
+	}
 
 	frags = n = net_fillFragments(p, pa, psz, n, ring->ops->max_tx_frag);
-	if (!frags) {
+	if (frags == 0) {
 		pbuf_free(p);
 		mutexUnlock(ring->lock);
 		return 0; /* dropped: too many fragments or empty packet */
@@ -293,9 +314,10 @@ size_t net_transmitPacket(net_bufdesc_ring_t *ring, struct pbuf *p)
 	i = ni = (i + n) & ring->last;
 	ring->bufp[i] = p;
 	last = BDRING_SEG_LAST;
-	while (n--) {
-		if (!n)
+	while (n-- > 0) {
+		if (n == 0) {
 			last |= BDRING_SEG_FIRST;
+		}
 		i = (i - 1) & ring->last;
 		ring->ops->fillTxDesc(ring, i, pa[n], psz[n], last);
 		last = 0;
