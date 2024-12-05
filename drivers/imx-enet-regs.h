@@ -114,6 +114,7 @@ struct enet_regs {
 #define ENET_RCR_PADEN                BIT(12)      /* remove padding for short packets (forces CRCFWD=1) */
 #define ENET_RCR_RMII_10T             BIT(9)       /* RMII 10Mbps mode (vs 100Mbps when clear) */
 #define ENET_RCR_RMII_MODE            BIT(8)       /* RMII mode (vs MII when clear) */
+#define ENET_RCR_RGMII_EN             BIT(6)       /* RGMII mode */
 #define ENET_RCR_FCE                  BIT(5)       /* process incoming PAUSE frames (iow. enable flow control for tx) */
 #define ENET_RCR_BR_REJ               BIT(4)       /* discard broadcast frames (unless in PROMISC) */
 #define ENET_RCR_PROM                 BIT(3)       /* PROMISC mode (== receive-all) */
