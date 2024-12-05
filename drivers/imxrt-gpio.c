@@ -1,14 +1,20 @@
 /*
  * Phoenix-RTOS --- networking stack
  *
- * GPIO wrapper for iMX RT106x
+ * GPIO wrapper for iMX RT106x/RT117x
  *
  * Copyright 2024 Phoenix Systems
  * Author: Julian Uziembło
  *
  * %LICENSE%
  */
+#if defined(__CPU_IMXRT106X)
 #include <phoenix/arch/armv7m/imxrt/10xx/imxrt10xx.h>
+#elif defined(__CPU_IMXRT117X)
+#include <phoenix/arch/armv7m/imxrt/11xx/imxrt1170.h>
+#else
+#error "Unsupported TARGET"
+#endif
 #include <phoenix/types.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -20,12 +26,9 @@
 
 #include "gpio.h"
 #include "imxrt-multi.h"
-#include "lwipopts.h"
 
 #define GPIO_DEBUG 0
 
-
-static oid_t multidrv;
 
 #if GPIO_DEBUG
 #define gpio_debug_printf(gp, fmt, ...) printf("lwip: gpio%02u_io%02u: " fmt "\n", gp->id - id_gpio1 + 1, gp->pin, ##__VA_ARGS__)
@@ -44,7 +47,7 @@ static int gpio_getPin(gpio_info_t *gp, uint32_t *res)
 
 	msg.type = mtDevCtl;
 	msg.oid.id = gp->id;
-	msg.oid.port = multidrv.port;
+	msg.oid.port = gp->multidrv.port;
 
 	msg.i.data = NULL;
 	msg.i.size = 0;
@@ -54,7 +57,7 @@ static int gpio_getPin(gpio_info_t *gp, uint32_t *res)
 	imsg = (multi_i_t *)msg.i.raw;
 	imsg->gpio.type = gpio_get_port;
 
-	err = msgSend(multidrv.port, &msg);
+	err = msgSend(gp->multidrv.port, &msg);
 	if (err < 0) {
 		return err;
 	}
@@ -72,7 +75,7 @@ static int gpio_setPin(gpio_info_t *gp, int state)
 
 	msg.type = mtDevCtl;
 	msg.oid.id = gp->id;
-	msg.oid.port = multidrv.port;
+	msg.oid.port = gp->multidrv.port;
 
 	msg.i.data = NULL;
 	msg.i.size = 0;
@@ -85,7 +88,7 @@ static int gpio_setPin(gpio_info_t *gp, int state)
 	imsg->gpio.port.val = state << gp->pin;
 	imsg->gpio.port.mask = 1 << gp->pin;
 
-	return msgSend(multidrv.port, &msg);
+	return msgSend(gp->multidrv.port, &msg);
 }
 
 
@@ -96,7 +99,7 @@ static int gpio_setDir(gpio_info_t *gp, int dir)
 
 	msg.type = mtDevCtl;
 	msg.oid.id = gp->id;
-	msg.oid.port = multidrv.port;
+	msg.oid.port = gp->multidrv.port;
 
 	msg.i.data = NULL;
 	msg.i.size = 0;
@@ -109,7 +112,7 @@ static int gpio_setDir(gpio_info_t *gp, int dir)
 	imsg->gpio.dir.val = dir << gp->pin;
 	imsg->gpio.dir.mask = 1 << gp->pin;
 
-	return msgSend(multidrv.port, &msg);
+	return msgSend(gp->multidrv.port, &msg);
 }
 
 int gpio_set(gpio_info_t *gp, int active)
@@ -206,8 +209,8 @@ int gpio_init(gpio_info_t *gp, const char *arg, unsigned flags)
 		return -EINVAL;
 	}
 
-	if (multidrv.port == 0) {
-		while (lookup(arg, NULL, &multidrv) < 0) {
+	if (gp->multidrv.port == 0) {
+		while (lookup(arg, NULL, &gp->multidrv) < 0) {
 			usleep(100 * 1000);
 		}
 	}
