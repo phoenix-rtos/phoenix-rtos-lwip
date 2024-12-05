@@ -22,7 +22,8 @@ typedef struct {
 	enum { ephy_ksz8081rna,
 		ephy_ksz8081rnb,
 		ephy_ksz8081rnd,
-		ephy_rtl8201fi } model;
+		ephy_rtl8201fi,
+		ephy_rtl8211fdi } model;
 	unsigned bus;
 	unsigned addr;
 	unsigned reset_hold_time_us;

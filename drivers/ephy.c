@@ -79,8 +79,35 @@ enum {
 	EPHY_RTL8201_PAGE07_18_SSCR = 0x18  /* Spread Spectrum Clock Register */
 };
 
-#define ephy_printf(phy, fmt, ...) printf("lwip: ephy%u.%u: " fmt "\n", phy->bus, phy->addr, ##__VA_ARGS__)
+/* RTL8211-specific registers */
+enum {
+	/* Page 0/0xa42 (default) */
+	EPHY_RTL8211_09_GBCR,          /* 1000Base-T Control */
+	EPHY_RTL8211_0A_GBSR,          /* 1000Base-T Status */
+	EPHY_RTL8211_0F_GBESR = 0x0F,  /* 1000Base-T Ext Status */
+	EPHY_RTL8211_12_INER = 0x12,   /* Interrupt Enable */
+	EPHY_RTL8211_18_PHYCR1 = 0x18, /* PHY Specific Control 1 */
+	EPHY_RTL8211_19_PHYCR2,        /* PHY Specific Control 2 */
+	EPHY_RTL8211_1A_PHYSR,         /* PHY Specific Status */
+	EPHY_RTL8211_1D_INSR = 0x1D,   /* Interrupt Status */
+	EPHY_RTL8211_1E_EXTPAGESEL,    /* (hidden) Ext Page Select */
 
+	/* Page 0xd04 */
+	EPHY_RTL8211_PAGE0D04_10_LCR = 0x10, /* LED Control */
+	EPHY_RTL8211_PAGE0D04_11_EEELCR,     /* EEE LEd Control */
+
+	/* Page 0xa46 */
+	EPHY_RTL8211_PAGE0A46_14_PHYSCR = 0x14, /* PHY Special Config */
+
+	/* Page 0xd08 */
+	EPHY_RTL8211_PAGE0D08_15_MIICR, /* MII Control */
+
+	/* Page 0xd40 */
+	EPHY_RTL8211_PAGE0D40_16_INTBCR, /* INTB Pin Control */
+};
+
+
+#define ephy_printf(phy, fmt, ...) printf("lwip: ephy%u.%u: " fmt "\n", phy->bus, phy->addr, ##__VA_ARGS__)
 
 #if EPHY_DEBUG
 #define ephy_debug_printf(phy, fmt, ...) ephy_printf(phy, fmt, ##__VA_ARGS__)
@@ -98,6 +125,15 @@ static uint16_t ephy_regRead(const eth_phy_state_t *phy, uint16_t reg)
 static void ephy_regWrite(const eth_phy_state_t *phy, uint16_t reg, uint16_t val)
 {
 	mdio_write(phy->bus, phy->addr, reg, val);
+}
+
+
+static inline void ephy_mmdWrite(const eth_phy_state_t *phy, uint16_t devad, uint16_t addr, uint16_t val)
+{
+	ephy_regWrite(phy, EPHY_RTL_0D_MACR, devad);
+	ephy_regWrite(phy, EPHY_RTL_0E_MAADR, addr);
+	ephy_regWrite(phy, EPHY_RTL_0D_MACR, (1 << 14) | devad);
+	ephy_regWrite(phy, EPHY_RTL_0E_MAADR, val);
 }
 
 
@@ -204,6 +240,12 @@ static void ephy_setLinkState(const eth_phy_state_t *phy)
 			ephy_printf(phy, "link is %s %uMbps/%s (ctl %04x, status %04x, adv %04x, lpa %04x)",
 					(linkup != 0) ? "UP  " : "DOWN", speed, (full_duplex != 0) ? "Full" : "Half", bctl, bstat, adv, lpa);
 			break;
+		case ephy_rtl8211fdi:
+			pc1 = ephy_regRead(phy, EPHY_RTL8211_18_PHYCR1);
+			pc2 = ephy_regRead(phy, EPHY_RTL8211_19_PHYCR2);
+			ephy_printf(phy, "link is %s %uMbps/%s (ctl %04x, status %04x, adv %04x, lpa %04x, pctl %04x,%04x)",
+					linkup ? "UP  " : "DOWN", speed, full_duplex ? "Full" : "Half", bctl, bstat, adv, lpa, pc1, pc2);
+			break;
 		default:
 			/* unreachable */
 			break;
@@ -239,6 +281,30 @@ static inline int ephy_rtl8201fi_linkSpeed(const eth_phy_state_t *phy, int *full
 }
 
 
+static inline int ephy_rtl8211fdi_linkSpeed(const eth_phy_state_t *phy, int *full_duplex)
+{
+	uint16_t physr = ephy_regRead(phy, EPHY_RTL8211_1A_PHYSR);
+	uint16_t speed;
+
+	if (full_duplex != NULL) {
+		*full_duplex = !!(physr & (1 << 3));
+	}
+
+	speed = (physr >> 4) & 0x3;
+
+	switch (speed) {
+		case 0x0:
+			return 10;
+		case 0x1:
+			return 100;
+		case 0x2:
+			return 1000;
+		default:
+			return 0;
+	}
+}
+
+
 int ephy_linkSpeed(const eth_phy_state_t *phy, int *full_duplex)
 {
 	switch (phy->model) {
@@ -248,6 +314,8 @@ int ephy_linkSpeed(const eth_phy_state_t *phy, int *full_duplex)
 			return ephy_ksz8081rnx_linkSpeed(phy, full_duplex);
 		case ephy_rtl8201fi:
 			return ephy_rtl8201fi_linkSpeed(phy, full_duplex);
+		case ephy_rtl8211fdi:
+			return ephy_rtl8211fdi_linkSpeed(phy, full_duplex);
 		default:
 			/* unreachable */
 			return 0;
@@ -263,6 +331,8 @@ static inline uint16_t ephy_bmcrMaxSpeedMask(const eth_phy_state_t *phy)
 		case ephy_ksz8081rnd:
 		case ephy_rtl8201fi:
 			return 1u << 13;
+		case ephy_rtl8211fdi:
+			return 1u << 6;
 		default:
 			return 0;
 	}
@@ -271,10 +341,17 @@ static inline uint16_t ephy_bmcrMaxSpeedMask(const eth_phy_state_t *phy)
 
 static void ephy_restartAN(const eth_phy_state_t *phy)
 {
+	/* max speed, enable AN, restart AN, full-duplex */
+	uint16_t bmcr = ephy_bmcrMaxSpeedMask(phy) | (1u << 12) | (1u << 9) | (1u << 8);
+	if (phy->model == ephy_rtl8211fdi) {
+		/* adv: 1000M-FD */
+		ephy_regWrite(phy, EPHY_RTL8211_09_GBCR, (1u << 9));
+		/* don't adv: 1000Base-T EEE (MMD write) */
+		ephy_mmdWrite(phy, 0x7, 0x3c /* EEEAR */, 0);
+	}
 	/* adv: no-next-page, no-rem-fault, no-pause, no-T4, 100M/10M-FD & 10M-HD, 802.3 */
 	ephy_regWrite(phy, EPHY_COMMON_04_ANAR, (1u << 8) | (1u << 6) | (1u << 5) | 1u);
-	/* 100M-FD, AN, restart-AN */
-	ephy_regWrite(phy, EPHY_COMMON_00_BMCR, ephy_bmcrMaxSpeedMask(phy) | (1u << 12) | (1u << 9) | (1u << 8));
+	ephy_regWrite(phy, EPHY_COMMON_00_BMCR, bmcr);
 }
 
 
@@ -294,6 +371,10 @@ static void ephy_linkThread(void *arg)
 		case ephy_rtl8201fi:
 			irq_reg = EPHY_RTL8201_1E_IISDR;
 			irq_mask = 0xE800;
+			break;
+		case ephy_rtl8211fdi:
+			irq_reg = EPHY_RTL8211_1D_INSR;
+			irq_mask = 0x06BD;
 			break;
 		default:
 			/* unreachable */
@@ -371,6 +452,9 @@ static __attribute__((unused)) char *ephy_parsePhyModel(eth_phy_state_t *phy, ch
 	}
 	else if (strcmp(cfg, "rtl8201fi-vc-cg") == 0) {
 		phy->model = ephy_rtl8201fi;
+	}
+	else if (strcmp(p, "rtl8211fdi-cg") == 0) {
+		phy->model = ephy_rtl8211fdi;
 	}
 	else {
 		printf("lwip: ephy: unsupported PHY model: \"%s\"\n", cfg);
@@ -592,6 +676,20 @@ static inline void ephy_rtl8201fi_init(eth_phy_state_t *phy)
 }
 
 
+static inline void ephy_rtl8211fdi_init(eth_phy_state_t *phy)
+{
+	/* no addr 0 broadcast, auto-MDI, TX CRS assert, no PHYAD detect, check preamble, no jabber detection, no ALDPS/PLL-OFF  */
+	ephy_regWrite(phy, EPHY_RTL8211_18_PHYCR1, (1 << 8) | (1 << 4));
+	/* clkout 125MHz, no clkout SSC, no RXC SSC, no EEE, RXC out enabled, clkout out disabled */
+	ephy_regWrite(phy, EPHY_RTL8211_19_PHYCR2, (1 << 6));
+
+	/* Pin 31 INTB */
+	ephy_regWrite(phy, EPHY_RTL_1F_PAGESEL, 0xd40);
+	ephy_regWrite(phy, EPHY_RTL8211_PAGE0D40_16_INTBCR, 0);
+	ephy_regWrite(phy, EPHY_RTL_1F_PAGESEL, 0xa42);
+}
+
+
 int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb_t cb, void *cb_arg)
 {
 	uint32_t phyid;
@@ -616,6 +714,10 @@ int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb
 		case ephy_rtl8201fi:
 			phy->reset_hold_time_us = 10 * 1000 /* 10ms */;
 			phy->reset_release_time_us = 150 * 1000 /* 150ms */;
+			break;
+		case ephy_rtl8211fdi:
+			phy->reset_hold_time_us = 10 * 1000 /* 10ms */;
+			phy->reset_release_time_us = 3 * 30 * 1000 /* 90ms */;
 			break;
 		default:
 			/* unreachable */
@@ -656,6 +758,9 @@ int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb
 		case ephy_rtl8201fi:
 			ephy_rtl8201fi_init(phy);
 			break;
+		case ephy_rtl8211fdi:
+			ephy_rtl8211fdi_init(phy);
+			break;
 		default:
 			/* unreachable */
 			break;
@@ -683,6 +788,9 @@ int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb
 				ephy_regWrite(phy, EPHY_RTL_1F_PAGESEL, 7);
 				ephy_regWrite(phy, EPHY_RTL8201_PAGE07_13_IWELFR, ephy_regRead(phy, EPHY_RTL8201_PAGE07_13_IWELFR) | (1 << 13));
 				ephy_regWrite(phy, EPHY_RTL_1F_PAGESEL, 0);
+				break;
+			case ephy_rtl8211fdi:
+				ephy_regWrite(phy, EPHY_RTL8211_12_INER, (1 << 4));
 				break;
 			default:
 				/* unreachable */
