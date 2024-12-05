@@ -20,7 +20,8 @@ typedef void (*link_state_cb_t)(void *arg, int state);
 
 typedef struct {
 	enum { ephy_ksz8081rnab,
-		ephy_ksz8081rnd } model;
+		ephy_ksz8081rnd,
+		ephy_rtl8201fi } model;
 	unsigned bus;
 	unsigned addr;
 	unsigned reset_hold_time_us;
