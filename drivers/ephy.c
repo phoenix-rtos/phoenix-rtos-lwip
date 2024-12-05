@@ -453,7 +453,7 @@ static __attribute__((unused)) char *ephy_parsePhyModel(eth_phy_state_t *phy, ch
 	else if (strcmp(cfg, "rtl8201fi-vc-cg") == 0) {
 		phy->model = ephy_rtl8201fi;
 	}
-	else if (strcmp(p, "rtl8211fdi-cg") == 0) {
+	else if (strcmp(cfg, "rtl8211fdi-cg") == 0) {
 		phy->model = ephy_rtl8211fdi;
 	}
 	else {
