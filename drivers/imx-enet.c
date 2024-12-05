@@ -1290,7 +1290,7 @@ static int enet_phySelfTest(struct netif *netif)
 #endif
 
 
-/* ARGS: enet:base:irq[:no-mdio][:PHY:[bus.]addr[:config]] */
+/* ARGS: enet:base:irq[:no-mdio][:PHY:[model:][bus.]addr[:config]] */
 static int enet_netifInit(struct netif *netif, char *cfg)
 {
 	enet_state_t *state;

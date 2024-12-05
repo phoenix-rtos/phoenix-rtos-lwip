@@ -178,13 +178,25 @@ int ephy_linkSpeed(const eth_phy_state_t *phy, int *full_duplex)
 	return ((pc1 & 0x1) != 0) ? 10 : 100;
 }
 
+static inline uint16_t ephy_bmcrMaxSpeedMask(const eth_phy_state_t *phy)
+{
+	switch (phy->model) {
+		case ephy_ksz8081rna:
+		case ephy_ksz8081rnb:
+		case ephy_ksz8081rnd:
+			return 1u << 13;
+		default:
+			return 0;
+	}
+}
+
 
 static void ephy_restartAN(const eth_phy_state_t *phy)
 {
 	/* adv: no-next-page, no-rem-fault, no-pause, no-T4, 100M/10M-FD & 10M-HD, 802.3 */
 	ephy_regWrite(phy, EPHY_04_ANAR, (1u << 8) | (1u << 6) | (1u << 5) | 1u);
 	/* 100M-FD, AN, restart-AN */
-	ephy_regWrite(phy, EPHY_00_BMCR, (1u << 13) | (1u << 12) | (1u << 9) | (1u << 8));
+	ephy_regWrite(phy, EPHY_00_BMCR, ephy_bmcrMaxSpeedMask(phy) | (1u << 12) | (1u << 9) | (1u << 8));
 }
 
 
@@ -244,8 +256,42 @@ static char *ephy_parsePinArg(char *cfg, const char *pfx, size_t pfx_len, gpio_i
 }
 
 
-/* printf("This is an Ethernet PHY driver. use: %s id mdio-bus phy-addr [irq=[-]n,/dev/gpio/X] [reset=[-]n,/dev/gpio/X]\n", argv[0]); */
-/* ARGS: [bus.]id[:reset:[-]n:/dev/gpioX][:irq:[-]n:/dev/gpioX] */
+static __attribute__((unused)) char *ephy_parsePhyModel(eth_phy_state_t *phy, char *cfg)
+{
+	char *p = strchr(cfg, ':');
+	if (p == NULL) {
+		return NULL;
+	}
+
+	*p = '\0';
+
+	if (strcmp(cfg, "ksz8081rna") == 0) {
+		phy->model = ephy_ksz8081rna;
+	}
+	else if (strcmp(cfg, "ksz8081rnb") == 0) {
+		phy->model = ephy_ksz8081rnb;
+	}
+	else if (strcmp(cfg, "ksz8081rnd") == 0) {
+		phy->model = ephy_ksz8081rnd;
+	}
+	else {
+		printf("lwip: ephy: unsupported PHY model: \"%s\"\n", cfg);
+		*p = ':';
+		return NULL;
+	}
+
+	p++;
+
+#if EPHY_DEBUG
+	printf("lwip: ephy: model=\"%s\"\n", cfg);
+#endif
+
+	return p;
+}
+
+
+/* printf("This is an Ethernet PHY driver. use: %s model id mdio-bus phy-addr [irq=[-]n,/dev/gpio/X] [reset=[-]n,/dev/gpio/X]\n", argv[0]); */
+/* ARGS: [model:][bus.]id[:reset:[-]n:/dev/gpioX][:irq:[-]n:/dev/gpioX] */
 static int ephy_config(eth_phy_state_t *phy, char *cfg)
 {
 	char *p;
@@ -253,6 +299,19 @@ static int ephy_config(eth_phy_state_t *phy, char *cfg)
 	if (*cfg == '\0') {
 		return -EINVAL;
 	}
+
+#if defined(EPHY_KSZ8081RNA)
+	phy->model = ephy_ksz8081rna;
+#elif defined(EPHY_KSZ8081RNB)
+	phy->model = ephy_ksz8081rnb;
+#elif defined(EPHY_KSZ8081RND)
+	phy->model = ephy_ksz8081rnd;
+#else
+	cfg = ephy_parsePhyModel(phy, cfg);
+	if (cfg == NULL) {
+		return -EINVAL;
+	}
+#endif
 
 	phy->addr = strtoul(cfg, &p, 0);
 	if (*p == '.') {
@@ -306,34 +365,48 @@ static int ephy_config(eth_phy_state_t *phy, char *cfg)
 int ephy_enableLoopback(const eth_phy_state_t *phy, bool enable)
 {
 	uint16_t bmcr = ephy_regRead(phy, EPHY_00_BMCR);
-	uint16_t phy_ctrl2 = ephy_regRead(phy, EPHY_1F_PHYCR2);
+	bool loopback_enabled = bmcr & (1u << 14);
+
+	if (loopback_enabled == enable) {
+		return 0;
+	}
 
 	if (enable) {
-		/* disable auto-negotiation, enable: full-duplex, 100Mbps, loopback mode */
-		bmcr = (bmcr & ~(1u << 12)) | (1u << 8) | (1u << 13) | (1u << 14);
-		/* force link up, disable transmitter */
-		phy_ctrl2 |= (1u << 11) | (1u << 3);
-	}
-	else {
-		bmcr = (bmcr & ~((1u << 8) | (1u << 13) | (1u << 14))) | (1u << 12);
-		phy_ctrl2 &= ~((1u << 11) | (1u << 3));
+		/* disable AN */
+		bmcr &= ~1u << 12;
+		/* full-duplex */
+		bmcr |= 1u << 8;
+		bmcr |= ephy_bmcrMaxSpeedMask(phy);
 	}
 
+	switch (phy->model) {
+		case ephy_ksz8081rna:
+		case ephy_ksz8081rnb:
+		case ephy_ksz8081rnd: {
+			/* force link up, disable transmitter */
+			const uint16_t mask = (1u << 11) | (1u << 3);
+			uint16_t phycr2 = ephy_regRead(phy, EPHY_1F_PHYCR2);
+			phycr2 = enable ?
+					(phycr2 | mask) :
+					(phycr2 & ~mask);
+			ephy_regWrite(phy, EPHY_1F_PHYCR2, phycr2);
+			break;
+		}
+		default:
+			break;
+	}
+
+	/* loopback */
+	bmcr = enable ?
+			(bmcr | (1u << 14)) :
+			(bmcr & ~(1u << 14));
 	ephy_regWrite(phy, EPHY_00_BMCR, bmcr);
-	ephy_regWrite(phy, EPHY_1F_PHYCR2, phy_ctrl2);
 
-	if (ephy_regRead(phy, EPHY_00_BMCR) != bmcr) {
-		ephy_printf(phy, "failed to set loopback mode");
-		return -1;
-	}
-
-	if (ephy_regRead(phy, EPHY_1F_PHYCR2) != phy_ctrl2) {
-		ephy_printf(phy, "failed to force link up");
-		return -1;
+	if (!enable) {
+		ephy_restartAN(phy);
 	}
 
 	ephy_debug_printf(phy, "loopback %s", enable ? "enabled" : "disabled");
-
 	return 0;
 }
 
@@ -433,12 +506,18 @@ int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb
 	(void)board_rev;
 #endif
 
-
-#if defined(EPHY_KSZ8081RNA) || defined(EPHY_KSZ8081RNB)
-	ephy_setAltConfig(phy, 1);
-#elif defined(EPHY_KSZ8081RND)
-	ephy_setAltConfig(phy, 0);
-#endif
+	switch (phy->model) {
+		case ephy_ksz8081rna:
+		case ephy_ksz8081rnb:
+			ephy_setAltConfig(phy, 1);
+			break;
+		case ephy_ksz8081rnd:
+			ephy_setAltConfig(phy, 0);
+			break;
+		default:
+			/* unreachable */
+			return -EINVAL;
+	}
 
 	phy->link_state_callback = cb;
 	phy->link_state_callback_arg = cb_arg;
