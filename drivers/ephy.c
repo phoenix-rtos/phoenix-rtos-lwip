@@ -24,15 +24,21 @@
 
 #define EPHY_DEBUG 0
 
+
+/* EPHY common registers */
 enum {
-	EPHY_00_BMCR = 0x00,      /* Basic Mode Control */
-	EPHY_01_BMSR,             /* Basic Mode Status */
-	EPHY_02_PHYID1,           /* PHY Identifier 1 */
-	EPHY_03_PHYID2,           /* PHY Identifier 2 */
-	EPHY_04_ANAR,             /* Auto-Neg Advertising */
-	EPHY_05_ANLPAR,           /* Auto-Neg Link Partner Ability */
-	EPHY_06_ANER,             /* Auto-Neg Expansion */
-	EPHY_07_ANPR,             /* Auto-Neg Next Page */
+	EPHY_00_BMCR = 0x00, /* Basic Mode Control */
+	EPHY_01_BMSR,        /* Basic Mode Status */
+	EPHY_02_PHYID1,      /* PHY Identifier 1 */
+	EPHY_03_PHYID2,      /* PHY Identifier 2 */
+	EPHY_04_ANAR,        /* Auto-Neg Advertising */
+	EPHY_05_ANLPAR,      /* Auto-Neg Link Partner Ability */
+	EPHY_06_ANER         /* Auto-Neg Expansion */
+};
+
+/* KSZ8081-specific registers */
+enum {
+	EPHY_07_ANPR = 0x07,      /* Auto-Neg Next Page */
 	EPHY_08_LPNPAR,           /* Link Partner Next Page Ability */
 	EPHY_10_DRCR = 0x10,      /* Digital Reserved Control */
 	EPHY_11_AFECR1,           /* AFE Control 1 */
@@ -244,8 +250,8 @@ static char *ephy_parsePinArg(char *cfg, const char *pfx, size_t pfx_len, gpio_i
 }
 
 
-/* printf("This is an Ethernet PHY driver. use: %s id mdio-bus phy-addr [irq=[-]n,/dev/gpio/X] [reset=[-]n,/dev/gpio/X]\n", argv[0]); */
-/* ARGS: [bus.]id[:reset:[-]n:/dev/gpioX][:irq:[-]n:/dev/gpioX] */
+/* printf("This is an Ethernet PHY driver. use: %s model id mdio-bus phy-addr [irq=[-]n,/dev/gpio/X] [reset=[-]n,/dev/gpio/X]\n", argv[0]); */
+/* ARGS: model:[bus.]id[:reset:[-]n:/dev/gpioX][:irq:[-]n:/dev/gpioX] */
 static int ephy_config(eth_phy_state_t *phy, char *cfg)
 {
 	char *p;
@@ -253,6 +259,43 @@ static int ephy_config(eth_phy_state_t *phy, char *cfg)
 	if (*cfg == '\0') {
 		return -EINVAL;
 	}
+
+	phy->addr = strtoul(cfg, &p, 0);
+	if (cfg != p) {
+		return -EINVAL;
+	}
+
+	if (strncmp(p, "ksz8081rn", 9) == 0) {
+		if (p[9] == 'a' || p[9] == 'b') {
+			phy->model = ephy_ksz8081rnab;
+		}
+		else if (p[9] == 'd') {
+			phy->model = ephy_ksz8081rnd;
+		}
+		else {
+			printf("lwip: ephy: unsupported PHY model: `ksz8081rn%c`\n", p[9]);
+			return -EINVAL;
+		}
+	}
+	else {
+		p = strchr(cfg, ':');
+		if (p == NULL) {
+			return -EINVAL;
+		}
+		*p = '\0';
+		printf("lwip: ephy: unsupported PHY model: `%s`\n", cfg);
+		return -EINVAL;
+	}
+
+	p = strchr(cfg, ':');
+	if (p == NULL) {
+		return -EINVAL;
+	}
+	*p = '\0';
+#if EPHY_DEBUG
+	printf("lwip: ephy: model=`%s`\n", cfg);
+#endif
+	cfg = ++p;
 
 	phy->addr = strtoul(cfg, &p, 0);
 	if (*p == '.') {
@@ -266,7 +309,9 @@ static int ephy_config(eth_phy_state_t *phy, char *cfg)
 		phy->addr = strtoul(cfg, &p, 0);
 	}
 	else {
+#if EPHY_DEBUG
 		printf("lwip: ephy: WARN: setting default bus 0\n");
+#endif
 		phy->bus = 0;
 	}
 
@@ -430,12 +475,17 @@ int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb
 	(void)board_rev;
 #endif
 
-
-#if defined(EPHY_KSZ8081RNA) || defined(EPHY_KSZ8081RNB)
-	ephy_setAltConfig(phy, 1);
-#elif defined(EPHY_KSZ8081RND)
-	ephy_setAltConfig(phy, 0);
-#endif
+	switch (phy->model) {
+		case ephy_ksz8081rnab:
+			ephy_setAltConfig(phy, 1);
+			break;
+		case ephy_ksz8081rnd:
+			ephy_setAltConfig(phy, 0);
+			break;
+		default:
+			/* unreachable */
+			break;
+	}
 
 	phy->link_state_callback = cb;
 	phy->link_state_callback_arg = cb_arg;
