@@ -34,6 +34,9 @@ typedef struct gpio_info_ {
 		int id;
 	};
 	uint32_t pin;
+#if defined(__CPU_IMXRT106X) || defined(__CPU_IMXRT117X)
+	oid_t multidrv;
+#endif
 } gpio_info_t;
 
 
