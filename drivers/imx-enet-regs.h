@@ -1,7 +1,7 @@
 /*
  * Phoenix-RTOS --- networking stack
  *
- * i.MX 6ULL/RT106x built-in ENET register and structure definitions
+ * i.MX 6ULL/RT106x/RT117x built-in ENET register and structure definitions
  *
  * Copyright 2018, 2024 Phoenix Systems
  * Author: Michał Mirosław, Julian Uziembło
@@ -18,6 +18,10 @@
  * i.MX RT106x:
  * ENET  base: 0x402D8000  irq 130  (@AIPS-1)
  * ENET2 base: 0x402D4000  irq 152  (@AIPS-4)
+ *
+ * i.MX RT117x:
+ * ENET    base: 0x40424000 irq 153 (@AIPS-2)
+ * ENET-1G base: 0x40420000 irq 157 (@AIPS-2)
  *
  * iMX6UL / iMX6ULL:
  * ENET1: base 0x02188000  irq 150  (@AIPS-2)
@@ -59,6 +63,7 @@ struct enet_regs {
 #define ENET_ECR_MAGIC_VAL 0x70000000 /* Magic number that has to be written to ECR on every write (imxrt106x: RM 41.5.1.6.4) */
 #define ENET_ECR_DBSWP     BIT(8)
 #define ENET_ECR_DBGEN     BIT(6)
+#define ENET_ECR_SPEED     BIT(5)
 #define ENET_ECR_EN1588    BIT(4)
 #define ENET_ECR_SLEEP     BIT(3)
 #define ENET_ECR_MAGICEN   BIT(2)
@@ -130,16 +135,45 @@ struct enet_regs {
 #define ENET_PAUR_TYPE_RESET_VAL (0x8808)
 	uint32_t OPD;  /* pause duration (for TXed pauses) */
 	uint32_t TXIC; /* TX irq coalescing */
+#if defined(__CPU_IMX6ULL) || defined(__CPU_IMXRT106X)
 	R_RESERVED(0x0F4, 0x100);
+#elif defined(__CPU_IMXRT117X)
+	uint32_t TXIC1;
+	uint32_t TXIC2;
+	R_RESERVED(0x0FC, 0x100);
+#else
+#error "Unsupported TARGET"
+#endif
 	uint32_t RXIC; /* RX irq coalescing */
+#if defined(__CPU_IMX6ULL) || defined(__CPU_IMXRT106X)
 	R_RESERVED(0x104, 0x118);
+#elif defined(__CPU_IMXRT117X)
+	uint32_t RXIC1;
+	uint32_t RXIC2;
+	R_RESERVED(0x10C, 0x118);
+#else
+#error "Unsupported TARGET"
+#endif
 	uint32_t IAUR; /* Upper 32 bits of 64 bit hashtable for unicast address recognition */
 	uint32_t IALR; /* Lower 32 bits of 64 bit hashtable for unicast address recognition */
 	uint32_t GAUR; /* Upper 32 bits of 64 bit hashtable for multicast address recognition */
 	uint32_t GALR; /* Lower 32 bits of 64 bit hashtable for multicast address recognition */
 	R_RESERVED(0x128, 0x144);
 	uint32_t TFWR; /* TX FIFO control (cut-through vs store-and-forward on TX) */
+#if defined(__CPU_IMXRT106X) || defined(__CPU_IMX6ULL)
 	R_RESERVED(0x148, 0x180);
+#elif defined(__CPU_IMXRT117X)
+	R_RESERVED(0x148, 0x160);
+	uint32_t RDSR1;
+	uint32_t TDSR1;
+	uint32_t MRBR1;
+	uint32_t RDSR2;
+	uint32_t TDSR2;
+	uint32_t MRBR2;
+	R_RESERVED(0x178, 0x180);
+#else
+#error "Unsupported TARGET"
+#endif
 	uint32_t RDSR; /* RX descriptor ring address [64-bit aligned; preferred: cacheline(64B)-aligned] */
 	uint32_t TDSR; /* TX descriptor ring address [as above] */
 	uint32_t MRBR; /* RX max buffer size [always includes FCS; 14-bit, 16B-aligned] */
@@ -161,13 +195,28 @@ struct enet_regs {
 #define ENET_RACC_PRODIS  BIT(2) /* discard frames with TCP/UDP/ICMP checksum error */
 #define ENET_RACC_IPDIS   BIT(1) /* discard frames with IPv4 checksum error */
 #define ENET_RACC_PADREM  BIT(0) /* remove ethernet payload padding from short IP frames */
+#if defined(__CPU_IMXRT106X) || defined(__CPU_IMX6ULL)
 	R_RESERVED(0x01c8, 0x0200);
+#elif defined(__CPU_IMXRT117X)
+	uint32_t RCMR1;
+	uint32_t RCMR2;
+	R_RESERVED(0x01d0, 0x01d8);
+	uint32_t DMA1CFG;
+	uint32_t DMA2CFG;
+	uint32_t RDAR1;
+	uint32_t TDAR1;
+	uint32_t RDAR2;
+	uint32_t TDAR2;
+	uint32_t QOS;
+	R_RESERVED(0x01f4, 0x0200);
+#else
+#error "Unsupported TARGET"
+#endif
 
 	union {
 		uint32_t rawstats[64]; /* various stats counters (32-bit each) */
 		struct {
-#if defined(__CPU_IMX6ULL)
-
+#if defined(__CPU_IMX6ULL) || defined(__CPU_IMXRT117X)
 #define ENET_VALID_COUTERS 0x01FFFFFE1FFFFFFFull
 			uint32_t RMON_T_DROP; /* Count of frames not cntd correctly */
 
@@ -198,8 +247,7 @@ struct enet_regs {
 			uint32_t RMON_T_P1024TO2047; /* RMON TX 1024 to 2047 byte pkts */
 			uint32_t RMON_T_P_GTE2048;   /* RMON TX pkts > 2048 bytes */
 			uint32_t RMON_T_OCTETS;      /* RMON TX octets */
-#if defined(__CPU_IMX6ULL)
-
+#if defined(__CPU_IMX6ULL) || defined(__CPU_IMXRT117X)
 			uint32_t IEEE_T_DROP; /* Count of frames not counted correctly */
 
 #elif defined(__CPU_IMXRT106X)
