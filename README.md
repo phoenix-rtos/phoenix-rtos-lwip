@@ -53,6 +53,12 @@ iMX.RT1064's evaluation board needs:
 enet:0x402D8000:130:PHY:ksz8081rnb:0.2:irq:-10:/dev/gpio1:reset:-9:/dev/gpio1
 ```
 
+iMX.RT1170's evaluation board B (EVKB) needs:
+```
+enet:0x40424000:153:PHY:rtl8201fi-vc-cg:0.3:reset:12:/dev/gpio12:irq:-11:/dev/gpio9
+enet:0x40420000:157:PHY:rtl8211fdi-cg:1.1:reset:-14:/dev/gpio11:irq:-13:/dev/gpio11
+```
+
 ## Build
 
 ```bash
