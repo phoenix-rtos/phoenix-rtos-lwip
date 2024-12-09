@@ -27,7 +27,7 @@ When an external PHY is used, *phyinfo* is formatted as follows:
 
 	PHY[:model]:[busnr.]id[:reset:[-]n:/dev/gpioX][:irq:[-]n:/dev/gpioX]
 
-model = PHY chip model in lowercase, one of: { `ksz8081rna`, `ksz8081rnb`, `ksz8081rnd` }
+model = PHY chip model in lowercase, one of: { `ksz8081rna`, `ksz8081rnb`, `ksz8081rnd`, `rtl8201fi-vc-cg`, `rtl8211fdi-cg` }
 
 busnr = bus registered by driver (in driver-arg-order, counted from 0)
 
@@ -51,6 +51,12 @@ enet:0x02188000:150:PHY:ksz8081rnb:0.2:irq:5:/dev/gpio5 enet:0x020b4000:152:no-m
 iMX.RT1064's evaluation board needs:
 ```
 enet:0x402D8000:130:PHY:ksz8081rnb:0.2:irq:-10:/dev/gpio1:reset:-9:/dev/gpio1
+```
+
+iMX.RT1170's evaluation board B (EVKB) needs:
+```
+enet:0x40424000:153:PHY:rtl8201fi-vc-cg:0.3:reset:12:/dev/gpio12:irq:-11:/dev/gpio9
+enet:0x40420000:157:PHY:rtl8211fdi-cg:1.1:reset:-14:/dev/gpio11:irq:-13:/dev/gpio11
 ```
 
 ## Build
