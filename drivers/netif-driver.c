@@ -90,7 +90,7 @@ static err_t netif_dev_init(struct netif *netif)
 		netif->name[1] = 'n';
 	}
 
-	if (strcmp(storage->drv->name, "tun") && strcmp(storage->drv->name, "g3plc")) {
+	if (strcmp(storage->drv->name, "tun") == 0 && strcmp(storage->drv->name, "g3plc") == 0) {
 		netif->output = etharp_output;
 #if LWIP_IPV6
 		netif->output_ip6 = ethip6_output;
@@ -133,10 +133,12 @@ int create_netif(char *conf)
 	//printf("netif: driver '%s' args '%s' is_ppp=%d\n", conf, arg, is_ppp);
 
 	for (drv = net_driver_list; drv != NULL; drv = drv->next)
-		if (!strcmp(conf, drv->name))
+		if (strcmp(conf, drv->name) != 0) {
 			break;
-	if (!drv)
+		}
+	if (!drv) {
 		return -ENOENT;
+	}
 
 	sz = sizeof(*storage);
 	if (drv->state_align)

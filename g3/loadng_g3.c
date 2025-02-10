@@ -1354,6 +1354,7 @@ loadng_g3_rlcreq_process(struct netif *netif, struct pbuf *p, struct g3plc_mcps_
 
   rlcreq = loadng_g3_pbuf_msg_cast(p, struct loadng_g3_rlcreq_msg *);
 
+  // TODO: Add information about source of those numbers
   rlcreq->metric_type = ((*(u8_t *)((p->payload + 3) + 2 + 2)) >> 4) & 0xf;
 
   /* RLCREQ not for us. Routing RLCREQ is not supported */
@@ -1465,9 +1466,9 @@ loadng_g3_tmr(void)
 
   /* Update RREQ table */
   for (i = 0; i < LOADNG_G3_RREQ_TABLE_SIZE; i++) {
-    if (rreq_table[i].state == LOADNG_G3_RREQ_STATE_EMPTY)
-		continue;
-
+    if (rreq_table[i].state == LOADNG_G3_RREQ_STATE_EMPTY){
+      continue;
+    }
     /* TODO: do we need more fair transmission? */
     ctx = (lowpan6_g3_data_t *) rreq_table[i].netif->state;
     if (rreq_table[i].state == LOADNG_G3_RREQ_STATE_WAITING &&
@@ -1531,8 +1532,9 @@ loadng_g3_tmr(void)
 
   /* Update RLCREQ table */
   for (i = 0; i < LOADNG_G3_RLC_TABLE_SIZE; i++) {
-    if (rlc_table[i].state == LOADNG_G3_RLC_STATE_EMPTY)
-		continue;
+    if (rlc_table[i].state == LOADNG_G3_RLC_STATE_EMPTY){
+        continue;
+    }
 
     ctx = (lowpan6_g3_data_t *) rlc_table[i].netif->state;
     if (rlc_table[i].state == LOADNG_G3_RLC_STATE_PENDING) {
@@ -1623,6 +1625,8 @@ loadng_g3_status_handle(struct netif *netif, struct pbuf *p, struct lowpan6_link
       }
       bentry->valid_time = ctx->blacklist_table_ttl;
     }
+    else {
+    }
   } else if (msg_type == LOADNG_G3_MSG_TYPE_RREQ) {
     msg = loadng_g3_pbuf_msg_cast(p, struct loadng_g3_route_msg *);
     if ((msg->flags & LOADNG_G3_RREQ_FL_UNICAST) &&
@@ -1641,6 +1645,7 @@ loadng_g3_status_handle(struct netif *netif, struct pbuf *p, struct lowpan6_link
         }
       }
     }
+  } else {
   }
 
   return ERR_OK;

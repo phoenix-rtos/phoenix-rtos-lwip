@@ -1,0 +1,9 @@
+#
+# Makefile for Phoenix-RTOS 3 LwIP
+#
+# Copyright 2024 Phoenix Systems
+#
+
+NET_DRIVERS_SUPPORTED := pppou pppos g3plc
+NET_DRIVERS ?= $(NET_DRIVERS_SUPPORTED)
+PPPOS_MODEM := huawei
