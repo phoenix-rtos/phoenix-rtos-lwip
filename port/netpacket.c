@@ -164,16 +164,16 @@ static void netpacket_recv(struct netpacket_pcb *pcb, struct pbuf *p, struct eth
 				netbuf_delete(buf);
 				return;
 			}
-			else {
+
 #if LWIP_SO_RCVBUF
 			SYS_ARCH_INC(conn->recv_avail, len);
-#endif /* LWIP_SO_RCVBUF */
+#endif
 			/* Register event with callback */
 			API_EVENT(conn, NETCONN_EVT_RCVPLUS, len);
-			}
+		}
 	}
 }
-}
+
 
 int netpacket_input(struct pbuf *p, struct netif *netif)
 {
@@ -242,6 +242,10 @@ static void netpacket_linkoutput_full(struct netif *netif, struct pbuf *p, struc
 	/* find netpacket pcb's that are binded to this netif */
 	struct netpacket_pcb *pcb = NULL;
 	for (pcb = netpacket_pcbs; pcb != NULL && pcb->netif != NULL; pcb = pcb->next) {
+		if (pcb == from_pcb) {
+			continue;
+		}
+
 		if (netif_get_index(pcb->netif) != netif_get_index(netif))
 			continue;
 

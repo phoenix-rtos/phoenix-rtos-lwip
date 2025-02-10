@@ -99,7 +99,12 @@ static struct {
   u8_t eap_id;
 #endif
   ps_eap_psk_nai_t nai_p;
-  ps_eap_psk_ctx_t eap_ctx;
+  ps_eap_psk_key_t ak;
+  ps_eap_psk_key_t kdk;
+  ps_eap_psk_key_t tek;
+  ps_eap_psk_rand_t rand_p;
+  ps_eap_psk_rand_t rand_s;
+  ps_eap_psk_nai_t nai_s;
   u32_t nonce;
 } lbp_data;
 
@@ -213,7 +218,6 @@ lbp_g3_discovery(struct netif *netif, u8_t duration)
   lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
   unsigned i;
 
-  fprintf(stderr, "lbp_g3_discovery: start\n");
   if (ctx->state == LBP_G3_STATE_SCANNING) {
     return ERR_INPROGRESS;
   }
@@ -240,8 +244,6 @@ err_t
 lbp_g3_start(struct netif *netif, u8_t scan_duration)
 {
   lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
-
-  fprintf(stderr, "lbp_g3: START\n");
 
   if (lbp_g3_discovery(netif, scan_duration) < 0) {
     return ERR_VAL;
@@ -444,8 +446,6 @@ lbp_g3_handle_accepted(struct netif *netif, struct pbuf *p, struct lowpan6_link_
 
       ctx->state = LBP_G3_STATE_IDLE;
       if (lowpan6_g3_set_short_addr(netif, ctx->short_address >> 8, ctx->short_address & 0xFF) < 0) {
-        /* XXX */
-
         LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_handle_accepted: Can't set short address!\n"));
         ctx->state = LBP_G3_STATE_ERROR;
         return ERR_VAL;
@@ -513,6 +513,7 @@ lbp_g3_handle_accepted(struct netif *netif, struct pbuf *p, struct lowpan6_link_
     pbuf_free(reply);
 
     return ret;
+  } else {
   }
 
   return ERR_OK;
@@ -533,9 +534,9 @@ lbp_g3_handle_msg1(struct netif *netif, struct lowpan6_link_addr *origin, u8_t *
   }
 
   LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_handle_msg1: Received EAP msg1\n\n"));
-  MEMCPY(&lbp_data.eap_ctx.rand_s, &rand_s, sizeof(rand_s));
-  MEMCPY(lbp_data.eap_ctx.nai_s.data, nai_s.data, nai_s.length);
-  lbp_data.eap_ctx.nai_s.length = nai_s.length;
+  MEMCPY(&lbp_data.rand_s, &rand_s, sizeof(rand_s));
+  MEMCPY(lbp_data.nai_s.data, nai_s.data, nai_s.length);
+  lbp_data.nai_s.length = nai_s.length;
 
   reply = lbp_g3_msg_init(LBP_G3_MSG_JOINING, lbd_addr,
                           ps_eap_psk_len__message2);
@@ -543,9 +544,10 @@ lbp_g3_handle_msg1(struct netif *netif, struct lowpan6_link_addr *origin, u8_t *
     return ERR_MEM;
   }
 
-  if (ps_eap_psk_create_message2(lbp_g3_msg_payload(reply), ps_eap_psk_len__message2, &lbp_data.eap_ctx,
+  if (ps_eap_psk_create_message2(lbp_g3_msg_payload(reply), ps_eap_psk_len__message2,
+                                &lbp_data.ak,
                                  &nai_s, &lbp_data.nai_p,
-                                 &lbp_data.eap_ctx.rand_s, &lbp_data.eap_ctx.rand_p,
+                                 &lbp_data.rand_s, &lbp_data.rand_p,
                                  eap_id) == 0) {
     LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_handle_msg1: Error while encoding msg2!\n"));
     pbuf_free(reply);
@@ -573,8 +575,9 @@ lbp_g3_handle_msg3(struct netif *netif, struct lowpan6_link_addr *origin, u8_t *
   u16_t len, p_data_len, p_data_out_len = 0, expected_params_mask = 0;
   u32_t nonce;
 
-  if (ps_eap_psk_parse_message3(eap_data, eap_data_len, &lbp_data.eap_ctx,
-                                hdr, &rand_s, &nonce,
+  if (ps_eap_psk_parse_message3(eap_data, eap_data_len, &lbp_data.ak, &lbp_data.tek,
+                                &lbp_data.nai_s, &lbp_data.rand_p,
+                                &rand_s,hdr,  &nonce,
                                 &p_result, &p_data_in, &p_data_len) != ps_eap__success) {
     LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_handle_msg3: Error while decoding msg3!\n"));
     return ERR_VAL;
@@ -608,8 +611,8 @@ lbp_g3_handle_msg3(struct netif *netif, struct lowpan6_link_addr *origin, u8_t *
     p_result = ps_eap_psk_p_result__done_failure;
   }
 
-  if ((len = ps_eap_psk_create_message4(lbp_g3_msg_payload(reply), lbp_g3_msg_payload_len(reply), &lbp_data.eap_ctx,
-                                 &lbp_data.eap_ctx.rand_s,
+  if ((len = ps_eap_psk_create_message4(lbp_g3_msg_payload(reply), lbp_g3_msg_payload_len(reply), &lbp_data.tek,
+                                 &lbp_data.rand_s,
                                  lbp_data.nonce, p_result, p_data_out,
                                  p_data_out_len, eap_id)) == 0) {
     LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_handle_msg3: Error while encoding msg4!\n"));
@@ -666,7 +669,6 @@ lbp_g3_handle_decline(struct netif *netif, struct pbuf *p)
 static err_t
 lbp_g3_handle_lbs_kick(struct netif *netif, struct pbuf *pbuf)
 {
-  lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
 
   LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_handle_lbs_kick: Received LBS kick msg!\n"));
 
@@ -1084,17 +1086,17 @@ lbp_g3_lbs_gen_msg1(struct netif *netif, u8_t *lbd_addr, struct lowpan6_link_add
   LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_lbs generating msg1 challenge:\n----------\n\n"));
   LWIP_DEBUGF(LBP_G3_DEBUG, ("RAND_S: "));
   for (i = 0; i < 16; i++)
-    LWIP_DEBUGF(LBP_G3_DEBUG, ("%02X ", lbp_data.eap_ctx.rand_s.data[i]));
+    LWIP_DEBUGF(LBP_G3_DEBUG, ("%02X ", lbp_data.rand_s.data[i]));
   LWIP_DEBUGF(LBP_G3_DEBUG, ("\nNAI_S: "));
 
-  for (i = 0; i < lbp_data.eap_ctx.nai_s.length; i++)
-    LWIP_DEBUGF(LBP_G3_DEBUG, ("%02X ", lbp_data.eap_ctx.nai_s.data[i]));
+  for (i = 0; i < lbp_data.nai_s.length; i++)
+    LWIP_DEBUGF(LBP_G3_DEBUG, ("%02X ", lbp_data.nai_s.data[i]));
   LWIP_DEBUGF(LBP_G3_DEBUG, ("\n"));
 
   /* TODO: since we are starting a new session, we should generate a new RAND_S */
   if (ps_eap_psk_create_message1(lbp_g3_msg_payload(reply), ps_eap_psk_len__message1,
-                                 &lbp_data.eap_ctx.rand_s,
-                                 &lbp_data.eap_ctx.nai_s,
+                                 &lbp_data.rand_s,
+                                 &lbp_data.nai_s,
                                  lbp_data.eap_id) == 0) {
     LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_lbs_req_msg1: Error while encoding msg1!\n"));
     pbuf_free(reply);
@@ -1232,8 +1234,8 @@ lbp_g3_lbs_handle_lbd_kick(struct netif *netif, struct pbuf *p, struct lowpan6_l
 void
 lbp_g3_set_id(uint8_t *id, size_t len)
 {
-    MEMCPY(lbp_data.eap_ctx.nai_s.data, id, len);
-    lbp_data.eap_ctx.nai_s.length = len;
+    MEMCPY(lbp_data.nai_s.data, id, len);
+    lbp_data.nai_s.length = len;
 }
 
 /**
@@ -1363,13 +1365,13 @@ lbp_g3_lbs_handle_msg2(struct netif *netif, struct lowpan6_link_addr *origin, st
   err_t ret;
   u8_t gmk_id;
 
-  if (ps_eap_psk_parse_message2(eap_data, eap_data_len, &lbp_data.eap_ctx, &lbp_data.eap_ctx.nai_s,
+  if (ps_eap_psk_parse_message2(eap_data, eap_data_len, &lbp_data.ak, &lbp_data.nai_s,
                                  &rand_s, &rand_p, ctx->bandplan) != ps_eap__success) {
     LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_lbs_handle_msg2: Can't decode msg2\n"));
     return ERR_VAL;
   }
 
-  if (memcmp(rand_s.data, lbp_data.eap_ctx.rand_s.data, PS_EAP_PSK_RAND_LENGTH) != 0) {
+  if (memcmp(rand_s.data, lbp_data.rand_s.data, PS_EAP_PSK_RAND_LENGTH) != 0) {
     LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_lbs_handle_msg2: Received wrong rand_s value\n"));
     return ERR_VAL;
   }
@@ -1409,10 +1411,10 @@ lbp_g3_lbs_handle_msg2(struct netif *netif, struct lowpan6_link_addr *origin, st
   }
 
   /* TODO: each device should have a separate TEK */
-  ps_eap_psk_tek_init(&lbp_data.eap_ctx, &rand_p);
+  ps_eap_psk_tek_init(&lbp_data.tek, &lbp_data.kdk, &rand_p);
 
-  if ((len = ps_eap_psk_create_message3(lbp_g3_msg_payload(reply), lbp_g3_msg_payload_len(reply), &lbp_data.eap_ctx, &rand_s, &rand_p,
-                                        &lbp_data.eap_ctx.nai_s, lbp_data.nonce, ps_eap_psk_p_result__done_success,
+  if ((len = ps_eap_psk_create_message3(lbp_g3_msg_payload(reply), lbp_g3_msg_payload_len(reply), &lbp_data.ak, &lbp_data.tek, &rand_s, &rand_p,
+                                        &lbp_data.nai_s, lbp_data.nonce, ps_eap_psk_p_result__done_success,
                                         p_data, p_data_len, lbp_data.eap_id)) == 0) {
     LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_lbs_handle_msg2: Error during msg3 encoding!\n"));
     pbuf_free(reply);
@@ -1440,7 +1442,7 @@ lbp_g3_lbs_handle_msg4(struct netif *netif, struct lowpan6_link_addr *origin, u8
   u16_t p_data_len = 0;
   err_t ret = ERR_OK;
 
-  if (ps_eap_psk_parse_message4(eap_data, eap_data_len, &lbp_data.eap_ctx, hdr,
+  if (ps_eap_psk_parse_message4(eap_data, eap_data_len, &lbp_data.tek, hdr,
                                 &rand_s, &nonce, &p_result, &p_data, &p_data_len) != ps_eap__success) {
     LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_lbs_handle_msg4: Error during msg4 decoding!\n"));
     return ERR_VAL;
@@ -1449,7 +1451,7 @@ lbp_g3_lbs_handle_msg4(struct netif *netif, struct lowpan6_link_addr *origin, u8
   lbp_data.nonce++;
 
   /* TODO: Each session should have a different RAND_S */
-  if (memcmp(rand_s.data, lbp_data.eap_ctx.rand_s.data, PS_EAP_PSK_RAND_LENGTH) != 0) {
+  if (memcmp(rand_s.data, lbp_data.rand_s.data, PS_EAP_PSK_RAND_LENGTH) != 0) {
     LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_lbs_handle_msg4: Received wrong RAND_S value!\n"));
     return ERR_VAL;
   }
@@ -1640,7 +1642,7 @@ static void lbp_g3_scan_finished(struct netif *netif)
     }
   }
 #endif
-  memset(scan_table, sizeof(scan_table), 0);
+  memset(scan_table, 0, sizeof(scan_table));
 }
 
 /**
@@ -1817,7 +1819,7 @@ lbp_g3_input(struct netif *netif, struct pbuf *p, struct lowpan6_link_addr *orig
   u8_t *lbd_addr;
   err_t ret = ERR_OK;
 
-    LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_input\n"));
+  LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_input\n"));
   if (p->tot_len < LBP_G3_HEADER_LEN) {
     LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_input: Packet too short, discarding\n"));
     return ERR_VAL;
@@ -1829,7 +1831,7 @@ lbp_g3_input(struct netif *netif, struct pbuf *p, struct lowpan6_link_addr *orig
   if (ctx->device_type == LOWPAN6_G3_DEVTYPE_DEVICE) {
     if (memcmp(ctx->extended_mac_addr.addr, lbd_addr, 8)) {
       /* Frame not for us */
-          LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_input: Frame not for us\n"));
+      LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_input: Frame not for us\n"));
       if (ctx->role_of_device == LOWPAN6_G3_ROLE_LBA) {
         ret = lbp_g3_lba_route_msg(netif, p, origin);
       } else {
@@ -1895,15 +1897,15 @@ lbp_g3_init(struct netif *netif, const u8_t *psk, const u8_t *rand, const u8_t *
   LWIP_ASSERT("id != NULL", id != NULL);
 
   ctx = (lowpan6_g3_data_t *) netif->state;
-  ps_eap_psk_init(&lbp_data.eap_ctx, (ps_eap_psk_key_t *) psk);
+  ps_eap_psk_init(&lbp_data.ak,&lbp_data.kdk, (ps_eap_psk_key_t *) psk);
   if (ctx->device_type == LOWPAN6_G3_DEVTYPE_COORD) {
     LWIP_DEBUGF(LBP_G3_DEBUG, ("LBP_G3_INIT SET DEVTYPE\n\n"));
-    MEMCPY(lbp_data.eap_ctx.rand_s.data, rand, PS_EAP_PSK_RAND_LENGTH);
-    MEMCPY(lbp_data.eap_ctx.nai_s.data, id, id_len);
-    lbp_data.eap_ctx.nai_s.length = id_len;
+    MEMCPY(lbp_data.rand_s.data, rand, PS_EAP_PSK_RAND_LENGTH);
+    MEMCPY(lbp_data.nai_s.data, id, id_len);
+    lbp_data.nai_s.length = id_len;
   } else {
-    MEMCPY(lbp_data.eap_ctx.rand_p.data, rand, PS_EAP_PSK_RAND_LENGTH);
-    ps_eap_psk_tek_init(&lbp_data.eap_ctx, &lbp_data.eap_ctx.rand_p);
+    MEMCPY(lbp_data.rand_p.data, rand, PS_EAP_PSK_RAND_LENGTH);
+    ps_eap_psk_tek_init(&lbp_data.tek, &lbp_data.kdk, &lbp_data.rand_p);
     MEMCPY(lbp_data.nai_p.data, id, id_len);
     lbp_data.nai_p.length = id_len;
   }
@@ -1911,10 +1913,10 @@ lbp_g3_init(struct netif *netif, const u8_t *psk, const u8_t *rand, const u8_t *
   LWIP_DEBUGF(LBP_G3_DEBUG, ("LBP_G3_INIT:\n----------\n"));
   LWIP_DEBUGF(LBP_G3_DEBUG, ("RAND_S: "));
   for (i = 0; i < 16; i++)
-    LWIP_DEBUGF(LBP_G3_DEBUG, ("%02X ", lbp_data.eap_ctx.rand_s.data[i]));
+    LWIP_DEBUGF(LBP_G3_DEBUG, ("%02X ", lbp_data.rand_s.data[i]));
   LWIP_DEBUGF(LBP_G3_DEBUG, ("\nNAI_S: "));
 
-  for (i = 0; i < lbp_data.eap_ctx.nai_s.length; i++)
-    LWIP_DEBUGF(LBP_G3_DEBUG, ("%02X ", lbp_data.eap_ctx.nai_s.data[i]));
+  for (i = 0; i < lbp_data.nai_s.length; i++)
+    LWIP_DEBUGF(LBP_G3_DEBUG, ("%02X ", lbp_data.nai_s.data[i]));
   LWIP_DEBUGF(LBP_G3_DEBUG, ("\n"));
 }

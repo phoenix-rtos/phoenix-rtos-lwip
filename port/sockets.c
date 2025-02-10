@@ -44,7 +44,6 @@
 #include "netif.h"
 #include "route.h"
 #include "ipsec-api.h"
-#define AF_PACKET 17
 
 #define SOCKTHREAD_PRIO    4
 #define SOCKTHREAD_STACKSZ (4 * _PAGE_SIZE)
@@ -186,7 +185,7 @@ static int socket_ioctl6(int sock, unsigned long request, const void *in_data, v
 		case SIOCGIFALIFETIME_IN6: {
 			struct in6_ifreq *in6_ifreq = (struct in6_ifreq *)out_data;
 			struct netif *netif = netif_find(in6_ifreq->ifr_name);
-			struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)&in6_ifreq->ifr_ifru.ifru_addr;
+			struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)&in6_ifreq->ifr_addr;
 			ip6_addr_t ip6addr;
 			s8_t idx;
 			u8_t uidx;
@@ -228,7 +227,7 @@ static int socket_ioctl6(int sock, unsigned long request, const void *in_data, v
 		case SIOCDIFADDR_IN6: {
 			struct in6_ifreq *in6_ifreq = (struct in6_ifreq *)in_data;
 			struct netif *netif = netif_find(in6_ifreq->ifr_name);
-			struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)&in6_ifreq->ifr_ifru.ifru_addr;
+			struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)&in6_ifreq->ifr_addr;
 			ip6_addr_t ip6addr;
 			s8_t idx;
 
@@ -270,11 +269,13 @@ static int socket_ioctl6(int sock, unsigned long request, const void *in_data, v
 			}
 
 			inet6_addr_to_ip6addr(&ip6addr, &sin6->sin6_addr);
-			if ((idx = netif_get_ip6_addr_match(netif, &ip6addr)) < 0) {
+			idx = netif_get_ip6_addr_match(netif, &ip6addr);
+			if (idx < 0) {
 				if (netif_add_ip6_address(netif, &ip6addr, &idx) != ERR_OK) {
 					return -ENOMEM;
 				}
 			}
+
 			uidx = (u8_t)idx;
 
 			netif_ip6_addr_set_pref_life(netif, uidx, in6_ifreq->ifra_lifetime.preferred);
@@ -427,7 +428,7 @@ static int socket_ioctl(int sock, unsigned long request, const void *in_data, vo
 					if (!netif_is_ppp(interface)) {
 						sin = (struct sockaddr_in *)&ifreq->ifr_broadaddr;
 						sin->sin_addr.s_addr = ip4_addr_get_u32(netif_ip4_addr(interface)) |
-								~ip4_addr_get_u32(netif_ip4_netmask(interface));
+							~ip4_addr_get_u32(netif_ip4_netmask(interface));
 					}
 					else {
 						return -EOPNOTSUPP;
@@ -588,8 +589,10 @@ static int socket_ioctl(int sock, unsigned long request, const void *in_data, vo
 			struct netif *netif;
 
 			ifconf->ifc_len = 0;
-			if (!ifreq)  // WARN: it is legal to pass NULL here (we should return the lenght sufficient for whole response)
+			if (ifreq == NULL) {
+				/* WARN: it is legal to pass NULL here (we should return the length sufficient for whole response) */
 				return -EFAULT;
+			}
 
 			memset(ifreq, 0, maxlen);
 
@@ -666,8 +669,7 @@ static void do_socket_ioctl(msg_t *msg, int sock)
 	void *out_data = NULL;
 	const void *in_data = ioctl_unpackEx(msg, &request, NULL, &out_data);
 
-	int err = socket_ioctl(sock, request, in_data, out_data);
-	ioctl_setResponseErr(msg, request, err);
+	msg->o.err = socket_ioctl(sock, request, in_data, out_data);
 }
 
 
@@ -751,7 +753,7 @@ static int socket_op(msg_t *msg, int sock)
 			break;
 		case sockmSend:
 			smo->ret = map_errno(lwip_sendto(sock, msg->i.data, msg->i.size, smi->send.flags,
-					smi->send.addrlen == 0 ? NULL : sa_convert_sys_to_lwip(smi->send.addr, smi->send.addrlen), smi->send.addrlen));
+				smi->send.addrlen == 0 ? NULL : sa_convert_sys_to_lwip(smi->send.addr, smi->send.addrlen), smi->send.addrlen));
 			break;
 		case sockmRecv:
 			smo->ret = map_errno(lwip_recvfrom(sock, msg->o.data, msg->o.size, smi->send.flags, (void *)smo->sockname.addr, &salen));
@@ -799,26 +801,26 @@ static int socket_op(msg_t *msg, int sock)
 			break;
 		case mtRead:
 			if (msg->o.size <= SSIZE_MAX)
-				msg->o.io.err = map_errno(lwip_read(sock, msg->o.data, msg->o.size));
+				msg->o.err = map_errno(lwip_read(sock, msg->o.data, msg->o.size));
 			else
-				msg->o.io.err = -EINVAL;
+				msg->o.err = -EINVAL;
 			break;
 		case mtWrite:
 			if (msg->i.size <= SSIZE_MAX)
-				msg->o.io.err = map_errno(lwip_write(sock, msg->i.data, msg->i.size));
+				msg->o.err = map_errno(lwip_write(sock, msg->i.data, msg->i.size));
 			else
-				msg->o.io.err = -EINVAL;
+				msg->o.err = -EINVAL;
 			break;
 		case mtGetAttr:
 			if (msg->i.attr.type != atPollStatus) {
-				msg->o.attr.err = -EINVAL;
+				msg->o.err = -EINVAL;
 				break;
 			}
 			msg->o.attr.val = poll_one(&polls, msg->i.attr.val, 0);
-			msg->o.attr.err = (msg->o.attr.val < 0) ? msg->o.attr.val : EOK;
+			msg->o.err = (msg->o.attr.val < 0) ? msg->o.attr.val : EOK;
 			break;
 		case mtClose:
-			msg->o.io.err = map_errno(lwip_close(sock));
+			msg->o.err = map_errno(lwip_close(sock));
 			return 1;
 		case mtDevCtl:
 			do_socket_ioctl(msg, sock);
@@ -835,7 +837,7 @@ static int socket_op(msg_t *msg, int sock)
 static void socket_thread(void *arg)
 {
 	struct sock_start *ss = arg;
-	unsigned long respid;
+	msg_rid_t respid;
 	uint32_t port = ss->port;
 	int sock = ss->sock, err;
 	msg_t msg;
@@ -1008,8 +1010,9 @@ static int do_getaddrinfo(const char *name, const char *serv, const struct addri
 			dest->ai_canonname = (void *)(strdest - buf);
 			strdest += n;
 		}
-		else
+		else {
 			dest->ai_canonname = NULL;
+		}
 
 		dest->ai_next = ai->ai_next ? (void *)((void *)(dest + 1) - buf) : NULL;
 		++dest;
@@ -1089,7 +1092,7 @@ static int do_getifaddrs(char *buf, size_t *buflen)
 		dest->ifa_netmask = (struct sockaddr *)(addrdest - buf);
 		addrdest += sizeof(struct sockaddr_in);
 
-		snprintf(strdest, sizeof(netif->name) + 2, "%2s%1u", netif->name, netif->num % 10);
+		snprintf(strdest, sizeof(netif->name) + 2, "%.2s%1u", netif->name, netif->num % 10);
 		dest->ifa_name = (char *)(strdest - buf);
 #if LWIP_IPV6
 		sin6 = (struct sockaddr_in6 *)&sa;
@@ -1126,14 +1129,14 @@ static int do_getifaddrs(char *buf, size_t *buflen)
 
 static void socketsrv_thread(void *arg)
 {
-	unsigned long respid;
+	msg_rid_t respid;
 	size_t sz;
 	msg_t msg;
 	uint32_t port;
 	int err, sock, type;
 #if LWIP_DNS
 	struct addrinfo hint = { 0 };
-	char *node, *serv;
+	const char *node, *serv;
 #endif
 
 	port = (unsigned)arg;
@@ -1160,9 +1163,9 @@ static void socketsrv_thread(void *arg)
 					break;
 				}
 				if ((sock = lwip_socket(smi->socket.domain, type, smi->socket.protocol)) < 0)
-					msg.o.lookup.err = -errno;
+					msg.o.err = -errno;
 				else {
-					msg.o.lookup.err = wrap_socket(&msg.o.lookup.dev.port, sock, smi->socket.type);
+					msg.o.err = wrap_socket(&msg.o.lookup.dev.port, sock, smi->socket.type);
 					msg.o.lookup.fil = msg.o.lookup.dev;
 				}
 				break;
@@ -1206,7 +1209,7 @@ static void socketsrv_thread(void *arg)
 				smo->sys.err = smo->ret == EAI_SYSTEM ? errno : 0;
 				break;
 			default:
-				msg.o.io.err = -EINVAL;
+				msg.o.err = -EINVAL;
 		}
 
 		msgRespond(port, &msg, respid);

@@ -1029,7 +1029,7 @@ lowpan6_decompress_hdr(u8_t *lowpan6_buffer, size_t lowpan6_bufsize,
 #if LWIP_G3_PLC
         iid[0] |= pan_id << 16;
 #endif
-        iid[1] = 0xfe000000UL | dest->addr[0] << 8 | dest->addr[1]; /* XXX */
+        iid[1] = 0xfe000000UL | dest->addr[0] << 8 | dest->addr[1];
       } else if (dest->addr_len == 8) {
         ip6hdr->dest.addr[2] = lwip_htonl(((dest->addr[0] ^ 2) << 24) | (dest->addr[1] << 16) | dest->addr[2] << 8 | dest->addr[3]);
         ip6hdr->dest.addr[3] = lwip_htonl((dest->addr[4] << 24) | (dest->addr[5] << 16) | dest->addr[6] << 8 | dest->addr[7]);
