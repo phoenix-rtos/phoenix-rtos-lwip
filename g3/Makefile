@@ -15,14 +15,11 @@ LWIP_EXCLUDE += netif/lowpan6.c netif/lowpan6_common.c
 LWIP_SRCS := $(filter-out $(addprefix $(LWIPDIR)/,$(LWIP_EXCLUDE)),$(LWIPNOAPPSFILES))
 
 
-LDFLAGS := $(LDFLAGS) -L$(PHOENIX_BUILD_DIR)/phrtos3-lib/ -l:ps_eap.a -l:ps_g3_sap.a
-CFLAGS := $(CFLAGS) -I$(PHOENIX_BUILD_DIR)/phrtos3-include
-
 G3_SRCS := lowpan6_g3.c lowpan6_common.c lbp_g3.c loadng_g3.c
 
 ifneq ($(G3PLC_PLUGFEST_PATH),)
 G3_ADP_TESTS := g3_adp_gr1.c g3_adp_gr2.c g3_adp_gr3.c g3_adp_gr4.c g3_adp_gr5.c common.c
-LWIP_SRCS += $(addprefix $(G3PLC_PLUGFEST_PATH),$(G3_ADP_TESTS))
+LWIP_SRCS += $(addprefix $(G3PLC_PLUGFEST_PATH)/,$(G3_ADP_TESTS))
 CFLAGS += -I$(G3PLC_PLUGFEST_PATH)
 endif
 

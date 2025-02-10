@@ -16,6 +16,7 @@
 #include <g3plc.h>
 #include <lbp_g3.h>
 #include "netif-driver.h"
+#include <ps_g3_sap_dl_uart.h>
 #include <g3_adp_common.h>
 
 struct g3plc_data_request {
@@ -63,7 +64,7 @@ struct {
 
 #define DEBUG_LOG(...) \
 	{ \
-		fprintf(stderr, __VA_ARGS__); \
+		printf(__VA_ARGS__); \
 	}
 
 static void *be_memcpy(void *dest, const void *src, size_t n)
@@ -659,7 +660,7 @@ static void g3plc_get_param(char *name)
 static void g3plc_msg_thread(void *arg)
 {
 	msg_t msg = { 0 };
-	unsigned long int rid;
+	msg_rid_t rid;
 	int test;
 	struct g3adp_ctl *ctl;
 
@@ -672,10 +673,10 @@ static void g3plc_msg_thread(void *arg)
 				ctl = (struct g3adp_ctl *)msg.i.raw;
 				if (ctl->type == g3adp_test) {
 					DEBUG_LOG("g3adp: devctl test %s\n", ctl->name);
-					msg.o.io.err = g3plc_test_cmd(ctl->name);
+					msg.o.err = g3plc_test_cmd(ctl->name);
 				}
 				else if (ctl->type == g3adp_get) {
-					msg.o.io.err = g3plc_get_val(ctl->name);
+					msg.o.err = g3plc_get_val(ctl->name);
 				}
 
 			default:
@@ -705,9 +706,19 @@ static int sap_setup(ps_g3_sap_t *sap)
 		.mlme_start_confirm = mlme_start_confirm,
 		/* .mlme_comm_status_indication = mlme_comm_status_indication, */
 	};
-
+#define USE_SAP_UART 1
+#ifdef USE_SAP_UART
+	ps_g3_sap_dl_uart_cfg_t sap_dl_cfg = {
+		.devname = "/dev/uart3",
+	};
+	if (ps_g3_sap_init(sap, &ps_g3_sap_dl_uart, &sap_dl_cfg) < 0) {
+		printf("ps_g3_sap_init() unable to initialize sap layer");
+		return -1;
+	}
+#else
 	if (ps_g3_sap_init(sap, &ps_g3_sap_dl_msgcli, NULL) < 0)
 		return -1;
+#endif
 
 	ps_g3_sap_context(sap, NULL);
 	ps_g3_sap_callbacks(sap, &clbk_adp);
@@ -733,7 +744,7 @@ static int g3plc_netifInit(struct netif *netif, char *cfg)
 
 	if (create_dev(&oid, "/dev/g3adp") < 0) {
 		DEBUG_LOG("phoenix-rtos-lwip: can't create /dev/g3adp\n");
-		return;
+		return -EINVAL;
 	}
 
 	hwaddrStr = strtok(cfg, ":");
@@ -792,7 +803,7 @@ static int g3plc_netifInit(struct netif *netif, char *cfg)
 
 	if (lowpan6_g3_if_init(g3plc_priv.netif) != 0) {
 		DEBUG_LOG("g3plc-drv: Fail to initialize lowpan6 netif\n");
-		return;
+		return -EINVAL;
 	}
 
 	if (g3plc_priv.noauto) {

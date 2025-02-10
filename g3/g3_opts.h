@@ -37,7 +37,7 @@
 
 /** Debug level for 6LoWPAN in general */
 #ifndef LWIP_LOWPAN6_DEBUG
-#define LWIP_LOWPAN6_DEBUG               LWIP_DBG_OFF
+#define LWIP_LOWPAN6_DEBUG               LWIP_DBG_ON
 #endif
 
 /** LWIP_LOWPAN6_IP_COMPRESSED_DEBUG: enable compressed IP frame
@@ -97,7 +97,7 @@
 #endif
 
 #ifndef LOADNG_G3_DEBUG
-#define LOADNG_G3_DEBUG LWIP_DBG_OFF
+#define LOADNG_G3_DEBUG LWIP_DBG_ON
 #endif
 
 #ifndef LOADNG_G3_RREQ_TABLE_SIZE
@@ -117,7 +117,7 @@
 #endif
 
 #ifndef LBP_G3_DEBUG
-#define LBP_G3_DEBUG   LWIP_DBG_OFF
+#define LBP_G3_DEBUG   LWIP_DBG_ON
 #endif
 
 #ifndef LBP_G3_SCAN_TABLE_SIZE

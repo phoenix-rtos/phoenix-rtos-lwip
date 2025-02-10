@@ -667,7 +667,7 @@ static void do_socket_ioctl(msg_t *msg, int sock)
 	const void *in_data = ioctl_unpackEx(msg, &request, NULL, &out_data);
 
 	int err = socket_ioctl(sock, request, in_data, out_data);
-	ioctl_setResponseErr(msg, request, err);
+	ioctl_setResponse(msg, request, err, NULL);
 }
 
 
@@ -799,26 +799,26 @@ static int socket_op(msg_t *msg, int sock)
 			break;
 		case mtRead:
 			if (msg->o.size <= SSIZE_MAX)
-				msg->o.io.err = map_errno(lwip_read(sock, msg->o.data, msg->o.size));
+				msg->o.err = map_errno(lwip_read(sock, msg->o.data, msg->o.size));
 			else
-				msg->o.io.err = -EINVAL;
+				msg->o.err = -EINVAL;
 			break;
 		case mtWrite:
 			if (msg->i.size <= SSIZE_MAX)
-				msg->o.io.err = map_errno(lwip_write(sock, msg->i.data, msg->i.size));
+				msg->o.err = map_errno(lwip_write(sock, msg->i.data, msg->i.size));
 			else
-				msg->o.io.err = -EINVAL;
+				msg->o.err = -EINVAL;
 			break;
 		case mtGetAttr:
 			if (msg->i.attr.type != atPollStatus) {
-				msg->o.attr.err = -EINVAL;
+				msg->o.err = -EINVAL;
 				break;
 			}
 			msg->o.attr.val = poll_one(&polls, msg->i.attr.val, 0);
-			msg->o.attr.err = (msg->o.attr.val < 0) ? msg->o.attr.val : EOK;
+			msg->o.err = (msg->o.attr.val < 0) ? msg->o.attr.val : EOK;
 			break;
 		case mtClose:
-			msg->o.io.err = map_errno(lwip_close(sock));
+			msg->o.err = map_errno(lwip_close(sock));
 			return 1;
 		case mtDevCtl:
 			do_socket_ioctl(msg, sock);
@@ -835,7 +835,7 @@ static int socket_op(msg_t *msg, int sock)
 static void socket_thread(void *arg)
 {
 	struct sock_start *ss = arg;
-	unsigned long respid;
+	msg_rid_t respid;
 	uint32_t port = ss->port;
 	int sock = ss->sock, err;
 	msg_t msg;
@@ -940,7 +940,7 @@ static int do_getnameinfo(const struct sockaddr *sa, socklen_t addrlen, char *ho
 
 		if (host != NULL) {
 			snprintf(host, hostsz, "%u.%u.%u.%u", (unsigned char)sa->sa_data[2], (unsigned char)sa->sa_data[3],
-				(unsigned char)sa->sa_data[4], (unsigned char)sa->sa_data[5]);
+					(unsigned char)sa->sa_data[4], (unsigned char)sa->sa_data[5]);
 			host[hostsz - 1] = '\0';
 		}
 
@@ -1036,7 +1036,8 @@ static int do_getifaddrs(char *buf, size_t *buflen)
 	int i;
 #endif
 
-	NETIF_FOREACH(netif) {
+	NETIF_FOREACH(netif)
+	{
 		n_netifs++;
 		n_ifaddrs++;
 		/* lwip_netif_name | netif_num | '\0' */
@@ -1069,7 +1070,8 @@ static int do_getifaddrs(char *buf, size_t *buflen)
 	memset(buf, 0, needed);
 	memset(&sa, 0, sizeof(sa));
 	sin = (struct sockaddr_in *)&sa;
-	NETIF_FOREACH(netif) {
+	NETIF_FOREACH(netif)
+	{
 		dest->ifa_flags = netif->flags;
 		sin->sin_family = AF_INET;
 		sin->sin_len = sizeof(struct sockaddr_in);
@@ -1126,7 +1128,7 @@ static int do_getifaddrs(char *buf, size_t *buflen)
 
 static void socketsrv_thread(void *arg)
 {
-	unsigned long respid;
+	msg_rid_t respid;
 	size_t sz;
 	msg_t msg;
 	uint32_t port;
@@ -1160,9 +1162,9 @@ static void socketsrv_thread(void *arg)
 					break;
 				}
 				if ((sock = lwip_socket(smi->socket.domain, type, smi->socket.protocol)) < 0)
-					msg.o.lookup.err = -errno;
+					msg.o.err = -errno;
 				else {
-					msg.o.lookup.err = wrap_socket(&msg.o.lookup.dev.port, sock, smi->socket.type);
+					msg.o.err = wrap_socket(&msg.o.lookup.dev.port, sock, smi->socket.type);
 					msg.o.lookup.fil = msg.o.lookup.dev;
 				}
 				break;
@@ -1206,7 +1208,7 @@ static void socketsrv_thread(void *arg)
 				smo->sys.err = smo->ret == EAI_SYSTEM ? errno : 0;
 				break;
 			default:
-				msg.o.io.err = -EINVAL;
+				msg.o.err = -EINVAL;
 		}
 
 		msgRespond(port, &msg, respid);
