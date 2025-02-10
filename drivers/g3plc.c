@@ -16,6 +16,7 @@
 #include <g3plc.h>
 #include <lbp_g3.h>
 #include "netif-driver.h"
+#include <ps_g3_sap_dl_uart.h>
 #include <g3_adp_common.h>
 
 struct g3plc_data_request {
@@ -28,8 +29,10 @@ struct g3plc_data_request {
 };
 
 struct g3adp_ctl {
-    enum { g3adp_set, g3adp_get, g3adp_test } type;
-    char name[32];
+	enum { g3adp_set,
+		g3adp_get,
+		g3adp_test } type;
+	char name[32];
 };
 
 struct {
@@ -59,7 +62,10 @@ struct {
 	} buf;
 } scan = { 0 };
 
-#define DEBUG_LOG(...) { fprintf(stderr, __VA_ARGS__); }
+#define DEBUG_LOG(...) \
+	{ \
+		printf(__VA_ARGS__); \
+	}
 
 static void *be_memcpy(void *dest, const void *src, size_t n)
 {
@@ -72,30 +78,30 @@ static void *be_memcpy(void *dest, const void *src, size_t n)
 }
 
 
-struct macMibValue setup_nb_table(ps_g3_mac_nb_entry_t* nb_entry)
+struct macMibValue setup_nb_table(ps_g3_mac_nb_entry_t *nb_entry)
 {
-    struct macMibValue value;
-    uint8_t* ptr = (uint8_t*) value.data;
+	struct macMibValue value;
+	uint8_t *ptr = (uint8_t *)value.data;
 
-    *ptr++ = nb_entry->short_address;
-    *ptr++ = nb_entry->short_address >> 8;
-    memcpy(ptr, nb_entry->tone_map.tm, sizeof(nb_entry->tone_map));
-    ptr += sizeof(ps_g3_phy_tone_map_t);
-    *ptr++ = nb_entry->tone_actives;
-    memcpy(ptr, nb_entry->tx_coef, 6);
-    ptr += 6;
-    *ptr++ = nb_entry->tx_res;
-    *ptr++ = nb_entry->tx_gain;
-    *ptr++ = nb_entry->mod_type;
-    *ptr++ = nb_entry->mod_scheme;
-    *ptr++ = nb_entry->phase_diff;
-    *ptr++ = nb_entry->lqi;
-    *ptr++ = nb_entry->tmr_valid_time;
-    *ptr++ = nb_entry->tmr_valid_time >> 8;
+	*ptr++ = nb_entry->short_address;
+	*ptr++ = nb_entry->short_address >> 8;
+	memcpy(ptr, nb_entry->tone_map.tm, sizeof(nb_entry->tone_map));
+	ptr += sizeof(ps_g3_phy_tone_map_t);
+	*ptr++ = nb_entry->tone_actives;
+	memcpy(ptr, nb_entry->tx_coef, 6);
+	ptr += 6;
+	*ptr++ = nb_entry->tx_res;
+	*ptr++ = nb_entry->tx_gain;
+	*ptr++ = nb_entry->mod_type;
+	*ptr++ = nb_entry->mod_scheme;
+	*ptr++ = nb_entry->phase_diff;
+	*ptr++ = nb_entry->lqi;
+	*ptr++ = nb_entry->tmr_valid_time;
+	*ptr++ = nb_entry->tmr_valid_time >> 8;
 
-    value.length = ptr - value.data;
+	value.length = ptr - value.data;
 
-    return value;
+	return value;
 }
 
 
@@ -157,7 +163,7 @@ static const char *status_to_str(enum macStatus status)
 
 /* Default initial values. Should be read from cfg in the future */
 static const u8_t psk[] = { 0xAB, 0x10, 0x34, 0x11, 0x45, 0x11, 0x1B, 0xC3,
-                            0xC1, 0x2D, 0xE8, 0xFF, 0x11, 0x14, 0x22, 0x04 };
+	0xC1, 0x2D, 0xE8, 0xFF, 0x11, 0x14, 0x22, 0x04 };
 static const u8_t gmk[] = { 0xAF, 0x4D, 0x6D, 0xCC, 0xF1, 0x4D, 0xE7, 0xC1, 0xC4, 0x23, 0x5E, 0x6F, 0xEF, 0x6C, 0x15, 0x1F };
 static const u16_t pan_id = 0x781d;
 
@@ -240,25 +246,25 @@ static void mcps_data_request_test_vector_dump(ps_g3_mcps_data_request_t *reques
 {
 	int i;
 
-    DEBUG_LOG("\033[1;33m");
-    DEBUG_LOG("MCPS-DATA.request test vector:\n");
-    DEBUG_LOG("\033[0;36m");
-    DEBUG_LOG("%02X,%02X,%04X,", request->src_addr_mode, request->dst_addr.mode, request->dst_pan_id);
+	DEBUG_LOG("\033[1;33m");
+	DEBUG_LOG("MCPS-DATA.request test vector:\n");
+	DEBUG_LOG("\033[0;36m");
+	DEBUG_LOG("%02X,%02X,%04X,", request->src_addr_mode, request->dst_addr.mode, request->dst_pan_id);
 
-    if (request->dst_addr.mode == ps_802154_addr_mode__short) {
-             DEBUG_LOG("%04X", request->dst_addr.short_address);
-    } else {
-        	for (i = 0; i < 8; i++) {
-                DEBUG_LOG("%02X", request->dst_addr.long_address.u8[i]);
-        }
-    }
-    DEBUG_LOG(",");
-    for (i = 0; i < request->msdu_len; i++)
-        DEBUG_LOG("%02X", request->msdu[i]);
+	if (request->dst_addr.mode == ps_802154_addr_mode__short) {
+		DEBUG_LOG("%04X", request->dst_addr.short_address);
+	}
+	else {
+		for (i = 0; i < 8; i++) {
+			DEBUG_LOG("%02X", request->dst_addr.long_address.u8[i]);
+		}
+	}
+	DEBUG_LOG(",");
+	for (i = 0; i < request->msdu_len; i++)
+		DEBUG_LOG("%02X", request->msdu[i]);
 
-    DEBUG_LOG(",%02X,%02X,%02X,%02X\n", request->tx_opts, request->qos, request->security_level, request->key_index);
-    DEBUG_LOG("\033[0m");
-
+	DEBUG_LOG(",%02X,%02X,%02X,%02X\n", request->tx_opts, request->qos, request->security_level, request->key_index);
+	DEBUG_LOG("\033[0m");
 }
 
 static void mcps_data_indication(ps_g3_sap_t *sap, ps_g3_mcps_data_indication_t *indication)
@@ -302,13 +308,13 @@ static void mcps_data_indication(ps_g3_sap_t *sap, ps_g3_mcps_data_indication_t 
 	n_indication.msdu_linkquality = indication->msdu_linkquality;
 
 	lowpan6_g3_tcpip_input(indication->msdu, indication->msdu_len,
-	                       g3plc_priv.netif, &src, &dst, &n_indication);;
+			g3plc_priv.netif, &src, &dst, &n_indication);
+	;
 }
 
 
-
 int g3plc_output(struct netif *netif, struct pbuf *p, const struct lowpan6_link_addr *src, const struct lowpan6_link_addr *dst,
-	uint8_t security_level, uint16_t pan_id, uint8_t qos, uint8_t key_index)
+		uint8_t security_level, uint16_t pan_id, uint8_t qos, uint8_t key_index)
 {
 	struct pbuf *q;
 	struct g3plc_data_request *req;
@@ -359,7 +365,7 @@ int g3plc_output(struct netif *netif, struct pbuf *p, const struct lowpan6_link_
 
 	/* Broadcast packet */
 	if (req->req.dst_addr.mode == ps_802154_addr_mode__short &&
-		req->req.dst_addr.short_address == 0xFFFF) {
+			req->req.dst_addr.short_address == 0xFFFF) {
 		req->req.tx_opts = 0;
 	}
 	else {
@@ -405,34 +411,33 @@ static int g3plc_mac_get(ps_g3_mlme_get_request_t *req)
 /* G3-PLC MAC API for the 6LoWPAN layer */
 int g3plc_mac_nb_table_lookup_sync(struct lowpan6_link_addr *addr, struct g3plc_mac_nb_entry *entry)
 {
-    ps_g3_mlme_get_request_t req = {.pib_attr_id = macExtNeighbourLookup};
-    unsigned i;
-    u16_t short_addr;
+	ps_g3_mlme_get_request_t req = { .pib_attr_id = macExtNeighbourLookup };
+	unsigned i;
+	u16_t short_addr;
 	int ret;
 
-    short_addr = lowpan6_link_addr_to_u16(addr);
-    short_addr = (((uint16_t)short_addr >> 8) & 0xff) | (((uint16_t)short_addr << 8) & 0xff00);
-    req.pib_attr_index = short_addr;
+	short_addr = lowpan6_link_addr_to_u16(addr);
+	short_addr = (((uint16_t)short_addr >> 8) & 0xff) | (((uint16_t)short_addr << 8) & 0xff00);
+	req.pib_attr_index = short_addr;
 
 	ret = g3plc_mac_get(&req);
 
-    if (ret == MAC_STATUS_SUCCESS) {
-        /* TODO: do we get active tones correctly? */
-        memcpy(entry, g3plc_priv.mlmeGetData, sizeof(struct g3plc_mac_nb_entry));
+	if (ret == MAC_STATUS_SUCCESS) {
+		/* TODO: do we get active tones correctly? */
+		memcpy(entry, g3plc_priv.mlmeGetData, sizeof(struct g3plc_mac_nb_entry));
 		DEBUG_LOG("g3plc-drv: nb entry valid for %04X\n", short_addr);
-        return 0;
-    }
+		return 0;
+	}
 
 	DEBUG_LOG("g3plc-drv: NO nb entry for %04X\n", short_addr);
-    return -1;
-
+	return -1;
 }
 
 int g3plc_scan_request(struct g3plc_scan_entry *buf, int size, uint16_t duration)
 {
 	ps_g3_mlme_scan_request_t req = { .scan_duration = duration };
 
- 	DEBUG_LOG("g3plc_scan_request\n");
+	DEBUG_LOG("g3plc_scan_request\n");
 	g3plc_priv.sap.clbk.mlme_scan_request(&g3plc_priv.sap, &req);
 	scan.is_active = 1;
 	scan.buf.entries = buf;
@@ -548,22 +553,22 @@ int g3plc_network_start(uint16_t pan_id)
 
 int g3_nb_table_set(uint16_t addr, uint8_t lqi, uint8_t ind)
 {
-    ps_g3_mac_nb_entry_t nb_entry = {
-        .short_address = addr,
-        .tone_map = { { 0x3f, 0 } }, /* FIXME: zero tonemap causes abort(), ps_assert no subcarriers */ \
-        .tx_coef = { 0, 0, 0, 0, 0, 0 },
-        .tx_res = 0,
-        .tx_gain = 0,
-        .mod_type = 0, /* robo */
-        .mod_scheme = 0,
-        .phase_diff = 0,
-        .lqi = lqi,
-        .tmr_valid_time = 0xff,
-    };
-    ps_g3_mlme_set_request_t set_nb_table = {
-        .pib_attr_id = macNeighbourTable,
-        .pib_attr_index = ind,
-        .pib_attr_value = setup_nb_table(&nb_entry),
+	ps_g3_mac_nb_entry_t nb_entry = {
+		.short_address = addr,
+		.tone_map = { { 0x3f, 0 } }, /* FIXME: zero tonemap causes abort(), ps_assert no subcarriers */
+		.tx_coef = { 0, 0, 0, 0, 0, 0 },
+		.tx_res = 0,
+		.tx_gain = 0,
+		.mod_type = 0, /* robo */
+		.mod_scheme = 0,
+		.phase_diff = 0,
+		.lqi = lqi,
+		.tmr_valid_time = 0xff,
+	};
+	ps_g3_mlme_set_request_t set_nb_table = {
+		.pib_attr_id = macNeighbourTable,
+		.pib_attr_index = ind,
+		.pib_attr_value = setup_nb_table(&nb_entry),
 	};
 
 	return g3plc_mac_set(&set_nb_table);
@@ -649,14 +654,13 @@ static void g3plc_get_param(char *name)
 	lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *)netif->state;
 
 	if (!strcmp(name, "")) {
-
 	}
 }
 
 static void g3plc_msg_thread(void *arg)
 {
 	msg_t msg = { 0 };
-	unsigned long int rid;
+	msg_rid_t rid;
 	int test;
 	struct g3adp_ctl *ctl;
 
@@ -669,10 +673,10 @@ static void g3plc_msg_thread(void *arg)
 				ctl = (struct g3adp_ctl *)msg.i.raw;
 				if (ctl->type == g3adp_test) {
 					DEBUG_LOG("g3adp: devctl test %s\n", ctl->name);
-					msg.o.io.err = g3plc_test_cmd(ctl->name);
+					msg.o.err = g3plc_test_cmd(ctl->name);
 				}
 				else if (ctl->type == g3adp_get) {
-					msg.o.io.err = g3plc_get_val(ctl->name);
+					msg.o.err = g3plc_get_val(ctl->name);
 				}
 
 			default:
@@ -702,9 +706,19 @@ static int sap_setup(ps_g3_sap_t *sap)
 		.mlme_start_confirm = mlme_start_confirm,
 		/* .mlme_comm_status_indication = mlme_comm_status_indication, */
 	};
-
+#define USE_SAP_UART 1
+#ifdef USE_SAP_UART
+	ps_g3_sap_dl_uart_cfg_t sap_dl_cfg = {
+		.devname = "/dev/uart3",
+	};
+	if (ps_g3_sap_init(sap, &ps_g3_sap_dl_uart, &sap_dl_cfg) < 0) {
+		printf("ps_g3_sap_init() unable to initialize sap layer");
+		return -1;
+	}
+#else
 	if (ps_g3_sap_init(sap, &ps_g3_sap_dl_msgcli, NULL) < 0)
 		return -1;
+#endif
 
 	ps_g3_sap_context(sap, NULL);
 	ps_g3_sap_callbacks(sap, &clbk_adp);
@@ -730,7 +744,7 @@ static int g3plc_netifInit(struct netif *netif, char *cfg)
 
 	if (create_dev(&oid, "/dev/g3adp") < 0) {
 		DEBUG_LOG("phoenix-rtos-lwip: can't create /dev/g3adp\n");
-		return;
+		return -EINVAL;
 	}
 
 	hwaddrStr = strtok(cfg, ":");
@@ -789,7 +803,7 @@ static int g3plc_netifInit(struct netif *netif, char *cfg)
 
 	if (lowpan6_g3_if_init(g3plc_priv.netif) != 0) {
 		DEBUG_LOG("g3plc-drv: Fail to initialize lowpan6 netif\n");
-		return;
+		return -EINVAL;
 	}
 
 	if (g3plc_priv.noauto) {
@@ -804,17 +818,16 @@ static int g3plc_netifInit(struct netif *netif, char *cfg)
 				return -EINVAL;
 			}
 
-  			if (lowpan6_g3_set_short_addr(netif, 0x00, 0x00) != ERR_OK) {
-    			DEBUG_LOG("g3plc-drv: Fail to set shord address\n");
-    			return -EINVAL;
-  			}
-
+			if (lowpan6_g3_set_short_addr(netif, 0x00, 0x00) != ERR_OK) {
+				DEBUG_LOG("g3plc-drv: Fail to set shord address\n");
+				return -EINVAL;
+			}
 		}
 		g3plc_lbp_init();
 	}
 
 	beginthread(g3plc_msg_thread, 4, g3plc_priv.msgstack, sizeof(g3plc_priv.msgstack), NULL);
-	//netif_set_default(netif);
+	// netif_set_default(netif);
 	beginthread(g3plc_tx_thread, 4, g3plc_priv.txstack, sizeof(g3plc_priv.txstack), &g3plc_priv.sap);
 
 	return EOK;
@@ -829,8 +842,7 @@ static netif_driver_t g3plc_drv = {
 };
 
 
-__constructor__(1000)
-void register_driver_g3plc(void)
+__constructor__(1000) void register_driver_g3plc(void)
 {
 	register_netif_driver(&g3plc_drv);
 }

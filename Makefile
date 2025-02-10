@@ -25,12 +25,13 @@ LWIP_EXCLUDE := netif/slipif.c
 LWIP_SRCS := $(filter-out $(addprefix $(LWIPDIR)/,$(LWIP_EXCLUDE)),$(LWIPNOAPPSFILES))
 
 # G3-PLC modifications to core LwIP
-ifeq (${LWIP_G3_BUILD}, yes)
+ifeq ($(LWIP_G3_BUILD), yes)
 CFLAGS := $(CFLAGS) -I./g3/
 include g3/Makefile
 endif
 
 CFLAGS += -Wundef -Iinclude -Ilib-lwip/src/include -I"$(LWIPOPTS_DIR)"
+CFLAGS += $(CFLAGS) -I$(PREFIX_BUILD)/phrtos3-include -I$(PREFIX_PROJECT)/G3-PLC/ps_g3_phy/api/include
 
 NAME := lwip-core
 SRCS := $(LWIP_SRCS)
