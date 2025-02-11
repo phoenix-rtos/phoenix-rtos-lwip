@@ -23,7 +23,11 @@
 
 
 #ifndef MAX_MDIO_BUSSES
+#if defined(__CPU_IMXRT117X)
+#define MAX_MDIO_BUSSES 2
+#else
 #define MAX_MDIO_BUSSES 1
+#endif
 #endif
 
 

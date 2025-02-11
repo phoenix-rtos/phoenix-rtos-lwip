@@ -17,20 +17,17 @@ where *driver* is one of:
 
 For qemu, it's usually: `rtl:0x10:10`
 
-2. iMX.6ULL ENET module (== "Freescale Ethernet Controller"?)
+2. iMX ENET module (== "Freescale Ethernet Controller"?)
 
 	enet:mmio:irq[:no-mdio][:phyinfo]
-
-.    | ENET1      | ENET2
----- | -----      | ----
-mmio | 0x02188000 | 0x020b4000
-irq  | 150        | 152
 
 `no-mdio` disables MDIO support (only one module can drive MDIO bus)
 
 When an external PHY is used, *phyinfo* is formatted as follows:
 
-	PHY:[busnr.]id[:reset:[-]n:/dev/gpioX][:irq:[-]n:/dev/gpioX]
+	PHY:model:[busnr.]id[:reset:[-]n:/dev/gpioX][:irq:[-]n:/dev/gpioX]
+
+model = PHY chip model in lowercase, e.g. `ksz8081rnb`
 
 busnr = bus registered by driver (in driver-arg-order, counted from 0)
 
@@ -48,8 +45,18 @@ n = pin number
 
 iMX.6ULL's evaluation board needs:
 ```
-enet:0x02188000:150:PHY:0.2:reset:-1:/dev/gpio6:irq:-5:/dev/gpio5
-enet:0x020b4000:152:no-mdio:PHY:0.1:reset:-2:/dev/gpio6:irq:-6:/dev/gpio5
+enet:0x02188000:150:PHY:ksz8081rnb:0.2:irq:5:/dev/gpio5 enet:0x020b4000:152:no-mdio:PHY:ksz8081rnb:0.1:irq:6:/dev/gpio5
+```
+
+iMX.RT1064's evaluation board needs:
+```
+enet:0x402D8000:130:PHY:ksz8081rnb:0.2:irq:-10:/dev/gpio1:reset:-9:/dev/gpio1
+```
+
+iMX.RT1170's evaluation board B (EVKB) needs:
+```
+enet:0x40424000:153:PHY:rtl8201fi-vc-cg:0.3:reset:12:/dev/gpio12:irq:-11:/dev/gpio9
+enet:0x40420000:157:PHY:rtl8211fdi-cg:1.1:reset:-14:/dev/gpio11:irq:-13:/dev/gpio11
 ```
 
 ## Build

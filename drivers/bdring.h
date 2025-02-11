@@ -27,8 +27,7 @@ enum {
 };
 
 
-typedef struct net_bufdesc_ops_
-{
+typedef struct net_bufdesc_ops_ {
 	size_t (*nextRxBufferSize)(const net_bufdesc_ring_t *ring, size_t i);
 	int (*pktRxFinished)(const net_bufdesc_ring_t *ring, size_t i);
 	void (*fillRxDesc)(const net_bufdesc_ring_t *ring, size_t i, addr_t pa, size_t sz, unsigned seg /* = zero */);
@@ -37,16 +36,14 @@ typedef struct net_bufdesc_ops_
 
 	size_t desc_size;
 	size_t ring_alignment;
-	size_t pkt_buf_sz;
 	size_t max_tx_frag;
 } net_bufdesc_ops_t;
 
 
-struct net_bufdesc_ring_
-{
+struct net_bufdesc_ring_ {
 	volatile void *ring;
 	struct pbuf **bufp;
-	volatile unsigned head, tail;
+	_Atomic volatile unsigned head, tail;
 	unsigned last;
 	addr_t phys;
 	const net_bufdesc_ops_t *ops;

@@ -1,12 +1,5 @@
 # Makefile for lwip drivers to be included
 
-ifeq ($(EPHY_KSZ8081),RNA)
-  LOCAL_CFLAGS := -DEPHY_KSZ8081RNA
-endif
-ifeq ($(EPHY_KSZ8081),RND)
-  LOCAL_CFLAGS := -DEPHY_KSZ8081RND
-endif
-
 # make possible to specify defalult APN name externally
 ifneq ($(PPPOS_DEFAULT_APN),)
   LOCAL_CFLAGS := -DPPPOS_DEFAULT_APN=\"$(PPPOS_DEFAULT_APN)\"
