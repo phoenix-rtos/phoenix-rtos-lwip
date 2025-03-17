@@ -85,7 +85,7 @@ int gpio_wait(gpio_info_t *gp, int active, time_t timeout)
 	when = now + timeout;
 
 	for (;;) {
-		val = gpio_get(gp);	// FIXME: in gpiosrv
+		val = gpio_get(gp);  // FIXME: in gpiosrv
 		if (!active ^ !val)
 			return 0;
 
@@ -96,7 +96,8 @@ int gpio_wait(gpio_info_t *gp, int active, time_t timeout)
 			now = when - now;
 			if (now > 100000)
 				now = 100000;
-		} else
+		}
+		else
 			now = 100000;
 
 		usleep(now);

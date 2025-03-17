@@ -23,7 +23,7 @@
 #include <sys/threads.h>
 
 
-//#define EPHY_KSZ8081RND
+// #define EPHY_KSZ8081RND
 
 
 static uint16_t ephy_reg_read(eth_phy_state_t *phy, uint16_t reg)
@@ -49,7 +49,8 @@ static void ephy_reset(eth_phy_state_t *phy)
 		gpio_set(&phy->reset, 0);
 		usleep(phy->reset_release_time_us);
 		mdio_unlock_bus(phy->bus);
-	} else {
+	}
+	else {
 		int err = 0, n = 10;
 
 		ephy_reg_write(phy, 0, 0x8000);
@@ -79,20 +80,20 @@ static uint32_t ephy_show_id(eth_phy_state_t *phy)
 
 	ret = ephy_reg_read(phy, 0x03);
 	phyid |= ret;
-	oui |= (ret & 0xFC00) << (18-10);
+	oui |= (ret & 0xFC00) << (18 - 10);
 
-/*
-	printf("lwip: ephy%u.%u id 0x%08x (vendor 0x%06x model 0x%02x rev %u)\n",
-		phy->bus, phy->addr, phyid, oui, (ret >> 4) & 0x3F, ret & 0x0F);
-*/
+	/*
+		printf("lwip: ephy%u.%u id 0x%08x (vendor 0x%06x model 0x%02x rev %u)\n",
+			phy->bus, phy->addr, phyid, oui, (ret >> 4) & 0x3F, ret & 0x0F);
+	*/
 
 	oui = ephy_reg_read(phy, 0x10);
 	ret = ephy_reg_read(phy, 0x11);
 
-/*
-	printf("lwip: ephy%u.%u DigCtl 0x%04x AFECtl1 0x%04x\n",
-		phy->bus, phy->addr, oui, ret);
-*/
+	/*
+		printf("lwip: ephy%u.%u DigCtl 0x%04x AFECtl1 0x%04x\n",
+			phy->bus, phy->addr, oui, ret);
+	*/
 
 	return phyid;
 }
@@ -217,7 +218,8 @@ static int ephy_config(eth_phy_state_t *phy, char *cfg)
 			return -EINVAL;
 
 		phy->addr = strtoul(cfg, &p, 0);
-	} else
+	}
+	else
 		phy->bus = 0;
 
 	if (phy->addr & ~NETDEV_MDIO_ADDR_MASK) {
