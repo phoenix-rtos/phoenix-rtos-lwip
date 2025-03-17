@@ -34,18 +34,18 @@
 #include <unistd.h>
 
 
-#define ENET_CLK_KHZ			(66000 /* IPG */)	// BT_FREQ=0
+#define ENET_CLK_KHZ (66000 /* IPG */)  // BT_FREQ=0
 
-#define USE_ENET_EXT_DESCRIPTORS	0
-#define USE_RMII			1
-#define ENABLE_FLOW_CONTROL		1
-#define ENABLE_PROMISC			0
-#define ENABLE_RX_PAD_REMOVE		1
-#define ENET_RX_RING_SIZE		64
-#define ENET_TX_RING_SIZE		64
-#define ENET_BUFFER_SIZE		(2048 - 64)
-#define MDC_ALWAYS_ON			1
-#define MDIO_DEBUG			0
+#define USE_ENET_EXT_DESCRIPTORS 0
+#define USE_RMII                 1
+#define ENABLE_FLOW_CONTROL      1
+#define ENABLE_PROMISC           0
+#define ENABLE_RX_PAD_REMOVE     1
+#define ENET_RX_RING_SIZE        64
+#define ENET_TX_RING_SIZE        64
+#define ENET_BUFFER_SIZE         (2048 - 64)
+#define MDC_ALWAYS_ON            1
+#define MDIO_DEBUG               0
 /* #define ENET_VERBOSE */
 
 
@@ -117,7 +117,9 @@ static void enet_reset(enet_priv_t *state)
 	/* trigger and wait for reset */
 	enet_printf(state, "Resetting device...");
 	state->mmio->ECR = ENET_ECR_REG_MAGIC | ENET_ECR_RESET;
-	do usleep(100); while (state->mmio->ECR & ENET_ECR_ETHEREN);
+	do
+		usleep(100);
+	while (state->mmio->ECR & ENET_ECR_ETHEREN);
 	enet_printf(state, "Reset done.");
 
 	state->mmio->IAUR = 0;
@@ -129,32 +131,32 @@ static void enet_reset(enet_priv_t *state)
 
 static void enet_start(enet_priv_t *state)
 {
-//	addr_t ecr_pa = (addr_t)&((struct enet_regs *)state->phys)->ECR;
+	//	addr_t ecr_pa = (addr_t)&((struct enet_regs *)state->phys)->ECR;
 	// FIXME: last_will(ECR = ENET_ECR_REG_MAGIC | ENET_ECR_RESET);
 
-	state->mmio->MRBR = ENET_BUFFER_SIZE;	// FIXME: coerce with net_allocPktBuf()
-	state->mmio->FTRL = BIT(14)-1;	// FIXME: truncation to just above link MTU
+	state->mmio->MRBR = ENET_BUFFER_SIZE;  // FIXME: coerce with net_allocPktBuf()
+	state->mmio->FTRL = BIT(14) - 1;       // FIXME: truncation to just above link MTU
 
 	state->mmio->RCR = (1518 << 16) |
-			  ENET_RCR_CRCFWD | ENET_RCR_PAUFWD |
+			ENET_RCR_CRCFWD | ENET_RCR_PAUFWD |
 #if ENABLE_RX_PAD_REMOVE
-			  ENET_RCR_PADEN |
+			ENET_RCR_PADEN |
 #endif
 #if USE_RMII
-			  ENET_RCR_RMII_MODE |
+			ENET_RCR_RMII_MODE |
 #endif
 #if ENABLE_FLOW_CONTROL
-			  ENET_RCR_FCE |
+			ENET_RCR_FCE |
 #endif
 #if ENABLE_PROMISC
-			  ENET_RCR_PROM |
+			ENET_RCR_PROM |
 #endif
-			  ENET_RCR_MII_MODE;
+			ENET_RCR_MII_MODE;
 	state->mmio->RACC = ENET_RACC_SHIFT16 |
 #if !ENABLE_PROMISC
-			   ENET_RACC_LINEDIS | ENET_RACC_PRODIS | ENET_RACC_IPDIS |
+			ENET_RACC_LINEDIS | ENET_RACC_PRODIS | ENET_RACC_IPDIS |
 #endif
-			   ENET_RACC_PADREM;
+			ENET_RACC_PADREM;
 
 	state->mmio->TCR = ENET_TCR_FDEN;
 #if ETH_PAD_SIZE == 2
@@ -169,12 +171,12 @@ static void enet_start(enet_priv_t *state)
 
 	state->mmio->ECR = ENET_ECR_REG_MAGIC |
 #if USE_ENET_EXT_DESCRIPTORS
-			  ENET_ECR_EN1588 |
+			ENET_ECR_EN1588 |
 #endif
 #if __BYTE_ORDER == __LITTLE_ENDIAN
-			  ENET_ECR_DBSWP |
+			ENET_ECR_DBSWP |
 #endif
-			  ENET_ECR_ETHEREN;
+			ENET_ECR_ETHEREN;
 
 	/* trigger HW RX */
 	state->mmio->RDAR = ~0u;
@@ -182,12 +184,12 @@ static void enet_start(enet_priv_t *state)
 #ifdef ENET_VERBOSE
 	enet_printf(state, "regs:   ECR   ,  EIMR  ,  TACC  ,  RACC  ,  TCR   ,  RCR   ,  MRBR  ,  FTRL  ");
 	enet_printf(state, "regs: %08x %08x %08x %08x %08x %08x %08x %08x",
-		state->mmio->ECR, state->mmio->EIMR, state->mmio->TACC, state->mmio->RACC,
-		state->mmio->TCR, state->mmio->RCR, state->mmio->MRBR, state->mmio->FTRL);
+			state->mmio->ECR, state->mmio->EIMR, state->mmio->TACC, state->mmio->RACC,
+			state->mmio->TCR, state->mmio->RCR, state->mmio->MRBR, state->mmio->FTRL);
 	enet_printf(state, "regs:   PLL6  ,  CCGR0 ,  GPR1  ,TXCLKMUX,TXCLKPAD,RCLK1SID,OSC24-M0,OSC24-LP");
 	enet_printf(state, "regs: %08x %08x %08x %08x %08x %08x %08x %08x",
-		hwdebug_read(0x20c80e0), hwdebug_read(0x20c4068), hwdebug_read(0x20e4004), hwdebug_read(0x20e00dc),
-		hwdebug_read(0x20e0368), hwdebug_read(0x20e0574), hwdebug_read(0x20c8150), hwdebug_read(0x20c8270));
+			hwdebug_read(0x20c80e0), hwdebug_read(0x20c4068), hwdebug_read(0x20e4004), hwdebug_read(0x20e00dc),
+			hwdebug_read(0x20e0368), hwdebug_read(0x20e0574), hwdebug_read(0x20c8150), hwdebug_read(0x20c8270));
 #endif
 }
 
@@ -265,14 +267,16 @@ static void enet_readCardMac(enet_priv_t *state)
 		mac[3] = get_byte(buf[0], 2);
 		mac[4] = get_byte(buf[0], 1);
 		mac[5] = get_byte(buf[0], 0);
-	} else if (state->devphys == 0x020B4000 /* iMX6ULL.ENET2 */ && !enet_readFusedMac(buf)) {
+	}
+	else if (state->devphys == 0x020B4000 /* iMX6ULL.ENET2 */ && !enet_readFusedMac(buf)) {
 		mac[0] = get_byte(buf[2], 3);
 		mac[1] = get_byte(buf[2], 2);
 		mac[2] = get_byte(buf[2], 1);
 		mac[3] = get_byte(buf[2], 0);
 		mac[4] = get_byte(buf[1], 3);
 		mac[5] = get_byte(buf[1], 2);
-	} else {
+	}
+	else {
 		buf[0] = state->mmio->PALR;
 		buf[1] = state->mmio->PAUR;
 
@@ -289,8 +293,8 @@ static void enet_readCardMac(enet_priv_t *state)
 		mac[0] = 0x02;
 		mac[1] = (cpuId >> 24) & 0xFF;
 		mac[2] = (cpuId >> 16) & 0xFF;
-		mac[3] = (cpuId >>  8) & 0xFF;
-		mac[4] = (cpuId >>  0) & 0xFF;
+		mac[3] = (cpuId >> 8) & 0xFF;
+		mac[4] = (cpuId >> 0) & 0xFF;
 		mac[5] = state->devphys >> 16;
 	}
 
@@ -320,7 +324,7 @@ static size_t enet_nextRxBufferSize(const net_bufdesc_ring_t *ring, size_t i)
 		return 0;
 
 	sz = desc->len;
-	if (!sz)	// FIXME: hw bug?
+	if (!sz)  // FIXME: hw bug?
 		sz = 1;
 	return sz;
 }
@@ -390,10 +394,10 @@ static const net_bufdesc_ops_t enet_ring_ops = {
 	enet_nextTxDone,
 	enet_fillTxDesc,
 
-	/* desc_size */		sizeof(enet_buf_desc_t),
-	/* ring_alignment */	64,
-	/* pkt_buf_sz */	ENET_BUFFER_SIZE,
-	/* max_tx_frag */	0xFFFF,
+	/* desc_size */ sizeof(enet_buf_desc_t),
+	/* ring_alignment */ 64,
+	/* pkt_buf_sz */ ENET_BUFFER_SIZE,
+	/* max_tx_frag */ 0xFFFF,
 };
 
 static const size_t enet_ring_sizes[] = { ENET_RX_RING_SIZE, ENET_TX_RING_SIZE };
@@ -538,17 +542,18 @@ static uint16_t enet_mdioIO(enet_priv_t *state, unsigned addr, unsigned reg, uns
 
 	if (addr & NETDEV_MDIO_CLAUSE45) {
 		uint32_t dev = ((addr & NETDEV_MDIO_A_MASK) << 18) |
-			((addr & NETDEV_MDIO_B_MASK) << (23-8));
+				((addr & NETDEV_MDIO_B_MASK) << (23 - 8));
 		state->mmio->MMFR = 0x00020000 | /* extended MDIO address write */
-			dev | (reg & 0xFFFF);
+				dev | (reg & 0xFFFF);
 		enet_mdioWait(state);
 		state->mmio->MMFR = (read ? 0x20020000 : 0x10020000) | /* extended MDIO data r/w */
-			dev | (read ? 0 : val & 0xFFFF);
-	} else { /* clause 22 */
+				dev | (read ? 0 : val & 0xFFFF);
+	}
+	else {                                                     /* clause 22 */
 		state->mmio->MMFR = (read ? 0x60020000 : 0x50020000) | /* standard MDIO data r/w */
-			((addr & NETDEV_MDIO_A_MASK) << 23) |
-			((reg & 0x1F) << 18) |
-			(read ? 0 : val & 0xFFFF);
+				((addr & NETDEV_MDIO_A_MASK) << 23) |
+				((reg & 0x1F) << 18) |
+				(read ? 0 : val & 0xFFFF);
 	}
 
 	enet_mdioWait(state);
@@ -715,9 +720,9 @@ static int enet_pinConfig(enet_priv_t *state)
 
 	state->mmio->RCR =
 #if USE_RMII
-		ENET_RCR_RMII_MODE |
+			ENET_RCR_RMII_MODE |
 #endif
-		ENET_RCR_MII_MODE;
+			ENET_RCR_MII_MODE;
 
 	return 0;
 }
@@ -798,7 +803,7 @@ static err_t enet_netifOutput(struct netif *netif, struct pbuf *p)
 
 static void enet_setLinkState(void *arg, int state)
 {
-	struct netif* netif = (struct netif*) arg;
+	struct netif *netif = (struct netif *)arg;
 	enet_priv_t *priv = netif->state;
 	int speed, full_duplex;
 
@@ -823,7 +828,7 @@ static void enet_setLinkState(void *arg, int state)
 #define _TP_ETHTYPE "\x05\xDD" /* eth frame type 0x05DD is undefined */
 #define _TP_10DIG   "0123456789"
 #define TEST_PACKET "ddddddssssss" _TP_ETHTYPE \
-	_TP_10DIG _TP_10DIG _TP_10DIG _TP_10DIG _TP_10DIG _TP_10DIG _TP_10DIG
+		_TP_10DIG _TP_10DIG _TP_10DIG _TP_10DIG _TP_10DIG _TP_10DIG _TP_10DIG
 #define TEST_PACKET_LEN (sizeof((TEST_PACKET)) - 1)
 
 
@@ -850,8 +855,8 @@ static err_t test_netif_input(struct pbuf *p, struct netif *netif)
 		}
 		enet_printf(priv, "self-test RX: invalid packet contents");
 		enet_printf(priv, "0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x",
-			data[0], data[1], data[2], data[3],
-			data[4], data[5], data[6], data[7]);
+				data[0], data[1], data[2], data[3],
+				data[4], data[5], data[6], data[7]);
 #endif
 		is_valid_pkt = false;
 	}
@@ -919,14 +924,14 @@ static int enet_phySelfTest(struct netif *netif)
 
 #ifdef ENET_VERBOSE
 		enet_printf(priv, "stats: TX: PACKETS=%u CRC_ALIGN=%u OK=%u",
-			priv->mmio->stats.RMON_T_PACKETS,
-			priv->mmio->stats.RMON_T_CRC_ALIGN,
-			priv->mmio->stats.IEEE_T_FRAME_OK);
+				priv->mmio->stats.RMON_T_PACKETS,
+				priv->mmio->stats.RMON_T_CRC_ALIGN,
+				priv->mmio->stats.IEEE_T_FRAME_OK);
 
 		enet_printf(priv, "stats: RX: PACKETS=%u CRC_ALIGN=%u OK=%u",
-			priv->mmio->stats.RMON_R_PACKETS,
-			priv->mmio->stats.RMON_R_CRC_ALIGN,
-			priv->mmio->stats.IEEE_R_FRAME_OK);
+				priv->mmio->stats.RMON_R_PACKETS,
+				priv->mmio->stats.RMON_R_CRC_ALIGN,
+				priv->mmio->stats.IEEE_R_FRAME_OK);
 #endif
 		if ((err < 0) || (priv->selfTest.rx_valid != 1)) {
 			ret = -1;
@@ -1021,29 +1026,29 @@ const char *enet_media(struct netif *netif)
 	speed = ephy_link_speed(&priv->phy, &full_duplex);
 
 	switch (speed) {
-	case 0:
-		return "unspecified";
-		break;
-	case 10:
-		if (full_duplex)
-			return "10Mbps/full-duplex";
-		else
-			return "10Mbps/half-duplex";
-		break;
-	case 100:
-		if (full_duplex)
-			return "100Mbps/full-duplex";
-		else
-			return "100Mbps/half-duplex";
-		break;
-	case 1000:
-		if (full_duplex)
-			return "1000Mbps/full-duplex";
-		else
-			return "1000Mbps/half-duplex";
-		break;
-	default:
-		return "unrecognized";
+		case 0:
+			return "unspecified";
+			break;
+		case 10:
+			if (full_duplex)
+				return "10Mbps/full-duplex";
+			else
+				return "10Mbps/half-duplex";
+			break;
+		case 100:
+			if (full_duplex)
+				return "100Mbps/full-duplex";
+			else
+				return "100Mbps/half-duplex";
+			break;
+		case 1000:
+			if (full_duplex)
+				return "1000Mbps/full-duplex";
+			else
+				return "1000Mbps/half-duplex";
+			break;
+		default:
+			return "unrecognized";
 	}
 }
 
@@ -1057,8 +1062,7 @@ static netif_driver_t enet_drv = {
 };
 
 
-__constructor__(1000)
-void register_driver_enet(void)
+__constructor__(1000) void register_driver_enet(void)
 {
 	register_netif_driver(&enet_drv);
 }

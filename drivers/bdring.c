@@ -157,7 +157,7 @@ size_t net_receivePackets(net_bufdesc_ring_t *ring, struct netif *ni, unsigned e
 			pkt = NULL;
 		}
 
-		i = (i + 1) & ring->last;	// NOTE: 2^n ring size verified in net_initRings
+		i = (i + 1) & ring->last; /* NOTE: 2^n ring size verified in net_initRings */
 		++n;
 	}
 
@@ -176,7 +176,7 @@ size_t net_refillRx(net_bufdesc_ring_t *ring, size_t ethpad)
 
 	n = 0;
 	i = ring->tail;
-	nxt = (i + 1) & ring->last;	// NOTE: 2^n ring size verified in net_initRings
+	nxt = (i + 1) & ring->last; /* NOTE: 2^n ring size verified in net_initRings */
 	sz = ring->ops->pkt_buf_sz;
 
 	while (nxt != ring->head) {
@@ -190,7 +190,7 @@ size_t net_refillRx(net_bufdesc_ring_t *ring, size_t ethpad)
 		ring->ops->fillRxDesc(ring, i, pa, sz, 0);
 
 		i = nxt;
-		nxt = (nxt + 1) & ring->last;	// NOTE: 2^n ring size verified in net_initRings
+		nxt = (nxt + 1) & ring->last; /* NOTE: 2^n ring size verified in net_initRings */
 		++n;
 	}
 
@@ -217,7 +217,7 @@ size_t net_reapTxFinished(net_bufdesc_ring_t *ring)
 			ring->bufp[i] = NULL;
 		}
 
-		i = (i + 1) & ring->last;	// NOTE: 2^n ring size verified in net_initRings
+		i = (i + 1) & ring->last; /* NOTE: 2^n ring size verified in net_initRings */
 		++n;
 	}
 
@@ -275,8 +275,8 @@ size_t net_transmitPacket(net_bufdesc_ring_t *ring, struct pbuf *p)
 		return 0;
 
 	mutexLock(ring->lock);
-	// NOTE: 2^n ring size verified in net_initRings
-	n = atomic_load(&ring->tail);	// access tail once - it may be advanced by tx_done thread
+	/* NOTE: 2^n ring size verified in net_initRings */
+	n = atomic_load(&ring->tail); /* access tail once - it may be advanced by tx_done thread */
 	i = ring->head;
 	n = (n - i - 1) & ring->last;
 	if (n > MAX_TX_FRAGMENTS)
@@ -286,7 +286,7 @@ size_t net_transmitPacket(net_bufdesc_ring_t *ring, struct pbuf *p)
 	if (!frags) {
 		pbuf_free(p);
 		mutexUnlock(ring->lock);
-		return 0;	/* dropped: too many fragments or empty packet */
+		return 0; /* dropped: too many fragments or empty packet */
 	}
 
 	/* fill fragments from last to avoid race against HW */
