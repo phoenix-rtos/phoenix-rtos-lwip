@@ -17,7 +17,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-typedef void (*link_state_cb_t)(void* arg, int state);
+typedef void (*link_state_cb_t)(void *arg, int state);
 
 typedef struct {
 	unsigned bus;

@@ -22,23 +22,23 @@ struct pin_conf {
 };
 
 static const struct pin_conf pin_conf0[] = {
-	{ 0, }
+	{ 0 }
 };
 
 static const struct pin_conf pin_conf1[] = {
 	{ 0x000003ff, pctl_mux_gpio1_00, pctl_pad_gpio1_00 },
 	{ 0x0000fc00, pctl_mux_jtag_mod - 10, pctl_pad_jtag_mod - 10 },
 	{ 0xffff0000, pctl_mux_uart1_tx - 16, pctl_pad_uart1_tx - 16 },
-	{ 0, }
+	{ 0 }
 };
 
 static const struct pin_conf pin_conf5[] = {
 	{ 0x000003ff, pctl_mux_tamper0, pctl_pad_tamper0 },
 	{ 0x00000c00, pctl_mux_boot_mode0 - 10, pctl_pad_boot0 - 10 },
-	{ 0, }
+	{ 0 }
 };
 
-static const struct pin_conf *const imx_gpio_pin[5] = {  pin_conf1,  pin_conf0,  pin_conf0,  pin_conf0,  pin_conf5 };
+static const struct pin_conf *const imx_gpio_pin[5] = { pin_conf1, pin_conf0, pin_conf0, pin_conf0, pin_conf5 };
 
 
 static int imx6ull_set_pin_conf(unsigned mux, unsigned pad, unsigned flags)
