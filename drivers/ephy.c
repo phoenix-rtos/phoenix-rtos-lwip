@@ -422,7 +422,7 @@ int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb
 	LWIP_EPHY_INIT_HOOK(phy, phyid, board_rev);
 #endif
 
-#if defined(EPHY_KSZ8081RNA)
+#if defined(EPHY_KSZ8081RNA) || defined(EPHY_KSZ8081RNB)
 	ephy_setAltConfig(phy, 1);
 #elif defined(EPHY_KSZ8081RND)
 	ephy_setAltConfig(phy, 0);
