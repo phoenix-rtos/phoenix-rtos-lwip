@@ -22,8 +22,7 @@
 #include <sys/msg.h>
 #include <sys/threads.h>
 
-
-// #define EPHY_KSZ8081RND
+#define EPHY_DEBUG 0
 
 enum {
 	EPHY_00_BMCR = 0x00,      /* Basic Mode Control */
@@ -51,6 +50,13 @@ enum {
 #define ephy_printf(phy, fmt, ...) printf("lwip: ephy%u.%u: " fmt "\n", phy->bus, phy->addr, ##__VA_ARGS__)
 
 
+#if EPHY_DEBUG
+#define ephy_debug_printf(phy, ...) ephy_printf(phy, __VA_ARGS__)
+#else
+#define ephy_debug_printf(phy, ...)
+#endif
+
+
 static uint16_t ephy_regRead(eth_phy_state_t *phy, uint16_t reg)
 {
 	return mdio_read(phy->bus, phy->addr, reg);
@@ -67,6 +73,7 @@ static void ephy_regWrite(eth_phy_state_t *phy, uint16_t reg, uint16_t val)
 static void ephy_reset(eth_phy_state_t *phy)
 {
 	if (gpio_valid(&phy->reset)) {
+		ephy_debug_printf(phy, "ephy_reset: start hardware reset...");
 		// TODO: prepare bootstrap pins
 		gpio_set(&phy->reset, 1);
 		usleep(phy->reset_hold_time_us);
@@ -74,10 +81,13 @@ static void ephy_reset(eth_phy_state_t *phy)
 		gpio_set(&phy->reset, 0);
 		usleep(phy->reset_release_time_us);
 		mdio_unlock_bus(phy->bus);
+		ephy_debug_printf(phy, "ephy_reset: hardware reset complete.");
 	}
 	else {
 		uint16_t res;
 		int retries = 10;
+
+		ephy_debug_printf(phy, "ephy_reset: start software reset...");
 
 		ephy_regWrite(phy, EPHY_00_BMCR, 1u << 15);
 		usleep(phy->reset_release_time_us);
@@ -319,6 +329,8 @@ int ephy_enableLoopback(eth_phy_state_t *phy, bool enable)
 		return -1;
 	}
 
+	ephy_debug_printf(phy, "loopback %s", enable ? "enabled" : "disabled");
+
 	return 0;
 }
 
@@ -375,6 +387,7 @@ int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb
 		printf("lwip: ephy: Couldn't configure PHY: %s (%d)\n", strerror(-err), err);
 		return -EINVAL;
 	}
+	ephy_debug_printf(phy, "PHY configured");
 
 	/* for KSZ8081RNA/D, KSZ8081RNB:
 	 * MDC max. 10MHz, std. 2.5MHz
@@ -431,6 +444,8 @@ int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb
 	}
 
 	ephy_restartAN(phy);
+
+	ephy_debug_printf(phy, "Successfully initialized PHY");
 
 	return 0;
 }
