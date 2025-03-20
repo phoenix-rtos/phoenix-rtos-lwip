@@ -100,9 +100,9 @@ static void pppos_printf(const char *format, ...)
 #define PPPOS_READ_AT_TIMEOUT_STEP_MS 		5
 #define PPPOS_READ_DATA_TIMEOUT_STEP_MS 	10
 
-#define PPPOS_TRYOPEN_SERIALDEV_SEC 		3
-#define PPPOS_CONNECT_RETRY_SEC 		5
-#define PPPOS_CONNECT_CMD_RETRY_MS		500
+#define PPPOS_TRYOPEN_SERIALDEV_SEC 3
+#define PPPOS_CONNECT_RETRY_SEC     5
+#define PPPOS_CONNECT_CMD_RETRY_MS  500
 
 /****** serial handling ******/
 
@@ -121,16 +121,18 @@ static void serial_close(int fd)
 static void serial_set_non_blocking(int fd)
 {
 	int flags = fcntl(fd, F_GETFL, 0);
-	if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0)
+	if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0) {
 		log_error("%s() : fcntl(%d, O_NONBLOCK) = (%d -> %s)", __func__, fd, errno, strerror(errno));
+	}
 }
 
 #if 0
 static void serial_set_blocking(int fd)
 {
 	int flags = fcntl(fd, F_GETFL, 0);
-	if (fcntl(fd, F_SETFL, flags & ~O_NONBLOCK) < 0)
+	if (fcntl(fd, F_SETFL, flags & ~O_NONBLOCK) < 0) {
 		log_error("%s() : fcntl(%d, ~O_NONBLOCK) = (%d -> %s)", __func__, fd, errno, strerror(errno));
+	}
 }
 #endif
 
@@ -544,7 +546,7 @@ static void pppos_mainLoop(void* _state)
 		state->conn_state = CONN_STATE_CONNECTING;
 		pppapi_connect(state->ppp, 0);
 
-		//serial_set_blocking(state);
+		// serial_set_blocking(state->fd);
 		log_debug("receiving");
 		pppos_do_rx(state);
 
