@@ -68,13 +68,15 @@ typedef struct
 #define COL_NORMAL  "\033[0m"
 
 #if 0
-#define log_debug(fmt, ...)     do { if (1) pppos_printf(state, fmt, ##__VA_ARGS__); } while (0)
-#define log_at(fmt, ...)     	do { if (1) pppos_printf(state, COL_CYAN fmt COL_NORMAL, ##__VA_ARGS__); } while (0)
-#define log_info(fmt, ...)      do { if (1) pppos_printf(state, COL_CYAN fmt COL_NORMAL, ##__VA_ARGS__); } while (0)
-#define log_warn(fmt, ...)      do { if (1) pppos_printf(state, COL_YELLOW fmt COL_NORMAL, ##__VA_ARGS__); } while (0)
-#define log_error(fmt, ...)     do { if (1) pppos_printf(state, COL_RED  fmt COL_NORMAL, ##__VA_ARGS__); } while (0)
+/* clang-format off */
+#define log_debug(fmt, ...)     do { if (1) pppos_printf(fmt, ##__VA_ARGS__); } while (0)
+#define log_at(fmt, ...)     	do { if (1) pppos_printf(COL_CYAN fmt COL_NORMAL, ##__VA_ARGS__); } while (0)
+#define log_info(fmt, ...)      do { if (1) pppos_printf(COL_CYAN fmt COL_NORMAL, ##__VA_ARGS__); } while (0)
+#define log_warn(fmt, ...)      do { if (1) pppos_printf(COL_YELLOW fmt COL_NORMAL, ##__VA_ARGS__); } while (0)
+#define log_error(fmt, ...)     do { if (1) pppos_printf(COL_RED  fmt COL_NORMAL, ##__VA_ARGS__); } while (0)
+/* clang-format on */
 
-static void pppos_printf(pppos_priv_t *state, const char *format, ...)
+static void pppos_printf(const char *format, ...)
 {
 	char buf[256];
 	va_list arg;
@@ -83,7 +85,7 @@ static void pppos_printf(pppos_priv_t *state, const char *format, ...)
 	vsnprintf(buf, sizeof(buf), format, arg);
 	va_end(arg);
 
-	printf("lwip: ppp@%s %s\n", state->serialdev_fn, buf);
+	printf("lwip: ppp: %s\n", buf);
 }
 #else
 
@@ -95,12 +97,13 @@ static void pppos_printf(pppos_priv_t *state, const char *format, ...)
 
 #endif
 
-#define PPPOS_READ_AT_TIMEOUT_STEP_MS 		5
-#define PPPOS_READ_DATA_TIMEOUT_STEP_MS 	10
+#define PPPOS_READ_AT_TIMEOUT_STEP_MS   5
+#define PPPOS_READ_DATA_TIMEOUT_STEP_MS 10 /* sleep if no data */
+#define PPPOS_READ_DATA_RETRY_MS        2  /* sleep if data was just read */
 
-#define PPPOS_TRYOPEN_SERIALDEV_SEC 		3
-#define PPPOS_CONNECT_RETRY_SEC 		5
-#define PPPOS_CONNECT_CMD_RETRY_MS		500
+#define PPPOS_TRYOPEN_SERIALDEV_SEC 3
+#define PPPOS_CONNECT_RETRY_SEC     5
+#define PPPOS_CONNECT_CMD_RETRY_MS  500
 
 /****** serial handling ******/
 
@@ -119,16 +122,64 @@ static void serial_close(int fd)
 static void serial_set_non_blocking(int fd)
 {
 	int flags = fcntl(fd, F_GETFL, 0);
-	if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0)
+	if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0) {
 		log_error("%s() : fcntl(%d, O_NONBLOCK) = (%d -> %s)", __func__, fd, errno, strerror(errno));
+	}
+
+	/* set RAW mode */
+	struct termios attr;
+
+	int ret = tcgetattr(fd, &attr);
+	if (ret < 0) {
+		log_error("tcgetattr failed");
+		return;
+	}
+
+	/* set RAW mode */
+	cfmakeraw(&attr);
+	/* TODO: add support for setting up UART from commandline params */
+	// cfsetspeed(&attr, B115200);
+
+	ret = tcflush(fd, TCIOFLUSH);
+	if (ret < 0) {
+		log_error("tcflush failed");
+		return;
+	}
+
+	ret = tcsetattr(fd, TCSANOW, &attr);
+	if (ret < 0) {
+		log_error("tcsetattr failed");
+		return;
+	}
 }
 
 #if 0
+/* NOTE: the approach with blocking read + VMIN>0, VTIME>0 termios was tested
+ * and it proved to have more latency than nonblocking read
+ */
 static void serial_set_blocking(int fd)
 {
 	int flags = fcntl(fd, F_GETFL, 0);
-	if (fcntl(fd, F_SETFL, flags & ~O_NONBLOCK) < 0)
+	if (fcntl(fd, F_SETFL, flags & ~O_NONBLOCK) < 0) {
 		log_error("%s() : fcntl(%d, ~O_NONBLOCK) = (%d -> %s)", __func__, fd, errno, strerror(errno));
+	}
+
+	struct termios attr;
+
+	int ret = tcgetattr(fd, &attr);
+	if (ret < 0) {
+		log_error("tcgetattr failed");
+		return;
+	}
+
+	attr.c_cc[VMIN] = 128;
+	attr.c_cc[VTIME] = 1; /* 0.1s */
+
+	ret = tcsetattr(fd, TCSANOW, &attr);
+	if (ret < 0) {
+		log_error("tcsetattr failed");
+		return;
+	}
 }
 #endif
 
@@ -435,18 +486,33 @@ static void pppos_link_status_cb(ppp_pcb *pcb, int err_code, void *ctx)
 static void pppos_do_rx(pppos_priv_t* state)
 {
 	int len;
-	u8_t buffer[1024];
+	u8_t buffer[512];
+
+	int off = 0;
 
 	while (state->conn_state != CONN_STATE_DISCONNECTED
 			&& state->conn_state != CONN_STATE_DISCONNECTING) {
-		len = read(state->fd, buffer, sizeof(buffer));
-		if (len > 0) {
+
+		len = read(state->fd, buffer + off, sizeof(buffer) - off);
+		if (off + len > 0) {
 			/* Pass received raw characters from PPPoS to be decoded through lwIP
-			* TCPIP thread using the TCPIP API. This is thread safe in all cases
-			* but you should avoid passing data byte after byte. */
-			//log_debug("%s : read() = %d", __func__, len);
-			pppos_input_tcpip(state->ppp, buffer, len);
-		} else {
+			 * TCPIP thread using the TCPIP API. This is thread safe in all cases
+			 * but you should avoid passing data byte after byte.
+			 * WARN: on memory constrainde devices you may exahust PCBs by allocating a lot of small buffers */
+			/* TODO: try to use pppos_input() directly (locking/state machine changes need to be reviewed for that) */
+
+			// log_debug("%s : read() = %d", __func__, len);
+			int err = pppos_input_tcpip(state->ppp, buffer, off + len);
+			if (err != ERR_OK) {
+				log_warn("pppos_input_tcpip FAIL: %d\n", err);
+				off += len; /* probably EMEM, retry sending the same data to tcpip thread */
+			}
+			else {
+				off = 0;
+			}
+			usleep(PPPOS_READ_DATA_RETRY_MS * 1000);
+		}
+		else {
 			if (len < 0 && errno != EINTR && errno != EWOULDBLOCK) {
 				log_error("%s() : read(%d) = %d (%d -> %s)", __func__, sizeof(buffer), len, errno, strerror(errno));
 				serial_close(state->fd);
@@ -542,7 +608,7 @@ static void pppos_mainLoop(void* _state)
 		state->conn_state = CONN_STATE_CONNECTING;
 		pppapi_connect(state->ppp, 0);
 
-		//serial_set_blocking(state);
+		// serial_set_blocking(state->fd);
 		log_debug("receiving");
 		pppos_do_rx(state);
 
