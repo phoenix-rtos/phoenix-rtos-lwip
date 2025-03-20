@@ -91,7 +91,8 @@ typedef struct
 
 #endif
 
-#define PPPOU_READ_DATA_TIMEOUT_STEP_MS  10
+#define PPPOU_READ_DATA_TIMEOUT_STEP_MS 10 /* sleep if no data */
+#define PPPOU_READ_DATA_RETRY_MS        2  /* sleep if data was just read */
 
 #define PPPOU_TRYOPEN_SERIALDEV_SEC      3
 #define PPPOU_CONNECT_RETRY_SEC          5
@@ -366,27 +367,45 @@ static void pppou_link_status_cb(ppp_pcb *pcb, int err_code, void *ctx)
 static void pppou_do_rx(pppou_priv_t *state)
 {
 	int len;
-	u8_t buffer[1024];
+	u8_t buffer[512];
+
+	int off = 0;
 
 	while (state->conn_state != CONN_STATE_DISCONNECTED
 			&& state->conn_state != CONN_STATE_DISCONNECTING) {
-		len = read(state->fd, buffer, sizeof(buffer));
-		if (len > 0) {
-			/* Pass received raw characters from PPPoU to be decoded through lwIP
-			 * TCPIP thread using the TCPIP API. This is thread safe in all cases
-			 * but you should avoid passing data byte after byte. */
 
-			/* log_debug("%s : read() = %d", __func__, len); */
-			pppos_input_tcpip(state->ppp, buffer, len);
-		}
-		else {
-			if (len < 0 && errno != EINTR && errno != EWOULDBLOCK) {
+		len = read(state->fd, buffer + off, sizeof(buffer) - off);
+		if (len < 0) {
+			if (errno != EINTR && errno != EWOULDBLOCK) {
 				log_error("%s() : read(%d) = %d (%d -> %s)", __func__, sizeof(buffer), len, errno, strerror(errno));
 				serial_close(state->fd);
 				state->fd = -1;
 				state->conn_state = CONN_STATE_DISCONNECTED;
 				return;
 			}
+
+			len = 0; /* make (off + len) below work */
+		}
+
+		if (off + len > 0) {
+			/* Pass received raw characters from PPPoU to be decoded through lwIP
+			 * TCPIP thread using the TCPIP API. This is thread safe in all cases
+			 * but you should avoid passing data byte after byte.
+			 * WARN: on memory constrained devices you may exhaust PCBs by allocating a lot of small buffers */
+			/* TODO: try to use pppos_input() directly (locking/state machine changes need to be reviewed for that) */
+
+			/* log_debug("%s : read() = %d", __func__, len); */
+			int err = pppos_input_tcpip(state->ppp, buffer, off + len);
+			if (err != ERR_OK) {
+				log_warn("pppos_input_tcpip FAIL: %d\n", err);
+				off += len; /* probably EMEM, retry sending the same data to tcpip thread */
+			}
+			else {
+				off = 0;
+			}
+			usleep(PPPOU_READ_DATA_RETRY_MS * 1000);
+		}
+		else {
 			usleep(PPPOU_READ_DATA_TIMEOUT_STEP_MS * 1000);
 		}
 	}
