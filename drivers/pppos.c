@@ -68,13 +68,15 @@ typedef struct
 #define COL_NORMAL  "\033[0m"
 
 #if 0
-#define log_debug(fmt, ...)     do { if (1) pppos_printf(state, fmt, ##__VA_ARGS__); } while (0)
-#define log_at(fmt, ...)     	do { if (1) pppos_printf(state, COL_CYAN fmt COL_NORMAL, ##__VA_ARGS__); } while (0)
-#define log_info(fmt, ...)      do { if (1) pppos_printf(state, COL_CYAN fmt COL_NORMAL, ##__VA_ARGS__); } while (0)
-#define log_warn(fmt, ...)      do { if (1) pppos_printf(state, COL_YELLOW fmt COL_NORMAL, ##__VA_ARGS__); } while (0)
-#define log_error(fmt, ...)     do { if (1) pppos_printf(state, COL_RED  fmt COL_NORMAL, ##__VA_ARGS__); } while (0)
+/* clang-format off */
+#define log_debug(fmt, ...)     do { if (1) pppos_printf(fmt, ##__VA_ARGS__); } while (0)
+#define log_at(fmt, ...)     	do { if (1) pppos_printf(COL_CYAN fmt COL_NORMAL, ##__VA_ARGS__); } while (0)
+#define log_info(fmt, ...)      do { if (1) pppos_printf(COL_CYAN fmt COL_NORMAL, ##__VA_ARGS__); } while (0)
+#define log_warn(fmt, ...)      do { if (1) pppos_printf(COL_YELLOW fmt COL_NORMAL, ##__VA_ARGS__); } while (0)
+#define log_error(fmt, ...)     do { if (1) pppos_printf(COL_RED  fmt COL_NORMAL, ##__VA_ARGS__); } while (0)
+/* clang-format on */
 
-static void pppos_printf(pppos_priv_t *state, const char *format, ...)
+static void pppos_printf(const char *format, ...)
 {
 	char buf[256];
 	va_list arg;
@@ -83,7 +85,7 @@ static void pppos_printf(pppos_priv_t *state, const char *format, ...)
 	vsnprintf(buf, sizeof(buf), format, arg);
 	va_end(arg);
 
-	printf("lwip: ppp@%s %s\n", state->serialdev_fn, buf);
+	printf("lwip: ppp: %s\n", buf);
 }
 #else
 
