@@ -102,21 +102,12 @@ static void dump_registers(void)
 static int alloc_dma_buffer(void)
 {
 	size_t size = DMA_BUFFER_SIZE;
-	size_t psize;
 
 	sdio_common.dmaptr = dmammap(size);
 	if (sdio_common.dmaptr == NULL)
 		return -1;
 
-	psize = size;
-	sdio_common.dmaphys = mphys(sdio_common.dmaptr, &psize);
-
-	if (size != psize) {
-		cy_log_msg(CYLF_SDIO, CY_LOG_ERR, "SDIO DMA buffer size != psize (%zu != %zu)\n", size, psize);
-		munmap(sdio_common.dmaptr, size);
-		sdio_common.dmaptr = NULL;
-		return -1;
-	}
+	sdio_common.dmaphys = va2pa(sdio_common.dmaptr);
 
 	if (sdio_common.dmaphys & 3) {
 		cy_log_msg(CYLF_SDIO, CY_LOG_ERR, "SDIO DMA buffer physical address is not aligned (%x)\n", sdio_common.dmaphys);
