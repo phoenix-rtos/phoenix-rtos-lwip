@@ -203,37 +203,22 @@ static void enet_start(enet_state_t *state)
 }
 
 
-static int enet_readFusedMac(uint32_t *buf)
+static int enet_readFusedMac(uint32_t *buf, volatile uint32_t *ocotp_mem)
 {
-	volatile uint32_t *va = physmmap(OCOTP_MEMORY_ADDR, 0x1000);
-
-	if (va == MAP_FAILED) {
-		return -ENOMEM;
-	}
-
-	buf[0] = va[OCOTP_MAC0_OFFSET / sizeof(*va)];
-	buf[1] = va[OCOTP_MAC1_OFFSET / sizeof(*va)];
-	buf[2] = va[OCOTP_MAC_OFFSET / sizeof(*va)];
-
-	physunmap(va, 0x1000);
+	buf[0] = ocotp_mem[OCOTP_MAC0_OFFSET / sizeof(*ocotp_mem)];
+	buf[1] = ocotp_mem[OCOTP_MAC1_OFFSET / sizeof(*ocotp_mem)];
+	buf[2] = ocotp_mem[OCOTP_MAC_OFFSET / sizeof(*ocotp_mem)];
 
 	return 0;
 }
 
 
-static uint32_t enet_readCpuId(void)
+static uint32_t enet_readCpuId(volatile uint32_t *ocotp_mem)
 {
-	volatile uint32_t *va = physmmap(OCOTP_MEMORY_ADDR, 0x1000);
 	uint32_t res = 0;
 
-	if (va == MAP_FAILED) {
-		return 0;
-	}
-
 	/* use CFG1: wafer no + x/y coordinate */
-	res = va[OCOTP_CFG1_OFFSET / sizeof(*va)];
-
-	physunmap(va, 0x1000);
+	res = ocotp_mem[OCOTP_CFG1_OFFSET / sizeof(*ocotp_mem)];
 
 	return res;
 }
@@ -245,25 +230,18 @@ static inline uint8_t enet_getByte(uint32_t v, int i)
 }
 
 
-static uint8_t enet_readBoardRev(void)
+static uint8_t enet_readBoardRev(volatile uint32_t *ocotp_mem)
 {
-	volatile uint32_t *va = physmmap(OCOTP_MEMORY_ADDR, 0x1000);
 	uint32_t res = 0;
 
-	if (va == MAP_FAILED) {
-		return 0;
-	}
-
 	/* note: keep in sync with imx6ull-otp */
-	res = va[OCOTP_GP2_OFFSET / sizeof(*va)];
-
-	physunmap(va, 0x1000);
+	res = ocotp_mem[OCOTP_GP2_OFFSET / sizeof(*ocotp_mem)];
 
 	return (res >> 24) + 1;
 }
 
 
-static void enet_readCardMac(enet_state_t *state)
+static void enet_readCardMac(enet_state_t *state, volatile uint32_t *ocotp_mem)
 {
 	static const struct eth_addr zero_eth = { { 0, 0, 0, 0, 0, 0 } };
 
@@ -272,7 +250,7 @@ static void enet_readCardMac(enet_state_t *state)
 
 	mac = (void *)&state->netif->hwaddr;
 
-	if (state->dev_phys_addr == ENET_ADDR_ENET1 && enet_readFusedMac(buf) == 0) {
+	if (state->dev_phys_addr == ENET_ADDR_ENET1 && enet_readFusedMac(buf, ocotp_mem) == 0) {
 		mac[0] = enet_getByte(buf[1], 1);
 		mac[1] = enet_getByte(buf[1], 0);
 		mac[2] = enet_getByte(buf[0], 3);
@@ -280,7 +258,7 @@ static void enet_readCardMac(enet_state_t *state)
 		mac[4] = enet_getByte(buf[0], 1);
 		mac[5] = enet_getByte(buf[0], 0);
 	}
-	else if (state->dev_phys_addr == ENET_ADDR_ENET2 && enet_readFusedMac(buf) == 0) {
+	else if (state->dev_phys_addr == ENET_ADDR_ENET2 && enet_readFusedMac(buf, ocotp_mem) == 0) {
 		mac[0] = enet_getByte(buf[2], 3);
 		mac[1] = enet_getByte(buf[2], 2);
 		mac[2] = enet_getByte(buf[2], 1);
@@ -301,7 +279,7 @@ static void enet_readCardMac(enet_state_t *state)
 	}
 
 	if (memcmp(mac, &zero_eth.addr, ETH_HWADDR_LEN) == 0) {
-		uint32_t cpuId = enet_readCpuId();
+		uint32_t cpuId = enet_readCpuId(ocotp_mem);
 		mac[0] = 0x02;
 		mac[1] = (cpuId >> 24) & 0xFF;
 		mac[2] = (cpuId >> 16) & 0xFF;
@@ -794,7 +772,7 @@ static int enet_pinConfig(enet_state_t *state)
 }
 
 
-static int enet_initDevice(enet_state_t *state, int irq, int mdio)
+static int enet_initDevice(enet_state_t *state, int irq, int mdio, volatile uint32_t *ocotp_mem)
 {
 	// FIXME: cleanup on error
 	int err;
@@ -815,7 +793,7 @@ static int enet_initDevice(enet_state_t *state, int irq, int mdio)
 	}
 
 	enet_reset(state);
-	enet_readCardMac(state);
+	enet_readCardMac(state, ocotp_mem);
 	enet_pinConfig(state);
 
 	if (mdio != 0) {
@@ -1035,6 +1013,7 @@ static int enet_netifInit(struct netif *netif, char *cfg)
 	enet_state_t *state;
 	char *p;
 	int err, irq, mdio = 1;
+	volatile uint32_t *ocotp_mem;
 
 	netif->linkoutput = enet_netifOutput;
 
@@ -1079,17 +1058,24 @@ static int enet_netifInit(struct netif *netif, char *cfg)
 		return -EINVAL;
 	}
 
-	err = enet_initDevice(state, irq, mdio);
+	ocotp_mem = physmmap(OCOTP_MEMORY_ADDR, 0x1000);
+	if (ocotp_mem == MAP_FAILED) {
+		return -ENOMEM;
+	}
+
+	err = enet_initDevice(state, irq, mdio, ocotp_mem);
 	if (err != 0) {
+		physunmap(ocotp_mem, 0x1000);
 		return err;
 	}
 
 	if (cfg != NULL) {
-		uint8_t board_rev = enet_readBoardRev();
+		uint8_t board_rev = enet_readBoardRev(ocotp_mem);
 
 		err = ephy_init(&state->phy, cfg, board_rev, enet_setLinkState, (void *)state->netif);
 		if (err < 0) {
 			enet_printf(state, "WARN: PHY init failed: %s (%d)", strerror(-err), err);
+			physunmap(ocotp_mem, 0x1000);
 			return err;
 		}
 
@@ -1098,6 +1084,8 @@ static int enet_netifInit(struct netif *netif, char *cfg)
 			enet_printf(state, "WARN: PHY autotest failed");
 		}
 	}
+
+	physunmap(ocotp_mem, 0x1000);
 
 	return 0;
 }
