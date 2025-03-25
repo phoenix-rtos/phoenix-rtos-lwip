@@ -9,6 +9,7 @@
  * %LICENSE%
  */
 #include "physmmap.h"
+#include "phoenix/mman.h"
 
 #include <sys/mman.h>
 
@@ -24,7 +25,7 @@ void *dmammap(size_t sz)
 	if (!sz)
 		return NULL;
 
-	p = mmap(NULL, sz, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_UNCACHED, -1, 0);
+	p = mmap(NULL, sz, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_UNCACHED | MAP_CONTIGUOUS, -1, 0);
 	return p != MAP_FAILED ? p : NULL;
 }
 
