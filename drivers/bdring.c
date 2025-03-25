@@ -50,7 +50,7 @@ static inline bool net_isPowerOf2(size_t n)
 
 int net_initRings(net_bufdesc_ring_t *rings, const size_t *sizes, size_t nrings, const net_bufdesc_ops_t *ops)
 {
-	size_t i, nb, sz, psz, align;
+	size_t i, nb, sz, align;
 	addr_t phys;
 	struct pbuf **bufp;
 	void *p;
@@ -91,15 +91,9 @@ int net_initRings(net_bufdesc_ring_t *rings, const size_t *sizes, size_t nrings,
 		return -ENOMEM;
 	}
 
-	psz = sz;
-	phys = mphys(p, &psz);
-	if ((psz != sz) || ((phys & align) != 0)) {
-		if (psz != sz) {
-			printf("ERROR: got non-contiguous ring buffer (%zu/%zu segment)\n", psz, sz);
-		}
-		else {
-			printf("ERROR: got unaligned ring buffer (at 0x%zx, align mask: 0x%zx)\n", (size_t)phys, align);
-		}
+	phys = va2pa(p);
+	if ((phys & align) != 0) {
+		printf("ERROR: got unaligned ring buffer (at 0x%zx, align mask: 0x%zx)\n", (size_t)phys, align);
 		munmap(p, sz);
 		free(bufp);
 		return -ENOMEM;
@@ -268,7 +262,7 @@ static size_t net_fillFragments(struct pbuf *p, addr_t *pa, size_t *psz, size_t 
 		}
 
 		*psz = fragsz <= max_fragsz ? fragsz : max_fragsz;
-		*pa = mphys(data, psz);
+		*pa = va2pa(data);
 		sz -= *psz;
 		fragsz -= *psz;
 

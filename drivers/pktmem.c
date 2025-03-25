@@ -249,9 +249,6 @@ struct pbuf *net_allocDMAPbuf(addr_t *pa, size_t sz)
 	if (bsz == 0) {
 		return NULL;
 	}
-
-	*pa = mphys(data, &bsz);
-
 	if (bsz < sz) {
 		net_freePktBuf(data, pktmem_start);
 		return NULL;
