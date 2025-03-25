@@ -9,6 +9,7 @@
  * %LICENSE%
  */
 #include "physmmap.h"
+#include "phoenix/mman.h"
 
 #include <sys/mman.h>
 
@@ -24,7 +25,7 @@ void *dmammap(size_t sz)
 	if (!sz)
 		return NULL;
 
-	p = mmap(NULL, sz, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_UNCACHED, -1, 0);
+	p = mmap(NULL, sz, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_UNCACHED | MAP_CONTIGUOUS, -1, 0);
 	return p != MAP_FAILED ? p : NULL;
 }
 
@@ -56,27 +57,4 @@ void physunmap(volatile void *va, size_t sz)
 	sz = (sz + _PAGE_SIZE - 1) & ~(_PAGE_SIZE - 1);  // NOTE
 
 	munmap((void *)va, sz);
-}
-
-
-addr_t mphys(void *p, size_t *psz)
-{
-	size_t sz;
-	addr_t pa;
-
-	pa = va2pa(p);
-	sz = _PAGE_SIZE - (pa & (_PAGE_SIZE - 1));
-
-	while (sz < *psz) {
-		addr_t npa = va2pa(p + sz);
-		if (npa != pa + sz)
-			break;
-
-		sz += _PAGE_SIZE;
-	}
-
-	if (sz < *psz)
-		*psz = sz;
-
-	return pa;
 }

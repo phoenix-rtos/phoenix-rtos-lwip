@@ -20,7 +20,5 @@ void *dmammap(size_t sz) __attribute__((malloc, alloc_size(1), assume_aligned(_P
 volatile void *physmmap(addr_t addr, size_t sz);
 void physunmap(volatile void *va, size_t sz);
 
-addr_t mphys(void *p, size_t *psz);
-
 
 #endif /* NETLIB_PHYSMMAP_H_ */
