@@ -18,6 +18,7 @@
 #include "res-create.h"
 #include "imx-enet-regs.h"
 
+#include <phoenix/ethtool.h>
 #include <sys/interrupt.h>
 #include <sys/platform.h>
 #include <sys/threads.h>
@@ -31,9 +32,10 @@
 #include <string.h>
 #include <unistd.h>
 
-#define ENET_DEBUG    0
-#define MDIO_DEBUG    0
-#define ENET_SELFTEST 0
+#define ENET_DEBUG 0
+#define MDIO_DEBUG 0
+
+#define ENET_SELFTEST 1
 
 #define ENET_MAX_PKT_SZ               1984 /* DMA aligned */
 #define ENET_USE_ENHANCED_DESCRIPTORS 0
@@ -64,6 +66,10 @@
 #define ENET_RX_RING_SIZE 8
 #define ENET_TX_RING_SIZE 8
 
+#define ENET_SUPPORTED_SPEEDS ( \
+		SUPPORTED_10baseT_Half | SUPPORTED_10baseT_Full | \
+		SUPPORTED_100baseT_Half | SUPPORTED_100baseT_Full)
+
 #elif defined(__CPU_IMXRT117X)
 
 #include <phoenix/arch/armv7m/imxrt/11xx/imxrt1170.h>
@@ -85,6 +91,11 @@
 #define ENET_RX_RING_SIZE 4
 #define ENET_TX_RING_SIZE 4
 
+#define ENET_SUPPORTED_SPEEDS ( \
+		SUPPORTED_10baseT_Half | SUPPORTED_10baseT_Full | \
+		SUPPORTED_100baseT_Half | SUPPORTED_100baseT_Full | \
+		SUPPORTED_1000baseT_Half | SUPPORTED_1000baseT_Full)
+
 #elif defined(__CPU_IMX6ULL)
 
 #include <phoenix/arch/armv7a/imx6ull/imx6ull.h>
@@ -105,9 +116,21 @@
 #define ENET_RX_RING_SIZE 64
 #define ENET_TX_RING_SIZE 64
 
+#define ENET_SUPPORTED_SPEEDS ( \
+		SUPPORTED_10baseT_Half | SUPPORTED_10baseT_Full | \
+		SUPPORTED_100baseT_Half | SUPPORTED_100baseT_Full)
+
 #else
 #error "Unsupported TARGET"
 #endif
+
+
+#define ENET_SUPPORTED_INTERFACES   (SUPPORTED_MII)
+#define ENET_SUPPORTED_FEATURES     (SUPPORTED_Autoneg)
+#define ENET_SUPPORTED              (ENET_SUPPORTED_SPEEDS | ENET_SUPPORTED_INTERFACES | ENET_SUPPORTED_FEATURES)
+#define ENET_PORT                   (PORT_MII)
+#define ENET_MDIO_SUPPORTED(addr)   ((((addr & NETDEV_MDIO_CLAUSE45) != 0) ? ETH_MDIO_SUPPORTS_C45 : 0) | ETH_MDIO_SUPPORTS_C22)
+#define ENET_LINK_MODE_MASKS_NWORDS (1)
 
 #if ENET_USE_ENHANCED_DESCRIPTORS
 typedef enet_enhanced_desc_t enet_buf_desc_t;
@@ -1645,16 +1668,6 @@ static int enet_netifInit(struct netif *netif, char *cfg)
 			physunmap(ocotp_mem, 0x1000);
 			return err;
 		}
-
-#if ENET_SELFTEST
-		err = enet_phySelfTest(netif);
-		if (err < 0) {
-			enet_printf(state, "WARN: PHY autotest failed");
-		}
-		else {
-			enet_printf(state, "PHY selftest passed successfully");
-		}
-#endif
 	}
 
 	physunmap(ocotp_mem, 0x1000);
@@ -1665,38 +1678,150 @@ static int enet_netifInit(struct netif *netif, char *cfg)
 
 const char *enet_media(struct netif *netif)
 {
-	int full_duplex, speed;
+	int duplex, speed;
 	enet_state_t *state;
 	state = netif->state;
 
-	speed = ephy_linkSpeed(&state->phy, &full_duplex);
+	speed = ephy_linkSpeed(&state->phy, &duplex);
 
 	switch (speed) {
-		case 0:
+		case SPEED_UNKNOWN:
 			return "unspecified";
-		case 10:
-			if (full_duplex != 0) {
-				return "10Mbps/full-duplex";
+		case SPEED_10:
+			switch (duplex) {
+				case DUPLEX_HALF:
+					return "10Mbps/half-duplex";
+				case DUPLEX_FULL:
+					return "10Mbps/full-duplex";
+				default:
+					return "unrecognized";
 			}
-			else {
-				return "10Mbps/half-duplex";
+		case SPEED_100:
+			switch (duplex) {
+				case DUPLEX_HALF:
+					return "100Mbps/half-duplex";
+				case DUPLEX_FULL:
+					return "100Mbps/full-duplex";
+				default:
+					return "unrecognized";
 			}
-		case 100:
-			if (full_duplex != 0) {
-				return "100Mbps/full-duplex";
-			}
-			else {
-				return "100Mbps/half-duplex";
-			}
-		case 1000:
-			if (full_duplex != 0) {
-				return "1000Mbps/full-duplex";
-			}
-			else {
-				return "1000Mbps/half-duplex";
+		case SPEED_1000:
+			switch (duplex) {
+				case DUPLEX_HALF:
+					return "1000Mbps/half-duplex";
+				case DUPLEX_FULL:
+					return "1000Mbps/full-duplex";
+				default:
+					return "unrecognized";
 			}
 		default:
 			return "unrecognized";
+	}
+}
+
+
+static int enet_ethtoolIoctl(struct netif *netif, void *data)
+{
+	enet_state_t *state = netif->state;
+	uint32_t cmd = *((uint32_t *)data);
+	int err;
+
+	switch (cmd) {
+		case ETHTOOL_GSET: {
+			struct ethtool_cmd *ecmd = data;
+			int duplex;
+			int speed = ephy_linkSpeed(&state->phy, &duplex);
+
+			memset(ecmd, 0, sizeof(*ecmd));
+			ecmd->supported = ENET_SUPPORTED;
+			ecmd->advertising = ephy_getAdv(&state->phy);
+			ecmd->speed = speed;
+			ecmd->duplex = duplex;
+			ecmd->port = ENET_PORT;
+			ecmd->phy_address = state->phy.addr;
+			ecmd->autoneg = ephy_getAN(&state->phy);
+			ecmd->mdio_support = ENET_MDIO_SUPPORTED(state->phy.addr);
+			/* FIXME: MDI info */
+
+			return EOK;
+		}
+
+		case ETHTOOL_GSSET_INFO: {
+			struct ethtool_sset_info *info = data;
+			uint64_t outmask = 0;
+
+			if ((info->sset_mask & (1ull << ETH_SS_TEST)) != 0) {
+				info->data[ETH_SS_TEST] = 0; /* number_of_strings * ETH_GSTRING_LEN */
+				outmask |= 1ull << ETH_SS_TEST;
+			}
+
+			info->sset_mask = outmask;
+
+			return EOK;
+		}
+
+		case ETHTOOL_GSTRINGS: {
+			struct ethtool_gstrings *strings = data;
+
+			switch (strings->string_set) {
+				case ETH_SS_TEST:
+					strings->len = 0;
+					break;
+
+				default:
+					return -EINVAL;
+			}
+
+			return EOK;
+		}
+
+		case ETHTOOL_TEST: {
+			struct ethtool_test *test_params = data;
+#if ENET_SELFTEST
+			if ((test_params->flags & ETH_TEST_FL_OFFLINE) != 0) {
+				err = enet_phySelfTest(netif);
+				if (err < 0) {
+					test_params->flags |= ETH_TEST_FL_FAILED;
+				}
+				return EOK;
+			}
+#endif
+			return -EOPNOTSUPP;
+		}
+
+		case ETHTOOL_GLINKSETTINGS: {
+			struct ethtool_link_settings *link_settings = data;
+
+			/* the caller expects us to return the real value */
+			if (link_settings->link_mode_masks_nwords != ENET_LINK_MODE_MASKS_NWORDS) {
+				link_settings->link_mode_masks_nwords = -ENET_LINK_MODE_MASKS_NWORDS;
+				return EOK;
+			}
+
+			int duplex;
+			uint64_t speed = ephy_linkSpeed(&state->phy, &duplex);
+
+			link_settings->speed = speed & 0xffffffff;
+			link_settings->duplex = duplex;
+			link_settings->port = ENET_PORT;
+			link_settings->phy_address = state->phy.addr;
+			link_settings->autoneg = ephy_getAN(&state->phy);
+			link_settings->mdio_support = ENET_MDIO_SUPPORTED(state->phy.addr);
+			/* FIXME: MDI info */
+
+			/* layout of link_mode_masks:
+			 * uint32_t map_supported[link_mode_masks_nwords];
+			 * uint32_t map_advertising[link_mode_masks_nwords];
+			 * uint32_t map_lp_advertising[link_mode_masks_nwords];
+			 */
+			link_settings->link_mode_masks[0] = ENET_SUPPORTED;
+			link_settings->link_mode_masks[1] = ephy_getAdv(&state->phy);
+
+			return EOK;
+		}
+
+		default:
+			return -EOPNOTSUPP;
 	}
 }
 
@@ -1707,6 +1832,7 @@ static netif_driver_t enet_drv = {
 	.state_align = _Alignof(enet_state_t),
 	.name = "enet",
 	.media = enet_media,
+	.do_ethtool_ioctl = enet_ethtoolIoctl,
 };
 
 
