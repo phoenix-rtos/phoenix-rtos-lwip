@@ -13,8 +13,15 @@
 
 #include "gpio.h"
 
+#include <phoenix/ethtool.h>
 #include <stdint.h>
 #include <stdbool.h>
+
+
+#define EPHY_ADVERTISED_SPEEDS     (ADVERTISED_10baseT_Half | ADVERTISED_10baseT_Full | ADVERTISED_100baseT_Half | ADVERTISED_100baseT_Full)
+#define EPHY_ADVERTISED_INTERFACES (ADVERTISED_Autoneg)
+#define EPHY_ADVERTISED_FEATURES   (ADVERTISED_MII)
+#define EPHY_ADVERTISED            (EPHY_ADVERTISED_SPEEDS | EPHY_ADVERTISED_INTERFACES | EPHY_ADVERTISED_FEATURES)
 
 typedef void (*link_state_cb_t)(void *arg, int state);
 
@@ -38,9 +45,12 @@ typedef struct {
 
 
 int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb_t cb, void *cb_arg);
-int ephy_linkSpeed(const eth_phy_state_t *phy, int *full_duplex);
+int ephy_linkSpeed(const eth_phy_state_t *phy, int *duplex);
 
 /* toggle MACPHY internal loopback for test mode */
 int ephy_enableLoopback(const eth_phy_state_t *phy, bool enable);
+
+/* ethtool interface */
+int ephy_getAN(const eth_phy_state_t *phy);
 
 #endif /* NET_EPHY_H_ */
