@@ -656,6 +656,28 @@ static int socket_ioctl(int sock, unsigned long request, const void *in_data, vo
 			return ret;
 		}
 
+		case SIOCETHTOOL: {
+			struct ifreq *ifr = out_data;
+			void *ethtool_data = (char *)out_data + sizeof(struct ifreq);
+
+			struct netif *interface = netif_find(ifr->ifr_name);
+			if (interface == NULL) {
+				return -ENXIO;
+			}
+
+			if (strncmp(interface->name, "lo", 2) == 0) {
+				/* loopback doesn't have driver */
+				return -EOPNOTSUPP;
+			}
+
+			netif_driver_t *drv = netif_driver(interface);
+			if (drv == NULL || drv->do_ethtool_ioctl == NULL) {
+				return -EOPNOTSUPP;
+			}
+
+			return drv->do_ethtool_ioctl(interface, ethtool_data);
+		}
+
 #if LWIP_IPV6
 		case SIOCGIFDSTADDR_IN6:
 		case SIOCGIFNETMASK_IN6:
@@ -1084,6 +1106,7 @@ static int do_getifaddrs(char *buf, size_t *buflen)
 		dest->ifa_flags = netif->flags;
 		sin->sin_family = AF_INET;
 		sin->sin_len = sizeof(struct sockaddr_in);
+		printf("next addr\n");
 
 		inet_addr_from_ip4addr(&sin->sin_addr, netif_ip4_addr(netif));
 		memcpy(addrdest, sin, sin->sin_len);
