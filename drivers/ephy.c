@@ -51,26 +51,25 @@ enum {
 
 
 #if EPHY_DEBUG
-#define ephy_debug_printf(phy, ...) ephy_printf(phy, __VA_ARGS__)
+#define ephy_debug_printf(phy, fmt, ...) ephy_printf(phy, fmt, ##__VA_ARGS__)
 #else
-#define ephy_debug_printf(phy, ...)
+#define ephy_debug_printf(phy, fmt, ...)
 #endif
 
 
-static uint16_t ephy_regRead(eth_phy_state_t *phy, uint16_t reg)
+static uint16_t ephy_regRead(const eth_phy_state_t *phy, uint16_t reg)
 {
 	return mdio_read(phy->bus, phy->addr, reg);
 }
 
 
-static void ephy_regWrite(eth_phy_state_t *phy, uint16_t reg, uint16_t val)
+static void ephy_regWrite(const eth_phy_state_t *phy, uint16_t reg, uint16_t val)
 {
 	mdio_write(phy->bus, phy->addr, reg, val);
-	ephy_regRead(phy, reg);
 }
 
 
-static void ephy_reset(eth_phy_state_t *phy)
+static void ephy_reset(const eth_phy_state_t *phy)
 {
 	if (gpio_valid(&phy->reset)) {
 		ephy_debug_printf(phy, "ephy_reset: start hardware reset...");
@@ -104,7 +103,7 @@ static void ephy_reset(eth_phy_state_t *phy)
 }
 
 
-static uint32_t ephy_readPhyId(eth_phy_state_t *phy)
+static uint32_t ephy_readPhyId(const eth_phy_state_t *phy)
 {
 	uint32_t oui = 0;
 	uint32_t phyid = 0;
@@ -134,7 +133,7 @@ static uint32_t ephy_readPhyId(eth_phy_state_t *phy)
 }
 
 
-static void ephy_setLinkState(eth_phy_state_t *phy)
+static void ephy_setLinkState(const eth_phy_state_t *phy)
 {
 	uint16_t bctl, bstat, adv, lpa, pc1, pc2;
 	int speed, full_duplex = 0;
@@ -164,7 +163,7 @@ static void ephy_setLinkState(eth_phy_state_t *phy)
 }
 
 
-int ephy_linkSpeed(eth_phy_state_t *phy, int *full_duplex)
+int ephy_linkSpeed(const eth_phy_state_t *phy, int *full_duplex)
 {
 	uint16_t pc1 = ephy_regRead(phy, EPHY_1E_PHYCR1);
 
@@ -180,7 +179,7 @@ int ephy_linkSpeed(eth_phy_state_t *phy, int *full_duplex)
 }
 
 
-static void ephy_restartAN(eth_phy_state_t *phy)
+static void ephy_restartAN(const eth_phy_state_t *phy)
 {
 	/* adv: no-next-page, no-rem-fault, no-pause, no-T4, 100M/10M-FD & 10M-HD, 802.3 */
 	ephy_regWrite(phy, EPHY_04_ANAR, (1u << 8) | (1u << 6) | (1u << 5) | 1u);
@@ -231,7 +230,8 @@ static char *ephy_parsePinArg(char *cfg, const char *pfx, size_t pfx_len, gpio_i
 	}
 	p = strchr(p + 1, ':');
 	if (p != NULL) {
-		*p++ = 0;
+		*p = 0;
+		p++;
 	}
 
 	err = gpio_init(gp, cfg, flags);
@@ -257,7 +257,8 @@ static int ephy_config(eth_phy_state_t *phy, char *cfg)
 	phy->addr = strtoul(cfg, &p, 0);
 	if (*p == '.') {
 		phy->bus = phy->addr;
-		cfg = ++p;
+		p++;
+		cfg = p;
 
 		if (*cfg == '\0') {
 			return -EINVAL;
@@ -279,9 +280,10 @@ static int ephy_config(eth_phy_state_t *phy, char *cfg)
 		return 0;
 	}
 
-	if (*p++ != ':') {
+	if (*p != ':') {
 		return -EINVAL;
 	}
+	p++;
 
 	while (p != NULL && *p != '\0') {
 		cfg = p;
@@ -301,7 +303,7 @@ static int ephy_config(eth_phy_state_t *phy, char *cfg)
 
 
 /* toggle MACPHY internal loopback for test mode */
-int ephy_enableLoopback(eth_phy_state_t *phy, bool enable)
+int ephy_enableLoopback(const eth_phy_state_t *phy, bool enable)
 {
 	uint16_t bmcr = ephy_regRead(phy, EPHY_00_BMCR);
 	uint16_t phy_ctrl2 = ephy_regRead(phy, EPHY_1F_PHYCR2);
@@ -355,14 +357,15 @@ static int ephy_setAltConfig(eth_phy_state_t *phy, int cfg_id)
 	/* try to set alternative MII clock frequency */
 	uint16_t phy_ctrl2 = ephy_regRead(phy, EPHY_1F_PHYCR2);
 
-	if (cfg_id == 0) {
-		phy_ctrl2 &= ~(1 << 7);
-	}
-	else if (cfg_id == 1) {
-		phy_ctrl2 |= (1 << 7);
-	}
-	else {
-		return 0; /* unknown config ID */
+	switch (cfg_id) {
+		case 0:
+			phy_ctrl2 &= ~(1 << 7);
+			break;
+		case 1:
+			phy_ctrl2 |= (1 << 7);
+			break;
+		default:
+			return 0; /* unknown config ID */
 	}
 
 	ephy_regWrite(phy, EPHY_1F_PHYCR2, phy_ctrl2);
