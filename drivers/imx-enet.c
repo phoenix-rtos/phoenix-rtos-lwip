@@ -54,6 +54,7 @@
 
 
 #if defined(__CPU_IMXRT106X)
+
 #include <phoenix/arch/armv7m/imxrt/10xx/imxrt10xx.h>
 
 #define ENET_ADDR_ENET1   (0x402D8000)
@@ -129,9 +130,9 @@ enum { EV_BUS_ERROR = 0x01 };
 #define enet_printf(state, fmt, ...) printf("lwip: enet@%08x: " fmt "\n", state->dev_phys_addr, ##__VA_ARGS__)
 
 #if ENET_DEBUG
-#define enet_debug_printf(state, ...) enet_printf(state, __VA_ARGS__)
+#define enet_debug_printf(state, fmt, ...) enet_printf(state, fmt, ##__VA_ARGS__)
 #else
-#define enet_debug_printf(...)
+#define enet_debug_printf(state, fmt, ...)
 #endif
 
 
@@ -759,8 +760,8 @@ static int enet_initMDIO(enet_state_t *state)
 		{ pctl_set, pctl_iomux, .iomux = { pctl_mux_gpio_emc_41, 0, 4 } }, /* enet_mdio */
 	};
 	if (state->dev_phys_addr != ENET_ADDR_ENET1) {
-		enet_printf(state, "Unsupported device addr: 0x%08x", state->dev_phys_addr);
-		return -1;
+		enet_warnUnsupportedDeviceAddr(state);
+		return -ENODEV;
 	}
 	err = platformctl_seq(pctl_enet, sizeof(pctl_enet) / sizeof(*pctl_enet));
 
