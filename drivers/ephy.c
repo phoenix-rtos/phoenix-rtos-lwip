@@ -24,26 +24,32 @@
 
 #define EPHY_DEBUG 0
 
+
+/* EPHY common registers */
 enum {
-	EPHY_00_BMCR = 0x00,      /* Basic Mode Control */
-	EPHY_01_BMSR,             /* Basic Mode Status */
-	EPHY_02_PHYID1,           /* PHY Identifier 1 */
-	EPHY_03_PHYID2,           /* PHY Identifier 2 */
-	EPHY_04_ANAR,             /* Auto-Neg Advertising */
-	EPHY_05_ANLPAR,           /* Auto-Neg Link Partner Ability */
-	EPHY_06_ANER,             /* Auto-Neg Expansion */
-	EPHY_07_ANPR,             /* Auto-Neg Next Page */
-	EPHY_08_LPNPAR,           /* Link Partner Next Page Ability */
-	EPHY_10_DRCR = 0x10,      /* Digital Reserved Control */
-	EPHY_11_AFECR1,           /* AFE Control 1 */
-	EPHY_15_RXER_CNTR = 0x15, /* RXER Counter */
-	EPHY_16_OMSOR,            /* Operation Mode Strap Override */
-	EPHY_17_OMSSR,            /* Operation Mode Strap Status*/
-	EPHY_18_EXCR,             /* Expanded Control */
-	EPHY_1B_ICSR = 0x1B,      /* Interrupt Control/Status */
-	EPHY_1D_LMDCSR = 0x1D,    /* LinkMD Control/Status */
-	EPHY_1E_PHYCR1,           /* PHY Control 1 */
-	EPHY_1F_PHYCR2            /* PHY Control 2 */
+	EPHY_COMMON_00_BMCR = 0x00, /* Basic Mode Control */
+	EPHY_COMMON_01_BMSR,        /* Basic Mode Status */
+	EPHY_COMMON_02_PHYID1,      /* PHY Identifier 1 */
+	EPHY_COMMON_03_PHYID2,      /* PHY Identifier 2 */
+	EPHY_COMMON_04_ANAR,        /* Auto-Neg Advertising */
+	EPHY_COMMON_05_ANLPAR,      /* Auto-Neg Link Partner Ability */
+	EPHY_COMMON_06_ANER,        /* Auto-Neg Expansion */
+	EPHY_COMMON_07_ANPR,        /* Auto-Neg Next Page */
+	EPHY_COMMON_08_LPNPAR,      /* Link Partner Next Page Ability */
+};
+
+/* KSZ8081-specific registers */
+enum {
+	EPHY_KSZ8081_10_DRCR = 0x10,      /* Digital Reserved Control */
+	EPHY_KSZ8081_11_AFECR1,           /* AFE Control 1 */
+	EPHY_KSZ8081_15_RXER_CNTR = 0x15, /* RXER Counter */
+	EPHY_KSZ8081_16_OMSOR,            /* Operation Mode Strap Override */
+	EPHY_KSZ8081_17_OMSSR,            /* Operation Mode Strap Status*/
+	EPHY_KSZ8081_18_EXCR,             /* Expanded Control */
+	EPHY_KSZ8081_1B_ICSR = 0x1B,      /* Interrupt Control/Status */
+	EPHY_KSZ8081_1D_LMDCSR = 0x1D,    /* LinkMD Control/Status */
+	EPHY_KSZ8081_1E_PHYCR1,           /* PHY Control 1 */
+	EPHY_KSZ8081_1F_PHYCR2            /* PHY Control 2 */
 };
 
 
@@ -88,11 +94,11 @@ static void ephy_reset(const eth_phy_state_t *phy)
 
 		ephy_debug_printf(phy, "ephy_reset: start software reset...");
 
-		ephy_regWrite(phy, EPHY_00_BMCR, 1u << 15);
+		ephy_regWrite(phy, EPHY_COMMON_00_BMCR, 1u << 15);
 		usleep(phy->reset_release_time_us);
 
 		while (retries-- > 0) {
-			res = ephy_regRead(phy, EPHY_00_BMCR);
+			res = ephy_regRead(phy, EPHY_COMMON_00_BMCR);
 			if ((res & (1u << 15)) == 0) {
 				return;
 			}
@@ -109,11 +115,11 @@ static uint32_t ephy_readPhyId(const eth_phy_state_t *phy)
 	uint32_t phyid = 0;
 	uint16_t ret;
 
-	ret = ephy_regRead(phy, EPHY_02_PHYID1);
+	ret = ephy_regRead(phy, EPHY_COMMON_02_PHYID1);
 	phyid = ret << 16;
 	oui |= ret << 2;
 
-	ret = ephy_regRead(phy, EPHY_03_PHYID2);
+	ret = ephy_regRead(phy, EPHY_COMMON_03_PHYID2);
 	phyid |= ret;
 	oui |= (ret & 0xFC00) << (18 - 10);
 
@@ -122,8 +128,8 @@ static uint32_t ephy_readPhyId(const eth_phy_state_t *phy)
 			phyid, oui, (ret >> 4) & 0x3F, ret & 0x0F);
 	*/
 
-	oui = ephy_regRead(phy, EPHY_10_DRCR);
-	ret = ephy_regRead(phy, EPHY_11_AFECR1);
+	oui = ephy_regRead(phy, EPHY_KSZ8081_10_DRCR);
+	ret = ephy_regRead(phy, EPHY_KSZ8081_11_AFECR1);
 
 	/*
 		ephy_printf(phy, "DigCtl 0x%04x AFECtl1 0x%04x", oui, ret);
@@ -138,18 +144,18 @@ static void ephy_setLinkState(const eth_phy_state_t *phy)
 	uint16_t bctl, bstat, adv, lpa, pc1, pc2;
 	int speed, full_duplex = 0;
 
-	bctl = ephy_regRead(phy, EPHY_00_BMCR);
+	bctl = ephy_regRead(phy, EPHY_COMMON_00_BMCR);
 	/*
 	 * NOTE: "[Bit 2 of BMSR] indicates whether the link was
 	 * lost since the last read. For the current link status,
 	 * read this register twice." - RTL8201FI-VC-CG datasheet
 	 */
-	bstat = ephy_regRead(phy, EPHY_01_BMSR);
-	bstat = ephy_regRead(phy, EPHY_01_BMSR);
-	adv = ephy_regRead(phy, EPHY_04_ANAR);
-	lpa = ephy_regRead(phy, EPHY_05_ANLPAR);
-	pc1 = ephy_regRead(phy, EPHY_1E_PHYCR1);
-	pc2 = ephy_regRead(phy, EPHY_1F_PHYCR2);
+	bstat = ephy_regRead(phy, EPHY_COMMON_01_BMSR);
+	bstat = ephy_regRead(phy, EPHY_COMMON_01_BMSR);
+	adv = ephy_regRead(phy, EPHY_COMMON_04_ANAR);
+	lpa = ephy_regRead(phy, EPHY_COMMON_05_ANLPAR);
+	pc1 = ephy_regRead(phy, EPHY_KSZ8081_1E_PHYCR1);
+	pc2 = ephy_regRead(phy, EPHY_KSZ8081_1F_PHYCR2);
 	speed = ephy_linkSpeed(phy, &full_duplex);
 
 	int linkup = (bstat & (1u << 2)) != 0;
@@ -165,7 +171,7 @@ static void ephy_setLinkState(const eth_phy_state_t *phy)
 
 int ephy_linkSpeed(const eth_phy_state_t *phy, int *full_duplex)
 {
-	uint16_t pc1 = ephy_regRead(phy, EPHY_1E_PHYCR1);
+	uint16_t pc1 = ephy_regRead(phy, EPHY_KSZ8081_1E_PHYCR1);
 
 	if ((pc1 & 0x7) == 0) { /* PHY still in auto-negotiation */
 		return 0;
@@ -194,9 +200,9 @@ static inline uint16_t ephy_bmcrMaxSpeedMask(const eth_phy_state_t *phy)
 static void ephy_restartAN(const eth_phy_state_t *phy)
 {
 	/* adv: no-next-page, no-rem-fault, no-pause, no-T4, 100M/10M-FD & 10M-HD, 802.3 */
-	ephy_regWrite(phy, EPHY_04_ANAR, (1u << 8) | (1u << 6) | (1u << 5) | 1u);
+	ephy_regWrite(phy, EPHY_COMMON_04_ANAR, (1u << 8) | (1u << 6) | (1u << 5) | 1u);
 	/* 100M-FD, AN, restart-AN */
-	ephy_regWrite(phy, EPHY_00_BMCR, ephy_bmcrMaxSpeedMask(phy) | (1u << 12) | (1u << 9) | (1u << 8));
+	ephy_regWrite(phy, EPHY_COMMON_00_BMCR, ephy_bmcrMaxSpeedMask(phy) | (1u << 12) | (1u << 9) | (1u << 8));
 }
 
 
@@ -211,7 +217,7 @@ static void ephy_linkThread(void *arg)
 		// FIXME: thread exit
 
 		if (err == 0) {
-			stat = ephy_regRead(phy, EPHY_1B_ICSR);
+			stat = ephy_regRead(phy, EPHY_KSZ8081_1B_ICSR);
 			if ((stat & 0xFF) != 0) {
 				ephy_setLinkState(phy);
 			}
@@ -364,7 +370,7 @@ static int ephy_config(eth_phy_state_t *phy, char *cfg)
 /* toggle MACPHY internal loopback for test mode */
 int ephy_enableLoopback(const eth_phy_state_t *phy, bool enable)
 {
-	uint16_t bmcr = ephy_regRead(phy, EPHY_00_BMCR);
+	uint16_t bmcr = ephy_regRead(phy, EPHY_COMMON_00_BMCR);
 	bool loopback_enabled = bmcr & (1u << 14);
 
 	if (loopback_enabled == enable) {
@@ -385,11 +391,11 @@ int ephy_enableLoopback(const eth_phy_state_t *phy, bool enable)
 		case ephy_ksz8081rnd: {
 			/* force link up, disable transmitter */
 			const uint16_t mask = (1u << 11) | (1u << 3);
-			uint16_t phycr2 = ephy_regRead(phy, EPHY_1F_PHYCR2);
+			uint16_t phycr2 = ephy_regRead(phy, EPHY_KSZ8081_1F_PHYCR2);
 			phycr2 = enable ?
 					(phycr2 | mask) :
 					(phycr2 & ~mask);
-			ephy_regWrite(phy, EPHY_1F_PHYCR2, phycr2);
+			ephy_regWrite(phy, EPHY_KSZ8081_1F_PHYCR2, phycr2);
 			break;
 		}
 		default:
@@ -400,7 +406,7 @@ int ephy_enableLoopback(const eth_phy_state_t *phy, bool enable)
 	bmcr = enable ?
 			(bmcr | (1u << 14)) :
 			(bmcr & ~(1u << 14));
-	ephy_regWrite(phy, EPHY_00_BMCR, bmcr);
+	ephy_regWrite(phy, EPHY_COMMON_00_BMCR, bmcr);
 
 	if (!enable) {
 		ephy_restartAN(phy);
@@ -428,7 +434,7 @@ static int ephy_setAltConfig(eth_phy_state_t *phy, int cfg_id)
 
 
 	/* try to set alternative MII clock frequency */
-	uint16_t phy_ctrl2 = ephy_regRead(phy, EPHY_1F_PHYCR2);
+	uint16_t phy_ctrl2 = ephy_regRead(phy, EPHY_KSZ8081_1F_PHYCR2);
 
 	switch (cfg_id) {
 		case 0:
@@ -441,8 +447,8 @@ static int ephy_setAltConfig(eth_phy_state_t *phy, int cfg_id)
 			return 0; /* unknown config ID */
 	}
 
-	ephy_regWrite(phy, EPHY_1F_PHYCR2, phy_ctrl2);
-	if (ephy_regRead(phy, EPHY_1F_PHYCR2) != phy_ctrl2) {
+	ephy_regWrite(phy, EPHY_KSZ8081_1F_PHYCR2, phy_ctrl2);
+	if (ephy_regRead(phy, EPHY_KSZ8081_1F_PHYCR2) != phy_ctrl2) {
 		ephy_printf(phy, "failed to set clock");
 		return -1;
 	}
@@ -492,7 +498,7 @@ int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb
 	// FIXME: check phyid
 
 	/* make address 0 not broadcast, disable NAND-tree mode */
-	ephy_regWrite(phy, EPHY_16_OMSOR, (1u << 1) | (1u << 9));
+	ephy_regWrite(phy, EPHY_KSZ8081_16_OMSOR, (1u << 1) | (1u << 9));
 
 	err = ephy_setAltConfig(phy, 0); /* KSZ8081 RND - default config */
 	if (err <= 0) {
@@ -531,7 +537,7 @@ int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb
 		}
 
 		/* enable link up/down IRQ signal */
-		ephy_regWrite(phy, EPHY_1B_ICSR, (1u << 8) | (1u << 10));
+		ephy_regWrite(phy, EPHY_KSZ8081_1B_ICSR, (1u << 8) | (1u << 10));
 	}
 	else {
 		ephy_printf(phy, "WARN: irq_gpio not valid, could not start PHY IRQ thread");
