@@ -44,7 +44,7 @@ enum {
 typedef struct
 {
 	struct netif *netif;
-	ppp_pcb* ppp;
+	ppp_pcb *ppp;
 
 	const char *serialdev_fn;
 	const char *serialat_fn;
@@ -62,10 +62,10 @@ typedef struct
 	uint32_t main_loop_stack[4096];
 } pppos_priv_t;
 
-#define COL_RED     "\033[1;31m"
-#define COL_CYAN    "\033[1;36m"
-#define COL_YELLOW  "\033[1;33m"
-#define COL_NORMAL  "\033[0m"
+#define COL_RED    "\033[1;31m"
+#define COL_CYAN   "\033[1;36m"
+#define COL_YELLOW "\033[1;33m"
+#define COL_NORMAL "\033[0m"
 
 #if 0
 /* clang-format off */
@@ -98,7 +98,9 @@ static void pppos_printf(const char *format, ...)
 #endif
 
 /* if 1 - use blocking read with VMIN=0, VTIME=1 */
+#ifndef PPPOS_USE_BLOCKING_READ
 #define PPPOS_USE_BLOCKING_READ 1
+#endif
 
 #define PPPOS_READ_AT_TIMEOUT_STEP_MS 5
 #if PPPOS_USE_BLOCKING_READ == 0
@@ -120,7 +122,7 @@ static void serial_close(int fd)
 	if (fd >= 0)
 		close(fd);
 
-//	state->fd = -1;
+	//	state->fd = -1;
 	// NOTE: set DISCONNECTED in status callback
 	// state->conn_state = CONN_STATE_DISCONNECTED;
 }
@@ -187,7 +189,7 @@ static void serial_set_blocking(int fd)
 #endif
 
 #define WRITE_MAX_RETRIES 2
-static int serial_write(int fd, const u8_t* data, u32_t len)
+static int serial_write(int fd, const u8_t *data, u32_t len)
 {
 	int off = 0;
 	int retries = 0;
@@ -197,8 +199,8 @@ static int serial_write(int fd, const u8_t* data, u32_t len)
 
 		if (res < 0) {
 			if (errno == EINTR) {
-				//log_sys_err("%s() : write(%d)\n", __func__, to_write);
-				usleep(5*1000);
+				// log_sys_err("%s() : write(%d)\n", __func__, to_write);
+				usleep(5 * 1000);
 				continue;
 			}
 			if (errno == EWOULDBLOCK) {
@@ -213,12 +215,13 @@ static int serial_write(int fd, const u8_t* data, u32_t len)
 		retries = 0;
 		continue;
 
-retry:
+	retry:
 		if (retries >= WRITE_MAX_RETRIES) {
 			return off;
-		} else {
+		}
+		else {
 			retries += 1;
-			usleep(5*1000);
+			usleep(5 * 1000);
 			continue;
 		}
 	}
@@ -238,13 +241,13 @@ enum {
 	AT_RESULT_NO_ANSWER
 };
 
-static const char* at_result_codes[] = { "OK", "CONNECT", "RING", "NO CARRIER", "ERROR", "NO ANSWER", NULL };
+static const char *at_result_codes[] = { "OK", "CONNECT", "RING", "NO CARRIER", "ERROR", "NO ANSWER", NULL };
 static int at_result_codes_len = sizeof(at_result_codes) / sizeof(at_result_codes[0]);
 
-static int at_check_result(const char* buf)
+static int at_check_result(const char *buf)
 {
 	int res = 0;
-	char* result;
+	char *result;
 
 	while (at_result_codes[res]) {
 		if ((result = strstr(buf, at_result_codes[res])) != NULL) {
@@ -256,7 +259,8 @@ static int at_check_result(const char* buf)
 	return -1;
 }
 
-static const char * at_result_to_str(int res) {
+static const char *at_result_to_str(int res)
+{
 	if (res < 0 || res >= at_result_codes_len)
 		return "!INVALID!";
 
@@ -264,7 +268,7 @@ static const char * at_result_to_str(int res) {
 }
 
 
-static int at_send_cmd_res(int fd, const char* cmd, int timeout_ms, char *rx_buf, int rx_bufsize)
+static int at_send_cmd_res(int fd, const char *cmd, int timeout_ms, char *rx_buf, int rx_bufsize)
 {
 	int max_len = rx_bufsize - 1;
 	char *end;
@@ -274,7 +278,7 @@ static int at_send_cmd_res(int fd, const char* cmd, int timeout_ms, char *rx_buf
 		return ERR_ARG;
 	}
 
-	serial_write(fd, (u8_t*)cmd, strlen(cmd));
+	serial_write(fd, (u8_t *)cmd, strlen(cmd));
 	end = strstr(cmd, "\r\n");
 	/* remove newlines for better result printing */
 	log_at("AT Tx: [%*s]", (end != NULL) ? end - cmd : strlen(cmd), cmd);
@@ -291,11 +295,13 @@ static int at_send_cmd_res(int fd, const char* cmd, int timeout_ms, char *rx_buf
 			log_error("%s() : read(%d) = %d (%d -> %s)", __func__, max_len - off, len, errno, strerror(errno));
 			serial_close(fd);
 			return -1;
-		} else if (len == 0) {
+		}
+		else if (len == 0) {
 			log_error("%s() : read(%d) = %d (%d -> %s)", __func__, max_len - off, len, errno, strerror(errno));
 			serial_close(fd);
 			return -1;
-		} else {
+		}
+		else {
 			rx_buf[off + len] = '\0';
 
 			int res = at_check_result(rx_buf);
@@ -311,11 +317,10 @@ static int at_send_cmd_res(int fd, const char* cmd, int timeout_ms, char *rx_buf
 				log_at("AT Rx: result=[%s] data=[%s]", at_result_to_str(res), rx_buf);
 				return res;
 			}
-
 		}
 		continue;
 
-retry:
+	retry:
 		usleep(PPPOS_READ_AT_TIMEOUT_STEP_MS * 1000);
 		if (timeout_ms >= 0) {
 			timeout_ms -= PPPOS_READ_AT_TIMEOUT_STEP_MS;
@@ -331,7 +336,7 @@ retry:
 }
 
 
-static int at_send_cmd(int fd, const char* cmd, int timeout_ms)
+static int at_send_cmd(int fd, const char *cmd, int timeout_ms)
 {
 	char rx_buf[512];
 	return at_send_cmd_res(fd, cmd, timeout_ms, rx_buf, sizeof(rx_buf));
@@ -362,7 +367,8 @@ static int at_is_responding(int fd, int timeout_ms)
 {
 	int res;
 	int retry = 5;
-	while ((res = at_send_cmd(fd, "AT\r\n", timeout_ms)) != AT_RESULT_OK && retry--);
+	while ((res = at_send_cmd(fd, "AT\r\n", timeout_ms)) != AT_RESULT_OK && retry--)
+		;
 
 	if (res != AT_RESULT_OK) {
 		log_warn("modem not responding, res=%d", res);
@@ -377,10 +383,10 @@ static int at_is_responding(int fd, int timeout_ms)
 
 static u32_t pppos_output_cb(ppp_pcb *pcb, u8_t *data, u32_t len, void *ctx)
 {
-	pppos_priv_t* state = (pppos_priv_t*) ctx;
+	pppos_priv_t *state = (pppos_priv_t *)ctx;
 
 	int res = serial_write(state->fd, data, len);
-	//log_debug("%s : write(%d) = %d", __func__, len, res);
+	// log_debug("%s : write(%d) = %d", __func__, len, res);
 	if (res < 0 && errno != EINTR && errno != EWOULDBLOCK) {
 		log_error("%s() : write(%d) = %d (%d -> %s)", __func__, len, res, errno, strerror(errno));
 		serial_close(state->fd);
@@ -394,11 +400,11 @@ static u32_t pppos_output_cb(ppp_pcb *pcb, u8_t *data, u32_t len, void *ctx)
 static void pppos_link_status_cb(ppp_pcb *pcb, int err_code, void *ctx)
 {
 	struct netif *pppif = ppp_netif(pcb);
-	pppos_priv_t* state = (pppos_priv_t*) ctx;
+	pppos_priv_t *state = (pppos_priv_t *)ctx;
 	mutexLock(state->lock);
 
-	switch(err_code) {
-	case PPPERR_NONE:               /* No error. */
+	switch (err_code) {
+		case PPPERR_NONE: /* No error. */
 		{
 			state->conn_state = CONN_STATE_CONNECTED;
 
@@ -415,70 +421,69 @@ static void pppos_link_status_cb(ppp_pcb *pcb, int err_code, void *ctx)
 #if PPP_IPV6_SUPPORT
 			log_info("   our6_ipaddr = %s\n\r", ip6addr_ntoa(netif_ip6_addr(pppif, 0)));
 #endif /* PPP_IPV6_SUPPORT */
-		}
-		break;
+		} break;
 
-	case PPPERR_PARAM:             /* Invalid parameter. */
-		log_info("ppp_link_status_cb: PPPERR_PARAM");
-		// TODO: error?
-		break;
+		case PPPERR_PARAM: /* Invalid parameter. */
+			log_info("ppp_link_status_cb: PPPERR_PARAM");
+			// TODO: error?
+			break;
 
-	case PPPERR_OPEN:              /* Unable to open PPP session. */
-		log_info("ppp_link_status_cb: PPPERR_OPEN");
-		break;
+		case PPPERR_OPEN: /* Unable to open PPP session. */
+			log_info("ppp_link_status_cb: PPPERR_OPEN");
+			break;
 
-	case PPPERR_DEVICE:            /* Invalid I/O device for PPP. */
-		log_info("ppp_link_status_cb: PPPERR_DEVICE");
-		serial_close(state->fd);
-		state->fd = -1;
-		break;
+		case PPPERR_DEVICE: /* Invalid I/O device for PPP. */
+			log_info("ppp_link_status_cb: PPPERR_DEVICE");
+			serial_close(state->fd);
+			state->fd = -1;
+			break;
 
-	case PPPERR_ALLOC:             /* Unable to allocate resources. */
-		log_info("ppp_link_status_cb: PPPERR_ALLOC");
-		//TODO: broken
-		break;
+		case PPPERR_ALLOC: /* Unable to allocate resources. */
+			log_info("ppp_link_status_cb: PPPERR_ALLOC");
+			// TODO: broken
+			break;
 
-	case PPPERR_USER:              /* User interrupt. */
-		log_info("ppp_link_status_cb: PPPERR_USER");
-		state->conn_state = CONN_STATE_DISCONNECTED;
-		break;
+		case PPPERR_USER: /* User interrupt. */
+			log_info("ppp_link_status_cb: PPPERR_USER");
+			state->conn_state = CONN_STATE_DISCONNECTED;
+			break;
 
-	case PPPERR_CONNECT:           /* Connection lost. */
-		log_info("ppp_link_status_cb: PPPERR_CONNECT");
-		state->conn_state = CONN_STATE_DISCONNECTED;
-		break;
+		case PPPERR_CONNECT: /* Connection lost. */
+			log_info("ppp_link_status_cb: PPPERR_CONNECT");
+			state->conn_state = CONN_STATE_DISCONNECTED;
+			break;
 
-	case PPPERR_AUTHFAIL:          /* Failed authentication challenge. */
-		log_info("ppp_link_status_cb: PPPERR_AUTHFAIL");
-		state->conn_state = CONN_STATE_DISCONNECTED;
-		break;
+		case PPPERR_AUTHFAIL: /* Failed authentication challenge. */
+			log_info("ppp_link_status_cb: PPPERR_AUTHFAIL");
+			state->conn_state = CONN_STATE_DISCONNECTED;
+			break;
 
-	case PPPERR_PROTOCOL:          /* Failed to meet protocol. */
-		log_info("ppp_link_status_cb: PPPERR_PROTOCOL");
-		state->conn_state = CONN_STATE_DISCONNECTED;
-		break;
+		case PPPERR_PROTOCOL: /* Failed to meet protocol. */
+			log_info("ppp_link_status_cb: PPPERR_PROTOCOL");
+			state->conn_state = CONN_STATE_DISCONNECTED;
+			break;
 
-	case PPPERR_PEERDEAD:          /* Connection timeout. */
-		log_info("ppp_link_status_cb: PPPERR_PEERDEAD");
-		state->conn_state = CONN_STATE_DISCONNECTED;
-		break;
+		case PPPERR_PEERDEAD: /* Connection timeout. */
+			log_info("ppp_link_status_cb: PPPERR_PEERDEAD");
+			state->conn_state = CONN_STATE_DISCONNECTED;
+			break;
 
-	case PPPERR_IDLETIMEOUT:       /* Idle Timeout. */
-		log_info("ppp_link_status_cb: PPPERR_IDLETIMEOUT");
-		break;
+		case PPPERR_IDLETIMEOUT: /* Idle Timeout. */
+			log_info("ppp_link_status_cb: PPPERR_IDLETIMEOUT");
+			break;
 
-	case PPPERR_CONNECTTIME:       /* Max connect time reached */
-		log_info("ppp_link_status_cb: PPPERR_CONNECTTIME");
-		state->conn_state = CONN_STATE_DISCONNECTED;
-		break;
+		case PPPERR_CONNECTTIME: /* Max connect time reached */
+			log_info("ppp_link_status_cb: PPPERR_CONNECTTIME");
+			state->conn_state = CONN_STATE_DISCONNECTED;
+			break;
 
-	case PPPERR_LOOPBACK:          /* Loopback detected */
-		log_info("ppp_link_status_cb: PPPERR_LOOPBACK");
-		break;
+		case PPPERR_LOOPBACK: /* Loopback detected */
+			log_info("ppp_link_status_cb: PPPERR_LOOPBACK");
+			break;
 
-	default:
-		log_info("ppp_link_status_cb: unknown error code: %d", err_code);
-		break;
+		default:
+			log_info("ppp_link_status_cb: unknown error code: %d", err_code);
+			break;
 	}
 
 	log_info("ppp_link_status_cb out");
@@ -486,15 +491,14 @@ static void pppos_link_status_cb(ppp_pcb *pcb, int err_code, void *ctx)
 	condSignal(state->cond);
 }
 
-static void pppos_do_rx(pppos_priv_t* state)
+static void pppos_do_rx(pppos_priv_t *state)
 {
 	int len;
 	u8_t buffer[512];
 
 	int off = 0;
 
-	while (state->conn_state != CONN_STATE_DISCONNECTED
-			&& state->conn_state != CONN_STATE_DISCONNECTING) {
+	while (state->conn_state != CONN_STATE_DISCONNECTED && state->conn_state != CONN_STATE_DISCONNECTING) {
 
 		len = read(state->fd, buffer + off, sizeof(buffer) - off);
 		if (len < 0) {
@@ -539,9 +543,9 @@ static void pppos_do_rx(pppos_priv_t* state)
 }
 
 
-static void pppos_mainLoop(void* _state)
+static void pppos_mainLoop(void *_state)
 {
-	pppos_priv_t* state = (pppos_priv_t*) _state;
+	pppos_priv_t *state = (pppos_priv_t *)_state;
 	int res;
 	int retries;
 
@@ -556,7 +560,7 @@ static void pppos_mainLoop(void* _state)
 		mutexUnlock(state->lock);
 
 		/* Wait for the serial device */
-		if (state->fd < 0)  {
+		if (state->fd < 0) {
 			while ((state->fd = open(state->serialdev_fn, O_RDWR | O_NOCTTY | O_NONBLOCK)) < 0)
 				sleep(PPPOS_TRYOPEN_SERIALDEV_SEC);
 
@@ -579,7 +583,7 @@ static void pppos_mainLoop(void* _state)
 		if (!at_is_responding(state->fd, 1000)) {
 			goto fail;
 		}
-		const char** at_cmd = at_init_cmds;
+		const char **at_cmd = at_init_cmds;
 		while (*at_cmd) {
 			if ((res = at_send_cmd(state->fd, *at_cmd, AT_INIT_CMDS_TIMEOUT_MS)) != AT_RESULT_OK) {
 				log_warn("failed to initialize modem (cmd=%s), res=%d, retrying", *at_cmd, res);
@@ -639,7 +643,7 @@ static void pppos_mainLoop(void* _state)
 
 		log_debug("connection closed");
 
-fail:
+	fail:
 		serial_close(state->fd);
 		state->fd = -1;
 
@@ -736,7 +740,7 @@ static int pppos_netifDown(pppos_priv_t *state)
 static pppos_priv_t *pppos_netifState(struct netif *netif)
 {
 	struct netif_alloc *s = (void *)netif;
-	pppos_priv_t *state = (void *) ((char *)s + ((sizeof(*s) + (_Alignof(pppos_priv_t) - 1)) & ~(_Alignof(pppos_priv_t) - 1)));
+	pppos_priv_t *state = (void *)((char *)s + ((sizeof(*s) + (_Alignof(pppos_priv_t) - 1)) & ~(_Alignof(pppos_priv_t) - 1)));
 	return state;
 }
 
@@ -748,7 +752,8 @@ static void pppos_statusCallback(struct netif *netif)
 	if (netif->flags & NETIF_FLAG_UP) {
 		if (pppos_netifUp(state))
 			netif->flags &= ~NETIF_FLAG_UP;
-	} else if (pppos_netifDown(state)) {
+	}
+	else if (pppos_netifDown(state)) {
 		netif->flags |= NETIF_FLAG_UP;
 	}
 }
@@ -772,7 +777,7 @@ static char *cfg_get_next_arg(char *arg)
 
 static int pppos_netifInit(struct netif *netif, char *cfg)
 {
-	pppos_priv_t* state;
+	pppos_priv_t *state;
 	int retries, flags = 0;
 	char *next;
 
@@ -830,7 +835,7 @@ static int pppos_netifInit(struct netif *netif, char *cfg)
 
 		if (!state->ppp) {
 			log_error("could not create PPP control interface");
-			return ERR_IF ; // TODO: maybe permanent broken state?
+			return ERR_IF;  // TODO: maybe permanent broken state?
 		}
 		netif->flags &= ~NETIF_FLAG_UP;
 		ppp_set_netif_statuscallback(state->ppp, pppos_statusCallback);
@@ -903,8 +908,7 @@ static netif_driver_t pppos_drv = {
 };
 
 
-__constructor__(1000)
-void register_driver_pppos(void)
+__constructor__(1000) void register_driver_pppos(void)
 {
 	register_netif_driver(&pppos_drv);
 }
