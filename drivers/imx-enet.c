@@ -1510,8 +1510,8 @@ static int enet_phySelfTest(struct netif *netif)
 	}
 
 	/* setup self-test (local loopback mode & force linkup) */
-	if (ephy_enableLoopback(&state->phy, true) < 0) {
-		ephy_enableLoopback(&state->phy, false);
+	if (ephy_setLoopback(&state->phy, true) < 0) {
+		ephy_setLoopback(&state->phy, false);
 		resourceDestroy(state->selfTest.rx_cond);
 		resourceDestroy(state->selfTest.rx_lock);
 		return -1;
@@ -1582,7 +1582,7 @@ static int enet_phySelfTest(struct netif *netif)
 		state->mmio->TCR |= ENET_TCR_ADDINS;
 	}
 	state->mmio->MIBC = ENET_MIBC_MIB_DIS;
-	ephy_enableLoopback(&state->phy, false);
+	ephy_setLoopback(&state->phy, false);
 
 	/* destroy selftest resources */
 	resourceDestroy(state->selfTest.rx_cond);
@@ -1787,6 +1787,25 @@ static int enet_ethtoolIoctl(struct netif *netif, void *data)
 			}
 #endif
 			return -EOPNOTSUPP;
+		}
+
+		case ETHTOOL_GLOOPBACK: {
+			struct ethtool_value *value = data;
+
+			value->data = ephy_getLoopback(&state->phy);
+
+			return EOK;
+		}
+
+		case ETHTOOL_SLOOPBACK: {
+			struct ethtool_value *value = data;
+
+			int err = ephy_setLoopback(&state->phy, value->data);
+			if (err < 0) {
+				value->data = ETH_PHY_LOOPBACK_SET_FAILED;
+			}
+
+			return EOK;
 		}
 
 		case ETHTOOL_GLINKSETTINGS: {
