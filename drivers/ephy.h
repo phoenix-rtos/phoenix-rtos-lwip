@@ -55,10 +55,9 @@ int ephy_linkSpeed(const eth_phy_state_t *phy, int *duplex);
 /* called by the MAC driver if it handles the PHY IRQ */
 void ephy_macInterrupt(const eth_phy_state_t *phy);
 
-/* toggle MACPHY internal loopback for test mode */
-int ephy_enableLoopback(const eth_phy_state_t *phy, bool enable);
-
 /* ethtool interface */
+int ephy_getLoopback(const eth_phy_state_t *phy);
+int ephy_setLoopback(const eth_phy_state_t *phy, bool enable);
 int ephy_getAN(const eth_phy_state_t *phy);
 
 /* get advertised: speeds, interfaces, features */

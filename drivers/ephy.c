@@ -674,7 +674,14 @@ static int ephy_config(eth_phy_state_t *phy, char *cfg)
 }
 
 
-int ephy_enableLoopback(const eth_phy_state_t *phy, bool enable)
+int ephy_getLoopback(const eth_phy_state_t *phy)
+{
+	return (ephy_regRead(phy, EPHY_COMMON_00_BMCR) >> 14) & 0x1;
+}
+
+
+/* toggle MACPHY internal loopback for test mode */
+int ephy_setLoopback(const eth_phy_state_t *phy, bool enable)
 {
 	uint16_t bmcr = ephy_regRead(phy, EPHY_COMMON_00_BMCR);
 	bool loopback_enabled = bmcr & (1U << 14);
