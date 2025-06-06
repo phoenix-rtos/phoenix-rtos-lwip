@@ -47,10 +47,9 @@ typedef struct {
 int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb_t cb, void *cb_arg);
 int ephy_linkSpeed(const eth_phy_state_t *phy, int *duplex);
 
-/* toggle MACPHY internal loopback for test mode */
-int ephy_enableLoopback(const eth_phy_state_t *phy, bool enable);
-
 /* ethtool interface */
+int ephy_getLoopback(const eth_phy_state_t *phy);
+int ephy_setLoopback(const eth_phy_state_t *phy, bool enable);
 int ephy_getAN(const eth_phy_state_t *phy);
 
 #endif /* NET_EPHY_H_ */
