@@ -114,9 +114,9 @@ static void greth_irqThread(void *arg)
 
 		if ((state->mmio->STAT & (GRETH_STAT_RI | GRETH_STAT_RE)) != 0) {
 			state->mmio->STAT = GRETH_STAT_RI;
-			rx_done = net_receivePackets(&state->rx, state->netif, 0);
+			rx_done = net_receivePackets(&state->rx, state->netif);
 			if ((rx_done > 0) || (net_rxFullyFilled(&state->rx) == 0)) {
-				net_refillRx(&state->rx, ETH_PAD_SIZE);
+				net_refillRx(&state->rx);
 				state->mmio->CTRL |= GRETH_CTRL_RE;
 			}
 		}
@@ -510,7 +510,7 @@ static int greth_initDevice(greth_state_t *state, int irq, bool mdio)
 	greth_readCardMac(state);
 	greth_showCardId(state);
 
-	net_refillRx(&state->rx, ETH_PAD_SIZE);
+	net_refillRx(&state->rx);
 	greth_startGreth(state);
 
 	return err;

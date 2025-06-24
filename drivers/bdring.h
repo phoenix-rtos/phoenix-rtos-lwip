@@ -54,8 +54,8 @@ struct net_bufdesc_ring_ {
 
 
 int net_initRings(net_bufdesc_ring_t *rings, const size_t *sizes, size_t nrings, const net_bufdesc_ops_t *ops);
-size_t net_receivePackets(net_bufdesc_ring_t *ring, struct netif *ni, unsigned ethpad);
-size_t net_refillRx(net_bufdesc_ring_t *ring, size_t ethpad);
+size_t net_receivePackets(net_bufdesc_ring_t *ring, struct netif *ni);
+size_t net_refillRx(net_bufdesc_ring_t *ring);
 size_t net_reapTxFinished(net_bufdesc_ring_t *ring);
 size_t net_transmitPacket(net_bufdesc_ring_t *ring, struct pbuf *p);
 
