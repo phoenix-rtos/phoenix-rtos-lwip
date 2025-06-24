@@ -96,8 +96,17 @@ err_t netpacket_sendto(struct netpacket_pcb *pcb, struct pbuf *p, u8_t *dst_addr
 	switch (pcb->type) {
 		case SOCK_RAW:
 			LWIP_ASSERT("netpacket_sendto: dst_addr must be NULL in SOCK_RAW connection", dst_addr == NULL);
+#if ETH_PAD_SIZE != 0
+			/* add ethpad (not added by user) */
+			packet = pbuf_alloc(PBUF_RAW, ETH_PAD_SIZE, PBUF_POOL);
+			if (packet == NULL) {
+				return ERR_MEM;
+			}
+			pbuf_chain(packet, p);
+#else
 			/* data in given buffer contains full ethernet frame - do nothing */
 			packet = p;
+#endif
 			break;
 		case SOCK_DGRAM:
 			LWIP_ASSERT("netpacket_sendto: dst_addr cannot be NULL in SOCK_DGRAM connection", dst_addr != NULL);
@@ -120,7 +129,11 @@ err_t netpacket_sendto(struct netpacket_pcb *pcb, struct pbuf *p, u8_t *dst_addr
 
 	netpacket_linkoutput_full(pcb->netif, packet, pcb);
 	err_t ret = pcb->netif->linkoutput(pcb->netif, packet);
-	if (pcb->type == SOCK_DGRAM) {
+	if (pcb->type == SOCK_DGRAM
+#if ETH_PAD_SIZE != 0
+			|| pcb->type == SOCK_RAW
+#endif
+	) {
 		pbuf_dechain(packet);
 		pbuf_free(packet);
 	}
@@ -203,7 +216,7 @@ int netpacket_input(struct pbuf *p, struct netif *netif)
 			pbuf_remove_header(p, sizeof(struct eth_hdr));
 		}
 		else {
-#if ETH_PAD_SIZE
+#if ETH_PAD_SIZE != 0
 			/* remove ethernet header padding */
 			pbuf_remove_header(p, ETH_PAD_SIZE);
 #endif
@@ -216,7 +229,7 @@ int netpacket_input(struct pbuf *p, struct netif *netif)
 			pbuf_add_header_force(p, sizeof(struct eth_hdr));
 		}
 		else {
-#if ETH_PAD_SIZE
+#if ETH_PAD_SIZE != 0
 			/* restore ethernet header padding */
 			pbuf_add_header_force(p, ETH_PAD_SIZE);
 #endif
@@ -263,7 +276,7 @@ static void netpacket_linkoutput_full(struct netif *netif, struct pbuf *p, struc
 			pbuf_remove_header(p, sizeof(struct eth_hdr));
 		}
 		else {
-#if ETH_PAD_SIZE
+#if ETH_PAD_SIZE != 0
 			/* remove ethernet header padding */
 			pbuf_remove_header(p, ETH_PAD_SIZE);
 #endif
@@ -276,7 +289,7 @@ static void netpacket_linkoutput_full(struct netif *netif, struct pbuf *p, struc
 			pbuf_add_header_force(p, sizeof(struct eth_hdr));
 		}
 		else {
-#if ETH_PAD_SIZE
+#if ETH_PAD_SIZE != 0
 			/* restore ethernet header padding */
 			pbuf_add_header_force(p, ETH_PAD_SIZE);
 #endif
