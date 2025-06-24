@@ -77,7 +77,7 @@ int net_initRings(net_bufdesc_ring_t *rings, const size_t *sizes, size_t nrings,
 
 		nb += sizes[i];
 		sz += sizes[i] * ops->desc_size;
-		sz = (sz + align - 1) & ~(align - 1);
+		sz = (sz + align) & ~align;
 	}
 
 	bufp = calloc(nb, sizeof(*bufp));
