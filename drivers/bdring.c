@@ -50,18 +50,15 @@ static inline bool net_isPowerOf2(size_t n)
 
 int net_initRings(net_bufdesc_ring_t *rings, const size_t *sizes, size_t nrings, const net_bufdesc_ops_t *ops)
 {
-	size_t i, nb, sz, align;
+	size_t i, nb, sz, alignMask;
 	addr_t phys;
 	struct pbuf **bufp;
 	void *p;
 
-	align = ops->ring_alignment;
-	if (align != 0) {
-		if (!net_isPowerOf2(align)) {
-			return -EINVAL;
-		}
-		--align;
+	if (ops->ring_alignment == 0 || !net_isPowerOf2(ops->ring_alignment)) {
+		return -EINVAL;
 	}
+	alignMask = ops->ring_alignment - 1;
 
 	if (net_initPktMem(ops->pkt_buf_sz) < 0) {
 		return -EINVAL;
@@ -77,7 +74,7 @@ int net_initRings(net_bufdesc_ring_t *rings, const size_t *sizes, size_t nrings,
 
 		nb += sizes[i];
 		sz += sizes[i] * ops->desc_size;
-		sz = (sz + align - 1) & ~(align - 1);
+		sz = (sz + alignMask) & ~alignMask;
 	}
 
 	bufp = calloc(nb, sizeof(*bufp));
@@ -92,8 +89,8 @@ int net_initRings(net_bufdesc_ring_t *rings, const size_t *sizes, size_t nrings,
 	}
 
 	phys = va2pa(p);
-	if ((phys & align) != 0) {
-		printf("ERROR: got unaligned ring buffer (at 0x%zx, align mask: 0x%zx)\n", (size_t)phys, align);
+	if ((phys & alignMask) != 0) {
+		printf("ERROR: got unaligned ring buffer (at 0x%zx, align mask: 0x%zx)\n", (size_t)phys, alignMask);
 		munmap(p, sz);
 		free(bufp);
 		return -ENOMEM;
@@ -112,7 +109,7 @@ int net_initRings(net_bufdesc_ring_t *rings, const size_t *sizes, size_t nrings,
 		rings[i].phys = phys;
 		rings[i].ops = ops;
 
-		sz = (sizes[i] * ops->desc_size + align) & ~align;
+		sz = (sizes[i] * ops->desc_size + alignMask) & ~alignMask;
 		p += sz;
 		bufp += sizes[i];
 		phys += sz;
