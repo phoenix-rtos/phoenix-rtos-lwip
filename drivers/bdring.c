@@ -121,7 +121,7 @@ int net_initRings(net_bufdesc_ring_t *rings, const size_t *sizes, size_t nrings,
 }
 
 
-size_t net_receivePackets(net_bufdesc_ring_t *ring, struct netif *ni, unsigned ethpad)
+size_t net_receivePackets(net_bufdesc_ring_t *ring, struct netif *ni)
 {
 	struct pbuf *p, *pkt;
 	size_t n, i, sz;
@@ -152,7 +152,6 @@ size_t net_receivePackets(net_bufdesc_ring_t *ring, struct netif *ni, unsigned e
 		}
 
 		if (ring->ops->pktRxFinished(ring, i)) {
-			pbuf_header_force(p, ETH_PAD_SIZE - ethpad);
 #ifdef LWIP_HOOK_ETH_INPUT
 			if (LWIP_HOOK_ETH_INPUT(p, ni)) {
 				pbuf_free(p);
@@ -175,7 +174,7 @@ size_t net_receivePackets(net_bufdesc_ring_t *ring, struct netif *ni, unsigned e
 }
 
 
-size_t net_refillRx(net_bufdesc_ring_t *ring, size_t ethpad)
+size_t net_refillRx(net_bufdesc_ring_t *ring)
 {
 	struct pbuf *p;
 	size_t n, i, nxt, sz;
@@ -192,8 +191,6 @@ size_t net_refillRx(net_bufdesc_ring_t *ring, size_t ethpad)
 		if (p == NULL) {
 			break;
 		}
-
-		pbuf_header_force(p, ethpad - ETH_PAD_SIZE);
 
 		ring->bufp[i] = p;
 		ring->ops->fillRxDesc(ring, i, pa, sz, 0);

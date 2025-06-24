@@ -197,7 +197,7 @@ static int rtl_initRings(rtl_priv_t *state)
 	if (err)
 		return err;
 
-	net_refillRx(&state->rx, 0);
+	net_refillRx(&state->rx);
 
 	state->mmio->RDSAR.h = USE_DMA64 ? state->rx.phys >> 32 : 0;
 	state->mmio->RDSAR.l = state->rx.phys;
@@ -237,9 +237,9 @@ static void rtl_rx_irq_thread(void *arg)
 		state->mmio->ISR = RTL_INT_RX;
 		mutexUnlock(state->irq_lock);
 
-		rx_done = net_receivePackets(&state->rx, state->netif, 0);
+		rx_done = net_receivePackets(&state->rx, state->netif);
 		if (rx_done || !net_rxFullyFilled(&state->rx))
-			net_refillRx(&state->rx, 0);
+			net_refillRx(&state->rx);
 
 		mutexLock(state->irq_lock);
 		if (!(state->mmio->ISR & RTL_INT_RX)) {
@@ -347,8 +347,7 @@ static err_t rtl_netifOutput(struct netif *netif, struct pbuf *p)
 		pbuf_header(p, -ETH_PAD_SIZE); /* drop the padding word */
 
 	if (p->tot_len < 60) {
-		struct pbuf *q = pbuf_alloc(PBUF_RAW, 60 + ETH_PAD_SIZE, PBUF_RAM);
-		pbuf_header(q, -ETH_PAD_SIZE);
+		struct pbuf *q = pbuf_alloc(PBUF_RAW, 60, PBUF_RAM);
 		pbuf_copy(q, p);
 		p = q;
 		do_unref = 1;

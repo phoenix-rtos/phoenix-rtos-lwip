@@ -540,9 +540,9 @@ static void enet_irqThread(void *arg)
 	exit = atomic_load(&state->drv_exit);
 	while (exit == 0) {
 		state->mmio->EIR = ENET_IRQ_RXF;
-		rx_done = net_receivePackets(&state->rx, state->netif, ETH_PAD_SIZE);
+		rx_done = net_receivePackets(&state->rx, state->netif);
 		if (rx_done > 0 || net_rxFullyFilled(&state->rx) == 0) {
-			net_refillRx(&state->rx, ETH_PAD_SIZE);
+			net_refillRx(&state->rx);
 			state->mmio->RDAR = ENET_RDAR_RDAR;
 		}
 
@@ -1346,7 +1346,7 @@ static int enet_initDevice(enet_state_t *state, int irq, bool mdio, volatile uin
 		enet_debug_printf(state, "MDIO bus %d", err);
 	}
 
-	net_refillRx(&state->rx, ETH_PAD_SIZE);
+	net_refillRx(&state->rx);
 	enet_start(state);
 
 	enet_showCardId(state);
