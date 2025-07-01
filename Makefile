@@ -36,7 +36,7 @@ CFLAGS += $(CFLAGS) -I$(PREFIX_BUILD)/phrtos3-include -I$(PREFIX_PROJECT)/G3-PLC
 NAME := lwip-core
 SRCS := $(LWIP_SRCS)
 # Disabling warnings from lib-lwip, as their code does not comply with these rules for now.
-LOCAL_CFLAGS += -Wno-char-subscripts -Wno-format-zero-length
+LOCAL_CFLAGS += -Wno-char-subscripts -Wno-format-zero-length -Wno-unused-variable -Wno-unused-function
 # don't install include subdir contents, these are actually internal headers
 LOCAL_HEADER_DIR := nothing
 include $(static-lib.mk)

@@ -62,6 +62,11 @@ struct {
 	} buf;
 } scan = { 0 };
 
+#define ERROR_LOG(...) \
+	{ \
+		printf(__VA_ARGS__); \
+	}
+
 #define DEBUG_LOG(...) \
 	{ \
 		printf(__VA_ARGS__); \
