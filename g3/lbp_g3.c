@@ -99,7 +99,6 @@ static struct {
   u8_t eap_id;
 #endif
   ps_eap_psk_nai_t nai_p;
-  // ps_eap_psk_ctx_t eap_ctx;
   ps_eap_psk_key_t ak;
   ps_eap_psk_key_t kdk;
   ps_eap_psk_key_t tek;
@@ -219,7 +218,6 @@ lbp_g3_discovery(struct netif *netif, u8_t duration)
   lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
   unsigned i;
 
-  fprintf(stderr, "lbp_g3_discovery: start\n");
   if (ctx->state == LBP_G3_STATE_SCANNING) {
     return ERR_INPROGRESS;
   }
@@ -246,8 +244,6 @@ err_t
 lbp_g3_start(struct netif *netif, u8_t scan_duration)
 {
   lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
-
-  fprintf(stderr, "lbp_g3: START\n");
 
   if (lbp_g3_discovery(netif, scan_duration) < 0) {
     return ERR_VAL;
@@ -450,8 +446,6 @@ lbp_g3_handle_accepted(struct netif *netif, struct pbuf *p, struct lowpan6_link_
 
       ctx->state = LBP_G3_STATE_IDLE;
       if (lowpan6_g3_set_short_addr(netif, ctx->short_address >> 8, ctx->short_address & 0xFF) < 0) {
-        /* XXX */
-
         LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_handle_accepted: Can't set short address!\n"));
         ctx->state = LBP_G3_STATE_ERROR;
         return ERR_VAL;
@@ -674,7 +668,6 @@ lbp_g3_handle_decline(struct netif *netif, struct pbuf *p)
 static err_t
 lbp_g3_handle_lbs_kick(struct netif *netif, struct pbuf *pbuf)
 {
-  lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
 
   LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_handle_lbs_kick: Received LBS kick msg!\n"));
 
@@ -1648,7 +1641,7 @@ static void lbp_g3_scan_finished(struct netif *netif)
     }
   }
 #endif
-  memset(scan_table, sizeof(scan_table), 0);
+  memset(scan_table, 0, sizeof(scan_table));
 }
 
 /**
@@ -1825,7 +1818,7 @@ lbp_g3_input(struct netif *netif, struct pbuf *p, struct lowpan6_link_addr *orig
   u8_t *lbd_addr;
   err_t ret = ERR_OK;
 
-    LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_input\n"));
+  LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_input\n"));
   if (p->tot_len < LBP_G3_HEADER_LEN) {
     LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_input: Packet too short, discarding\n"));
     return ERR_VAL;
@@ -1837,7 +1830,7 @@ lbp_g3_input(struct netif *netif, struct pbuf *p, struct lowpan6_link_addr *orig
   if (ctx->device_type == LOWPAN6_G3_DEVTYPE_DEVICE) {
     if (memcmp(ctx->extended_mac_addr.addr, lbd_addr, 8)) {
       /* Frame not for us */
-          LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_input: Frame not for us\n"));
+      LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_input: Frame not for us\n"));
       if (ctx->role_of_device == LOWPAN6_G3_ROLE_LBA) {
         ret = lbp_g3_lba_route_msg(netif, p, origin);
       } else {

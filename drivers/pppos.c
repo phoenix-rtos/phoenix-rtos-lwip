@@ -785,7 +785,7 @@ static int pppos_netifInit(struct netif *netif, char *cfg)
 	memset(state, 0, sizeof(pppos_priv_t));
 	state->netif = netif;
 	state->serialdev_fn = cfg;
-	state->serialat_fn = "/dev/uart3";
+	state->serialat_fn = "/dev/ttyacm1";
 	state->fd = -1;
 
 #if PPPOS_USE_CONFIG_FILE

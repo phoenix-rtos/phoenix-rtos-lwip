@@ -275,6 +275,7 @@ static int socket_ioctl6(int sock, unsigned long request, const void *in_data, v
 					return -ENOMEM;
 				}
 			}
+
 			uidx = (u8_t)idx;
 
 			netif_ip6_addr_set_pref_life(netif, uidx, in6_ifreq->ifra_lifetime.preferred);
@@ -427,7 +428,7 @@ static int socket_ioctl(int sock, unsigned long request, const void *in_data, vo
 					if (!netif_is_ppp(interface)) {
 						sin = (struct sockaddr_in *)&ifreq->ifr_broadaddr;
 						sin->sin_addr.s_addr = ip4_addr_get_u32(netif_ip4_addr(interface)) |
-								~ip4_addr_get_u32(netif_ip4_netmask(interface));
+							~ip4_addr_get_u32(netif_ip4_netmask(interface));
 					}
 					else {
 						return -EOPNOTSUPP;
@@ -588,8 +589,10 @@ static int socket_ioctl(int sock, unsigned long request, const void *in_data, vo
 			struct netif *netif;
 
 			ifconf->ifc_len = 0;
-			if (!ifreq)  // WARN: it is legal to pass NULL here (we should return the lenght sufficient for whole response)
+			if (!ifreq) {
+				/* WARN: it is legal to pass NULL here (we should return the length sufficient for whole response) */
 				return -EFAULT;
+			}
 
 			memset(ifreq, 0, maxlen);
 
@@ -666,8 +669,7 @@ static void do_socket_ioctl(msg_t *msg, int sock)
 	void *out_data = NULL;
 	const void *in_data = ioctl_unpackEx(msg, &request, NULL, &out_data);
 
-	int err = socket_ioctl(sock, request, in_data, out_data);
-	ioctl_setResponse(msg, request, err, NULL);
+	msg->o.err = socket_ioctl(sock, request, in_data, out_data);
 }
 
 
@@ -751,7 +753,7 @@ static int socket_op(msg_t *msg, int sock)
 			break;
 		case sockmSend:
 			smo->ret = map_errno(lwip_sendto(sock, msg->i.data, msg->i.size, smi->send.flags,
-					smi->send.addrlen == 0 ? NULL : sa_convert_sys_to_lwip(smi->send.addr, smi->send.addrlen), smi->send.addrlen));
+				smi->send.addrlen == 0 ? NULL : sa_convert_sys_to_lwip(smi->send.addr, smi->send.addrlen), smi->send.addrlen));
 			break;
 		case sockmRecv:
 			smo->ret = map_errno(lwip_recvfrom(sock, msg->o.data, msg->o.size, smi->send.flags, (void *)smo->sockname.addr, &salen));
@@ -940,7 +942,7 @@ static int do_getnameinfo(const struct sockaddr *sa, socklen_t addrlen, char *ho
 
 		if (host != NULL) {
 			snprintf(host, hostsz, "%u.%u.%u.%u", (unsigned char)sa->sa_data[2], (unsigned char)sa->sa_data[3],
-					(unsigned char)sa->sa_data[4], (unsigned char)sa->sa_data[5]);
+				(unsigned char)sa->sa_data[4], (unsigned char)sa->sa_data[5]);
 			host[hostsz - 1] = '\0';
 		}
 
@@ -1008,8 +1010,9 @@ static int do_getaddrinfo(const char *name, const char *serv, const struct addri
 			dest->ai_canonname = (void *)(strdest - buf);
 			strdest += n;
 		}
-		else
+		else {
 			dest->ai_canonname = NULL;
+		}
 
 		dest->ai_next = ai->ai_next ? (void *)((void *)(dest + 1) - buf) : NULL;
 		++dest;
@@ -1036,8 +1039,7 @@ static int do_getifaddrs(char *buf, size_t *buflen)
 	int i;
 #endif
 
-	NETIF_FOREACH(netif)
-	{
+	NETIF_FOREACH(netif) {
 		n_netifs++;
 		n_ifaddrs++;
 		/* lwip_netif_name | netif_num | '\0' */
@@ -1070,8 +1072,7 @@ static int do_getifaddrs(char *buf, size_t *buflen)
 	memset(buf, 0, needed);
 	memset(&sa, 0, sizeof(sa));
 	sin = (struct sockaddr_in *)&sa;
-	NETIF_FOREACH(netif)
-	{
+	NETIF_FOREACH(netif) {
 		dest->ifa_flags = netif->flags;
 		sin->sin_family = AF_INET;
 		sin->sin_len = sizeof(struct sockaddr_in);
@@ -1091,7 +1092,7 @@ static int do_getifaddrs(char *buf, size_t *buflen)
 		dest->ifa_netmask = (struct sockaddr *)(addrdest - buf);
 		addrdest += sizeof(struct sockaddr_in);
 
-		snprintf(strdest, sizeof(netif->name) + 2, "%2s%1u", netif->name, netif->num % 10);
+		snprintf(strdest, sizeof(netif->name) + 2, "%.2s%1u", netif->name, netif->num % 10);
 		dest->ifa_name = (char *)(strdest - buf);
 #if LWIP_IPV6
 		sin6 = (struct sockaddr_in6 *)&sa;
@@ -1135,7 +1136,7 @@ static void socketsrv_thread(void *arg)
 	int err, sock, type;
 #if LWIP_DNS
 	struct addrinfo hint = { 0 };
-	char *node, *serv;
+	const char *node, *serv;
 #endif
 
 	port = (unsigned)arg;

@@ -246,7 +246,7 @@ err_t lowpan6_g3_output(struct netif *netif, struct pbuf *q, const ip6_addr_t *i
 err_t lowpan6_g3_encapsulate(struct netif *netif, struct pbuf *p, const struct lowpan6_link_addr *src,
                              const struct lowpan6_link_addr *dst, const struct lowpan6_link_addr *final_dest);
 err_t
-lowpan6_g3_tcpip_input(u8_t *buf, size_t len, struct netif *inp, struct lowpan6_link_addr *src, struct lowpan6_link_addr *dst,
+lowpan6_g3_tcpip_input(const u8_t *buf, size_t len, struct netif *inp, struct lowpan6_link_addr *src, struct lowpan6_link_addr *dst,
                        struct g3plc_mcps_indication *indication);
 
 err_t lowpan6_g3_if_init(struct netif *netif);

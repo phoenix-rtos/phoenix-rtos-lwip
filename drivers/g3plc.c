@@ -165,7 +165,6 @@ static const char *status_to_str(enum macStatus status)
 static const u8_t psk[] = { 0xAB, 0x10, 0x34, 0x11, 0x45, 0x11, 0x1B, 0xC3,
 	0xC1, 0x2D, 0xE8, 0xFF, 0x11, 0x14, 0x22, 0x04 };
 static const u8_t gmk[] = { 0xAF, 0x4D, 0x6D, 0xCC, 0xF1, 0x4D, 0xE7, 0xC1, 0xC4, 0x23, 0x5E, 0x6F, 0xEF, 0x6C, 0x15, 0x1F };
-static const u16_t pan_id = 0x781d;
 
 static void mlme_signal(int status)
 {
@@ -269,7 +268,6 @@ static void mcps_data_request_test_vector_dump(ps_g3_mcps_data_request_t *reques
 
 static void mcps_data_indication(ps_g3_sap_t *sap, ps_g3_mcps_data_indication_t *indication)
 {
-	struct pbuf *p;
 	struct lowpan6_link_addr src, dst;
 	struct g3plc_mcps_indication n_indication;
 
@@ -412,7 +410,6 @@ static int g3plc_mac_get(ps_g3_mlme_get_request_t *req)
 int g3plc_mac_nb_table_lookup_sync(struct lowpan6_link_addr *addr, struct g3plc_mac_nb_entry *entry)
 {
 	ps_g3_mlme_get_request_t req = { .pib_attr_id = macExtNeighbourLookup };
-	unsigned i;
 	u16_t short_addr;
 	int ret;
 
@@ -526,7 +523,6 @@ int g3plc_set_gmk(const uint8_t *gmk, uint8_t gmk_id)
 {
 	DEBUG_LOG("g3_set_gmk\n");
 	ps_g3_mlme_set_request_t req = { .pib_attr_id = macKeyTable, .pib_attr_value = { .length = 16 } };
-	int ret;
 
 	req.pib_attr_index = gmk_id;
 	memcpy(req.pib_attr_value.data, gmk, req.pib_attr_value.length);
@@ -578,7 +574,6 @@ int g3_nb_table_set(uint16_t addr, uint8_t lqi, uint8_t ind)
 static void g3plc_lbp_init(void)
 {
 	uint8_t buf[16];
-	int i;
 
 	srand((unsigned int)time(NULL));
 
@@ -590,7 +585,6 @@ static void g3plc_tx_thread(void *arg)
 {
 	ps_g3_sap_t *sap = (ps_g3_sap_t *)arg;
 	struct g3plc_data_request *req;
-	int i;
 
 	lowpan6_g3_tmr_start(g3plc_priv.netif);
 	mutexLock(g3plc_priv.mcpsLock);
@@ -648,20 +642,11 @@ static int g3plc_test_cmd(char *test)
 	return g3plc_test_run(g3plc_priv.netif, test);
 }
 
-static void g3plc_get_param(char *name)
-{
-	struct netif *netif = g3plc_priv.netif;
-	lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *)netif->state;
-
-	if (!strcmp(name, "")) {
-	}
-}
 
 static void g3plc_msg_thread(void *arg)
 {
 	msg_t msg = { 0 };
 	msg_rid_t rid;
-	int test;
 	struct g3adp_ctl *ctl;
 
 	for (;;) {

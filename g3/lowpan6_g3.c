@@ -142,7 +142,6 @@ static const lowpan6_g3_data_t default_state = {
 #endif
 
 static const struct lowpan6_link_addr ieee_802154_broadcast = {2, {0xff, 0xff}};
-extern void ip6_debug_print(struct pbuf *p);
 
 static err_t adpd_data_indication(struct pbuf *p, struct netif *netif)
 {
@@ -1022,7 +1021,7 @@ lowpan6_g3_input(struct pbuf *p, struct netif *netif)
         /* address match with packet in reassembly. */
         if ((datagram_tag == lrh->datagram_tag) && (datagram_size == lrh->datagram_size)) {
           /* duplicate fragment. */
-		  LWIP_DEBUGF(LBP_G3_DEBUG, ("lowpan6_g3_input: 10\n"));
+          LWIP_DEBUGF(LBP_G3_DEBUG, ("lowpan6_g3_input: 10\n"));
           goto lowpan6_input_discard;
         } else {
           /* We are receiving the start of a new datagram. Discard old one (incomplete). */
@@ -1042,7 +1041,7 @@ lowpan6_g3_input(struct pbuf *p, struct netif *netif)
     pbuf_remove_header(p, 4); /* hide frag1 dispatch */
     lrh = (struct lowpan6_reass_helper *) mem_malloc(sizeof(struct lowpan6_reass_helper));
     if (lrh == NULL) {
-		  LWIP_DEBUGF(LBP_G3_DEBUG, ("lowpan6_g3_input: 11\n"));
+      LWIP_DEBUGF(LBP_G3_DEBUG, ("lowpan6_g3_input: 11\n"));
       goto lowpan6_input_discard;
     }
 
@@ -1065,7 +1064,7 @@ lowpan6_g3_input(struct pbuf *p, struct netif *netif)
       if (lrh->reass == NULL) {
         /* decompression failed */
         mem_free(lrh);
-		  LWIP_DEBUGF(LBP_G3_DEBUG, ("lowpan6_g3_input: 12\n"));
+        LWIP_DEBUGF(LBP_G3_DEBUG, ("lowpan6_g3_input: 12\n"));
         goto lowpan6_input_discard;
       }
     }
@@ -1076,7 +1075,7 @@ lowpan6_g3_input(struct pbuf *p, struct netif *netif)
     return ERR_OK;
   } else if ((b & 0xf8) == 0xe0) {
     /* FRAGN dispatch, find packet being reassembled. */
-    		  LWIP_DEBUGF(LBP_G3_DEBUG, ("lowpan6_g3_input: FRAGN dispatch\n"));
+    LWIP_DEBUGF(LBP_G3_DEBUG, ("lowpan6_g3_input: FRAGN dispatch\n"));
     datagram_size = ((u16_t)(puc[0] & 0x07) << 8) | (u16_t)puc[1];
     datagram_tag = ((u16_t)puc[2] << 8) | (u16_t)puc[3];
     datagram_offset = (u16_t)puc[4] << 3;
@@ -1091,7 +1090,7 @@ lowpan6_g3_input(struct pbuf *p, struct netif *netif)
     }
     if (lrh == NULL) {
       /* rogue fragment */
-		  LWIP_DEBUGF(LBP_G3_DEBUG, ("lowpan6_g3_input: 13\n"));
+      LWIP_DEBUGF(LBP_G3_DEBUG, ("lowpan6_g3_input: 13\n"));
       goto lowpan6_input_discard;
     }
     /* Insert new pbuf into list of fragments. Each fragment is a pbuf,
@@ -1103,7 +1102,7 @@ lowpan6_g3_input(struct pbuf *p, struct netif *netif)
         /* fragment overlap, discard old fragments */
         dequeue_datagram(lrh, lrh_prev);
         free_reass_datagram(lrh);
-		  LWIP_DEBUGF(LBP_G3_DEBUG, ("lowpan6_g3_input: 14\n"));
+        LWIP_DEBUGF(LBP_G3_DEBUG, ("lowpan6_g3_input: 14\n"));
         goto lowpan6_input_discard;
       }
     }
@@ -1123,7 +1122,7 @@ lowpan6_g3_input(struct pbuf *p, struct netif *netif)
             /* overlap, discard old fragments */
             dequeue_datagram(lrh, lrh_prev);
             free_reass_datagram(lrh);
-		  LWIP_DEBUGF(LBP_G3_DEBUG, ("lowpan6_g3_input: 15\n"));
+            LWIP_DEBUGF(LBP_G3_DEBUG, ("lowpan6_g3_input: 15\n"));
             goto lowpan6_input_discard;
           }
           /* insert here */
@@ -1218,7 +1217,7 @@ lowpan6_input_discard:
 }
 
 err_t
-lowpan6_g3_tcpip_input(u8_t *buf, size_t len, struct netif *inp, struct lowpan6_link_addr *src, struct lowpan6_link_addr *dst,
+lowpan6_g3_tcpip_input(const u8_t *buf, size_t len, struct netif *inp, struct lowpan6_link_addr *src, struct lowpan6_link_addr *dst,
                        struct g3plc_mcps_indication *indication)
 {
   struct pbuf *p;
@@ -1456,8 +1455,6 @@ lowpan6_g3_set_weak_lqi_value(u8_t val)
 void
 lowpan6_g3_set_device_type(u8_t dev_type)
 {
-  
-  fprintf(stderr, "lowpan6_g3_set_device_type: %d\n", dev_type);
   lowpan6_data.device_type = dev_type;
 }
 

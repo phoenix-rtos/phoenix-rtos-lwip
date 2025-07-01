@@ -1465,9 +1465,9 @@ loadng_g3_tmr(void)
 
   /* Update RREQ table */
   for (i = 0; i < LOADNG_G3_RREQ_TABLE_SIZE; i++) {
-    if (rreq_table[i].state == LOADNG_G3_RREQ_STATE_EMPTY)
-		continue;
-
+    if (rreq_table[i].state == LOADNG_G3_RREQ_STATE_EMPTY){
+      continue;
+    }
     /* TODO: do we need more fair transmission? */
     ctx = (lowpan6_g3_data_t *) rreq_table[i].netif->state;
     if (rreq_table[i].state == LOADNG_G3_RREQ_STATE_WAITING &&
@@ -1531,8 +1531,9 @@ loadng_g3_tmr(void)
 
   /* Update RLCREQ table */
   for (i = 0; i < LOADNG_G3_RLC_TABLE_SIZE; i++) {
-    if (rlc_table[i].state == LOADNG_G3_RLC_STATE_EMPTY)
-		continue;
+    if (rlc_table[i].state == LOADNG_G3_RLC_STATE_EMPTY){
+        continue;
+    }
 
     ctx = (lowpan6_g3_data_t *) rlc_table[i].netif->state;
     if (rlc_table[i].state == LOADNG_G3_RLC_STATE_PENDING) {

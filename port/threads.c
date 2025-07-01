@@ -17,6 +17,12 @@
 #include <stdlib.h>
 #include <errno.h>
 
+#include <lwipopts.h>
+
+#ifndef WAITTID_THREAD_PRIO
+#define WAITTID_THREAD_PRIO 3
+#endif
+
 
 typedef struct {
 	rbnode_t linkage;
@@ -113,7 +119,7 @@ static void thread_main(void *arg)
 }
 
 
-int sys_thread_opt_new(const char *name, void (*thread)(void *arg), void *arg, int stacksize, int prio, handle_t *id)
+int sys_thread_opt_new(const char *name, void (* thread)(void *arg), void *arg, int stacksize, int prio, handle_t *id)
 {
 	void *stack;
 	int err;
@@ -150,7 +156,7 @@ int sys_thread_opt_new(const char *name, void (*thread)(void *arg), void *arg, i
 }
 
 
-sys_thread_t sys_thread_new(const char *name, void (*thread)(void *arg), void *arg, int stacksize, int prio)
+sys_thread_t sys_thread_new(const char *name, void (* thread)(void *arg), void *arg, int stacksize, int prio)
 {
 	handle_t id;
 	int err;
@@ -194,11 +200,15 @@ void init_lwip_threads(void)
 	int err;
 
 	err = mutexCreate(&global.lock);
+	if (err)
+		errout(err, "mutexCreate(lock)");
+
+	err = condCreate(&global.join_cond);
 	if (err) {
 		resourceDestroy(global.lock);
-		errout(err, "mutexCreate(thread.start_sem)");
+		errout(err, "condCreate(join_cond)");
 	}
 
 	lib_rbInit(&global.threads, thread_cmp, NULL);
-	beginthreadex(thread_waittid_thr, 4, global.collector_stack, sizeof(global.collector_stack), NULL, NULL);
+	beginthreadex(thread_waittid_thr, WAITTID_THREAD_PRIO, global.collector_stack, sizeof(global.collector_stack), NULL, NULL);
 }
