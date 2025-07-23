@@ -11,6 +11,7 @@
 #include "arch/cc.h"
 #include "lwip/etharp.h"
 #include "netif-driver.h"
+#include "physelftest.h"
 #include "physmmap.h"
 #include "bdring.h"
 #include "pci.h"
@@ -43,6 +44,9 @@
 #define RTL_RX_RING_SIZE	64
 #define RTL_TX_RING_SIZE	64
 #define DEBUG_RINGS	0
+
+#define RTL_DEBUG    0
+#define RTL_SELFTEST 1
 
 typedef struct
 {
@@ -433,6 +437,38 @@ static int rtl_setLoopback(rtl_priv_t *state, bool enable)
 }
 
 
+#if RTL_SELFTEST
+static uint32_t old_rcr;
+
+
+static int rtl_selftestSetup(void *arg)
+{
+	rtl_priv_t *state = arg;
+
+	if (rtl_setLoopback(state, true) < 0) {
+		(void)rtl_setLoopback(state, false);
+		return -1;
+	}
+
+	old_rcr = state->mmio->RCR;
+	/* accept faulty frames */
+	state->mmio->RCR |= (1u << 16) | 0x3f;
+
+	return 0;
+}
+
+
+static int rtl_selftestTeardown(void *arg)
+{
+	rtl_priv_t *state = arg;
+
+	state->mmio->RCR = old_rcr;
+
+	return rtl_setLoopback(state, false);
+}
+#endif
+
+
 static int rtl_ethtoolIoctl(struct netif *netif, void *data)
 {
 	int err;
@@ -440,6 +476,57 @@ static int rtl_ethtoolIoctl(struct netif *netif, void *data)
 	uint32_t cmd = *(uint32_t *)data;
 
 	switch (cmd) {
+		case ETHTOOL_GSSET_INFO: {
+			struct ethtool_sset_info *info = data;
+			uint64_t outmask = 0;
+
+			if ((info->sset_mask & (1ull << ETH_SS_TEST)) != 0) {
+				info->data[ETH_SS_TEST] = 0; /* number_of_strings * ETH_GSTRING_LEN */
+				outmask |= 1ull << ETH_SS_TEST;
+			}
+
+			info->sset_mask = outmask;
+
+			return EOK;
+		}
+
+		case ETHTOOL_GSTRINGS: {
+			struct ethtool_gstrings *strings = data;
+
+			switch (strings->string_set) {
+				case ETH_SS_TEST:
+					strings->len = 0;
+					break;
+
+				default:
+					return -EINVAL;
+			}
+
+			return EOK;
+		}
+
+		case ETHTOOL_TEST: {
+#if RTL_SELFTEST
+			struct ethtool_test *test = data;
+			if ((test->flags & ETH_TEST_FL_OFFLINE) != 0) {
+				const struct selftest_params params = {
+					.module = "rtl",
+					.netif = netif,
+					.crcStripped = false,
+					.verbose = RTL_DEBUG != 0,
+					.setup = rtl_selftestSetup,
+					.teardown = rtl_selftestTeardown,
+				};
+				err = physelftest(&params);
+				if (err < 0) {
+					test->flags |= ETH_TEST_FL_FAILED;
+				}
+				return EOK;
+			}
+#endif
+			return -EOPNOTSUPP;
+		}
+
 		case ETHTOOL_GLOOPBACK: {
 			struct ethtool_value *value = data;
 			err = rtl_getLoopback(state);
@@ -447,7 +534,7 @@ static int rtl_ethtoolIoctl(struct netif *netif, void *data)
 				return err;
 			}
 			value->data = err;
-			return EOK;	
+			return EOK;
 		}
 
 		case ETHTOOL_SLOOPBACK: {
