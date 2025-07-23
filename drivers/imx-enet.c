@@ -1654,6 +1654,7 @@ static int enet_ethtoolIoctl(struct netif *netif, void *data)
 				const struct selftest_params params = {
 					.module = "enet",
 					.netif = netif,
+					.crcStripped = true,
 					.verbose = ENET_DEBUG != 0,
 					.setup = enet_selftestSetup,
 					.teardown = enet_selftestTeardown
