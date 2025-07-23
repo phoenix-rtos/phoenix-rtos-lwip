@@ -29,6 +29,7 @@ struct selftest_params {
 		void *arg;
 	};
 
+	bool is_crc_stripped;
 	bool verbose;
 };
 
