@@ -26,6 +26,7 @@
 #define TEST_PACKET _TP_DST _TP_SRC _TP_ETHTYPE \
 		_TP_10DIG _TP_10DIG _TP_10DIG _TP_10DIG _TP_10DIG _TP_10DIG _TP_10DIG
 #define TEST_PACKET_LEN (sizeof((TEST_PACKET)) - 1)
+#define CRC_LEN         4
 
 #define PHYSELFTEST_RESOURCES(s) &(s).rx_lock, 2, ~0x1
 
@@ -52,13 +53,13 @@ static struct {
 static err_t physelftest_netifInput(struct pbuf *p, struct netif *netif)
 {
 	uint8_t buf[TEST_PACKET_LEN]; /* used only if pbuf is fragmented (should not happen) */
-
 	bool is_valid_pkt = true;
+	const size_t expected_len = TEST_PACKET_LEN + ETH_PAD_SIZE + (test_common.params->crcStripped ? 0 : CRC_LEN);
 
 	/* verify contents */
-	if (p->len != (TEST_PACKET_LEN + ETH_PAD_SIZE)) {
+	if (p->len != expected_len) {
 		physelftest_debug_printf(test_common, "self-test RX: invalid packet length");
-		physelftest_debug_printf(test_common, "expected: %zuB", (TEST_PACKET_LEN + ETH_PAD_SIZE));
+		physelftest_debug_printf(test_common, "expected: %zuB", expected_len);
 		physelftest_debug_printf(test_common, "actual:   %uB", p->len);
 		is_valid_pkt = false;
 	}

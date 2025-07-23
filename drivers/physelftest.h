@@ -21,6 +21,7 @@ struct selftest_params {
 	int (*setup)(void *arg);
 	int (*teardown)(void *arg);
 	bool verbose;
+	bool crcStripped;
 };
 
 
