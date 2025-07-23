@@ -1654,6 +1654,7 @@ static int enet_ethtoolIoctl(struct netif *netif, void *data)
 					.arg = state,
 					.module = "enet",
 					.netif = netif,
+					.is_crc_stripped = true,
 					.verbose = ENET_DEBUG != 0,
 					.setup = enet_selftestSetup,
 					.teardown = enet_selftestTeardown
