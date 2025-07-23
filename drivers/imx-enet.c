@@ -14,6 +14,7 @@
 #include "netif-driver.h"
 #include "bdring.h"
 #include "ephy.h"
+#include "physelftest.h"
 #include "physmmap.h"
 #include "res-create.h"
 #include "imx-enet-regs.h"
@@ -160,15 +161,6 @@ typedef struct {
 	uint32_t mscr;
 
 	eth_phy_state_t phy;
-
-#if ENET_SELFTEST
-	struct {
-#define SELFTEST_RESOURCES(s) &(s)->selfTest.rx_lock, 2, ~0x1
-		handle_t rx_lock;
-		handle_t rx_cond;
-		unsigned int rx_valid; /* -1: received invalid packet, 0: no packet received, 1: received valid packet */
-	} selfTest;
-#endif
 
 	uint32_t irq_stack[1024] __attribute__((aligned(16)));
 } enet_state_t;
@@ -1431,168 +1423,6 @@ static void enet_setLinkState(void *arg, int state)
 }
 
 
-#if ENET_SELFTEST
-#define _TP_DST     "dddddd"
-#define _TP_SRC     "ssssss"
-#define _TP_ETHTYPE "\x05\xDD" /* eth frame type 0x05DD is undefined */
-#define _TP_10DIG   "0123456789"
-#define TEST_PACKET _TP_DST _TP_SRC _TP_ETHTYPE \
-		_TP_10DIG _TP_10DIG _TP_10DIG _TP_10DIG _TP_10DIG _TP_10DIG _TP_10DIG
-#define TEST_PACKET_LEN (sizeof((TEST_PACKET)) - 1)
-
-
-/* self-test RX input function */
-static err_t enet_testNetifInput(struct pbuf *p, struct netif *netif)
-{
-	uint8_t buf[TEST_PACKET_LEN]; /* used only if pbuf is fragmented (should not happen) */
-	enet_state_t *state = netif->state;
-
-	bool is_valid_pkt = true;
-
-	/* verify contents */
-	if (p->len != (TEST_PACKET_LEN + ETH_PAD_SIZE)) {
-		enet_debug_printf(state, "self-test RX: invalid packet length");
-		enet_debug_printf(state, "expected: %uB", (TEST_PACKET_LEN + ETH_PAD_SIZE));
-		enet_debug_printf(state, "actual:   %uB", p->len);
-		is_valid_pkt = false;
-	}
-	uint8_t *data = pbuf_get_contiguous(p, buf, sizeof(buf), TEST_PACKET_LEN, ETH_PAD_SIZE);
-	if (data == NULL || memcmp(TEST_PACKET, data, TEST_PACKET_LEN) != 0) {
-#if ENET_DEBUG
-		if (data == NULL) {
-			data = p->payload;
-		}
-		enet_printf(state, "self-test RX: invalid packet contents");
-
-		enet_printf(state, "expected:");
-		for (int i = 0; i < TEST_PACKET_LEN; i++) {
-			if (i != 0 && i % 16 == 0) {
-				printf("\n");
-			}
-			printf("%02x ", TEST_PACKET[i]);
-		}
-		printf("\n");
-
-		enet_printf(state, "actual:");
-		for (int i = 0; i < p->len; i++) {
-			if (i != 0 && i % 16 == 0) {
-				printf("\n");
-			}
-			printf("%02x ", data[i]);
-		}
-		printf("\n");
-#endif
-		is_valid_pkt = false;
-	}
-	pbuf_free(p);
-
-	mutexLock(state->selfTest.rx_lock);
-	state->selfTest.rx_valid = is_valid_pkt ? 1 : -1;
-	mutexUnlock(state->selfTest.rx_lock);
-	condBroadcast(state->selfTest.rx_cond);
-
-	return ERR_OK;
-}
-
-
-/* MACPHY self-test procedure (internal loopback) */
-static int enet_phySelfTest(struct netif *netif)
-{
-	enet_state_t *state = netif->state;
-	int err;
-	bool was_addins_set;
-
-	enet_printf(state, "Start enet phy tx/rx selftest");
-
-	err = create_mutexcond_bulk(SELFTEST_RESOURCES(state));
-	if (err != 0) {
-		return err;
-	}
-
-	/* setup self-test (local loopback mode & force linkup) */
-	if (ephy_setLoopback(&state->phy, true) < 0) {
-		ephy_setLoopback(&state->phy, false);
-		resourceDestroy(state->selfTest.rx_cond);
-		resourceDestroy(state->selfTest.rx_lock);
-		return -1;
-	}
-
-	/* enable promisicious mode to allow invalid MAC in pseudo-ETH test packet */
-	state->mmio->RCR |= ENET_RCR_PROM;
-
-	/* disable MAC address addition on TX */
-	was_addins_set = (state->mmio->TCR & ENET_TCR_ADDINS) != 0;
-	state->mmio->TCR &= ~ENET_TCR_ADDINS;
-
-	/* enable MIB counters (mmio->stats) + clear stats */
-	state->mmio->MIBC = 0;
-	state->mmio->MIBC |= ENET_MIBC_MIB_CLEAR;
-	state->mmio->MIBC &= ~ENET_MIBC_MIB_CLEAR;
-
-	/* override netif->input */
-	netif_input_fn old_input = netif->input;
-	netif->input = &enet_testNetifInput;
-
-	int ret = 0;
-	do {
-		struct pbuf *p = pbuf_alloc(PBUF_RAW, TEST_PACKET_LEN + ETH_PAD_SIZE, PBUF_RAM);
-		memset(p->payload, 0, ETH_PAD_SIZE);
-		pbuf_take_at(p, TEST_PACKET, TEST_PACKET_LEN, ETH_PAD_SIZE);
-
-		/* try to send and receive packets */
-		mutexLock(state->selfTest.rx_lock);
-		state->selfTest.rx_valid = 0;
-		if (enet_netifOutput(netif, p) != ERR_OK) { /* frees pbuf internally */
-			enet_printf(state, "failed to send test packet");
-			ret = -1;
-			mutexUnlock(state->selfTest.rx_lock);
-			break;
-		}
-
-		err = 0;
-		while ((err != -ETIME) && (state->selfTest.rx_valid == 0)) {
-			/* TX -> RX takes ~4ms, wait for 100ms just to be sure */
-			err = condWait(state->selfTest.rx_cond, state->selfTest.rx_lock, 100 * 1000);
-		}
-		mutexUnlock(state->selfTest.rx_lock);
-
-		enet_debug_printf(state, "stats: TX: PACKETS=%u CRC_ALIGN=%u OK=%u",
-				state->mmio->stats.RMON_T_PACKETS,
-				state->mmio->stats.RMON_T_CRC_ALIGN,
-				state->mmio->stats.IEEE_T_FRAME_OK);
-
-		enet_debug_printf(state, "stats: RX: PACKETS=%u CRC_ALIGN=%u OK=%u",
-				state->mmio->stats.RMON_R_PACKETS,
-				state->mmio->stats.RMON_R_CRC_ALIGN,
-				state->mmio->stats.IEEE_R_FRAME_OK);
-
-		if ((err < 0) || (state->selfTest.rx_valid != 1)) {
-			enet_debug_printf(state, "Test failed: state->selfTest.rx_valid=%d, %s (%d)",
-					state->selfTest.rx_valid, strerror(-err), err);
-			ret = -1;
-		}
-
-		/* successfully received */
-	} while (0);
-
-	/* restore normal mode */
-	netif->input = old_input;
-	state->mmio->RCR &= ~ENET_RCR_PROM;
-	if (was_addins_set) {
-		state->mmio->TCR |= ENET_TCR_ADDINS;
-	}
-	state->mmio->MIBC = ENET_MIBC_MIB_DIS;
-	ephy_setLoopback(&state->phy, false);
-
-	/* destroy selftest resources */
-	resourceDestroy(state->selfTest.rx_cond);
-	resourceDestroy(state->selfTest.rx_lock);
-
-	return ret;
-}
-#endif
-
-
 /* ARGS: enet:base:irq[:no-mdio][:PHY:[model:][bus.]addr[:config]] */
 static int enet_netifInit(struct netif *netif, char *cfg)
 {
@@ -1676,7 +1506,7 @@ static int enet_netifInit(struct netif *netif, char *cfg)
 }
 
 
-const char *enet_media(struct netif *netif)
+static const char *enet_media(struct netif *netif)
 {
 	int duplex, speed;
 	enet_state_t *state;
@@ -1718,6 +1548,61 @@ const char *enet_media(struct netif *netif)
 			return "unrecognized";
 	}
 }
+
+
+#if ENET_SELFTEST
+static bool was_addins_set;
+
+
+static int enet_selftestSetup(void *arg)
+{
+	enet_state_t *state = arg;
+
+	/* setup self-test (local loopback mode & force linkup) */
+	if (ephy_setLoopback(&state->phy, true) < 0) {
+		ephy_setLoopback(&state->phy, false);
+		return -1;
+	}
+
+	/* enable promisicious mode to allow invalid MAC in pseudo-ETH test packet */
+	state->mmio->RCR |= ENET_RCR_PROM;
+
+	/* disable MAC address addition on TX */
+	was_addins_set = (state->mmio->TCR & ENET_TCR_ADDINS) != 0;
+	state->mmio->TCR &= ~ENET_TCR_ADDINS;
+
+	/* enable MIB counters (mmio->stats) + clear stats */
+	state->mmio->MIBC = 0;
+	state->mmio->MIBC |= ENET_MIBC_MIB_CLEAR;
+	state->mmio->MIBC &= ~ENET_MIBC_MIB_CLEAR;
+
+	return 0;
+}
+
+
+static int enet_selftestTeardown(void *arg)
+{
+	enet_state_t *state = arg;
+
+	enet_debug_printf(state, "stats: TX: PACKETS=%u CRC_ALIGN=%u OK=%u",
+			state->mmio->stats.RMON_T_PACKETS,
+			state->mmio->stats.RMON_T_CRC_ALIGN,
+			state->mmio->stats.IEEE_T_FRAME_OK);
+	enet_debug_printf(state, "stats: RX: PACKETS=%u CRC_ALIGN=%u OK=%u",
+			state->mmio->stats.RMON_R_PACKETS,
+			state->mmio->stats.RMON_R_CRC_ALIGN,
+			state->mmio->stats.IEEE_R_FRAME_OK);
+
+	state->mmio->RCR &= ~ENET_RCR_PROM;
+	if (was_addins_set) {
+		state->mmio->TCR |= ENET_TCR_ADDINS;
+	}
+	state->mmio->MIBC = ENET_MIBC_MIB_DIS;
+	(void)ephy_setLoopback(&state->phy, false);
+
+	return 0;
+}
+#endif
 
 
 static int enet_ethtoolIoctl(struct netif *netif, void *data)
@@ -1779,7 +1664,14 @@ static int enet_ethtoolIoctl(struct netif *netif, void *data)
 			struct ethtool_test *test_params = data;
 #if ENET_SELFTEST
 			if ((test_params->flags & ETH_TEST_FL_OFFLINE) != 0) {
-				err = enet_phySelfTest(netif);
+				const struct selftest_params params = {
+					.module = "enet",
+					.netif = netif,
+					.verbose = ENET_DEBUG != 0,
+					.setup = enet_selftestSetup,
+					.teardown = enet_selftestTeardown
+				};
+				err = physelftest(&params);
 				if (err < 0) {
 					test_params->flags |= ETH_TEST_FL_FAILED;
 				}
