@@ -435,13 +435,14 @@ static int rtl_setLoopback(rtl_priv_t *state, bool enable)
 
 static int rtl_ethtoolIoctl(struct netif *netif, void *data)
 {
+	int err;
 	rtl_priv_t *state = netif->state;
 	uint32_t cmd = *(uint32_t *)data;
 
 	switch (cmd) {
 		case ETHTOOL_GLOOPBACK: {
 			struct ethtool_value *value = data;
-			int err = rtl_getLoopback(state);
+			err = rtl_getLoopback(state);
 			if (err < 0) {
 				return err;
 			}
@@ -451,7 +452,7 @@ static int rtl_ethtoolIoctl(struct netif *netif, void *data)
 
 		case ETHTOOL_SLOOPBACK: {
 			struct ethtool_value *value = data;
-			int err = rtl_setLoopback(state, value->data);
+			err = rtl_setLoopback(state, value->data);
 			if (err < 0) {
 				value->data = ETH_PHY_LOOPBACK_SET_FAILED;
 			}

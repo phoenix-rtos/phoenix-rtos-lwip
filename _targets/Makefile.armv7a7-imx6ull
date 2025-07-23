@@ -9,4 +9,4 @@
 NET_DRIVERS_SUPPORTED := enet tuntap
 NET_DRIVERS ?= $(NET_DRIVERS_SUPPORTED)
 
-DRIVERS_SRCS_enet = imx-enet.c ephy.c imx6ull-gpio.c $(DRIVERS_SRCS_UTIL) hw-debug.c
+DRIVERS_SRCS_enet = imx-enet.c ephy.c imx6ull-gpio.c physelftest.c $(DRIVERS_SRCS_UTIL) hw-debug.c
