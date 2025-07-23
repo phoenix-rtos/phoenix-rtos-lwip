@@ -27,6 +27,8 @@
 
 
 #include <errno.h>
+#include <phoenix/ethtool.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -393,11 +395,81 @@ static int rtl_netifInit(struct netif *netif, char *cfg)
 }
 
 
+static int rtl_getLoopback(rtl_priv_t *state)
+{
+	uint32_t tcr = state->mmio->TCR;
+
+	switch ((tcr >> 17) & 0x3) {
+		case 0x0:
+			return ETH_PHY_LOOPBACK_DISABLED;
+
+		case 0x3:
+			return ETH_PHY_LOOPBACK_ENABLED;
+
+		default:
+			return -EIO;
+	}
+}
+
+
+static int rtl_setLoopback(rtl_priv_t *state, bool enable)
+{
+	uint32_t tcr = state->mmio->TCR;
+
+	if (enable) {
+		tcr |= (0x3 << 17);
+	}
+	else {
+		tcr &= ~(0x3 << 17);
+	}
+
+	state->mmio->TCR = tcr;
+
+	if (state->mmio->TCR != tcr) {
+		return -1;
+	}
+
+	return 0;
+}
+
+
+static int rtl_ethtoolIoctl(struct netif *netif, void *data)
+{
+	rtl_priv_t *state = netif->state;
+	uint32_t cmd = *(uint32_t *)data;
+
+	switch (cmd) {
+		case ETHTOOL_GLOOPBACK: {
+			struct ethtool_value *value = data;
+			int err = rtl_getLoopback(state);
+			if (err < 0) {
+				return err;
+			}
+			value->data = err;
+			return EOK;	
+		}
+
+		case ETHTOOL_SLOOPBACK: {
+			struct ethtool_value *value = data;
+			int err = rtl_setLoopback(state, value->data);
+			if (err < 0) {
+				value->data = ETH_PHY_LOOPBACK_SET_FAILED;
+			}
+			return EOK;
+		}
+
+		default:
+			return -EOPNOTSUPP;
+	}
+}
+
+
 static netif_driver_t rtl_drv = {
 	.init = rtl_netifInit,
 	.state_sz = sizeof(rtl_priv_t),
 	.state_align = _Alignof(rtl_priv_t),
 	.name = "rtl",
+	.do_ethtool_ioctl = rtl_ethtoolIoctl
 };
 
 
