@@ -270,7 +270,7 @@ static void ephy_setLinkState(const eth_phy_state_t *phy)
 	adv = ephy_regRead(phy, EPHY_COMMON_04_ANAR);
 	lpa = ephy_regRead(phy, EPHY_COMMON_05_ANLPAR);
 
-	bool linkup = (bstat & (1u << 2)) != 0;
+	bool linkup = (bstat & (1U << 2)) != 0;
 	speed = ephy_linkSpeed(phy, &duplex);
 
 	if (linkup) {
@@ -684,8 +684,7 @@ int ephy_getLoopback(const eth_phy_state_t *phy)
 int ephy_setLoopback(const eth_phy_state_t *phy, bool enable)
 {
 	uint16_t bmcr = ephy_regRead(phy, EPHY_COMMON_00_BMCR);
-	bool loopback_enabled = bmcr & (1U << 14);
-
+	bool loopback_enabled = (bmcr & (1U << 14)) != 0;
 	if (loopback_enabled == enable) {
 		return 0;
 	}
@@ -696,7 +695,14 @@ int ephy_setLoopback(const eth_phy_state_t *phy, bool enable)
 		/* full-duplex */
 		bmcr |= 1U << 8;
 		bmcr |= ephy_bmcrMaxSpeedMask(phy);
+		/* loopback */
+		bmcr |= 1U << 14;
 	}
+	else {
+		bmcr &= ~(1U << 14);
+	}
+
+	ephy_regWrite(phy, EPHY_COMMON_00_BMCR, bmcr);
 
 	switch (phy->model) {
 		case ephy_ksz8081rna:
@@ -711,15 +717,15 @@ int ephy_setLoopback(const eth_phy_state_t *phy, bool enable)
 			ephy_regWrite(phy, EPHY_KSZ8081_1F_PHYCR2, phycr2);
 			break;
 		}
+		case ephy_rtl8201fi:
+		case ephy_rtl8211fdi:
+			if (enable) {
+				usleep(phy->reset_release_time_us);
+			}
+			break;
 		default:
 			break;
 	}
-
-	/* loopback */
-	bmcr = enable ?
-			(bmcr | (1U << 14)) :
-			(bmcr & ~(1U << 14));
-	ephy_regWrite(phy, EPHY_COMMON_00_BMCR, bmcr);
 
 	if (!enable) {
 		ephy_restartAN(phy);
