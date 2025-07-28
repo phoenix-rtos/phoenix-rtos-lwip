@@ -22,12 +22,21 @@ typedef struct {
 	enum { ephy_ksz8081rna,
 		ephy_ksz8081rnb,
 		ephy_ksz8081rnd,
+		ephy_ksz9031mnx,
 		ephy_rtl8201fi,
 		ephy_rtl8211fdi } model;
 	unsigned bus;
 	unsigned addr;
 	unsigned reset_hold_time_us;
 	unsigned reset_release_time_us;
+
+	struct {
+		enum { ephy_gpio_irq,
+			ephy_mac_irq } type;
+		uint16_t mask;
+		uint16_t reg;
+	} irq;
+
 	gpio_info_t reset, irq_gpio;
 
 	link_state_cb_t link_state_callback;
@@ -39,6 +48,9 @@ typedef struct {
 
 int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb_t cb, void *cb_arg);
 int ephy_linkSpeed(const eth_phy_state_t *phy, int *full_duplex);
+
+/* called by the MAC driver if it handles the PHY IRQ */
+void ephy_macInterrupt(const eth_phy_state_t *phy);
 
 /* toggle MACPHY internal loopback for test mode */
 int ephy_enableLoopback(const eth_phy_state_t *phy, bool enable);
