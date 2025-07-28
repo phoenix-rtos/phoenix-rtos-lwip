@@ -75,7 +75,7 @@ static err_t netif_dev_init(struct netif *netif)
 
 	LWIP_ASSERT("netif != NULL", (netif != NULL));
 
-	if (!strcmp(storage->drv->name, "enet") || !strcmp(storage->drv->name, "rtl")) {
+	if (!strcmp(storage->drv->name, "enet") || !strcmp(storage->drv->name, "rtl") || !strcmp(storage->drv->name, "greth")) {
 		MIB2_INIT_NETIF(netif, snmp_ifType_ethernet_csmacd, 10000000);
 
 		netif->mtu = 1500;
