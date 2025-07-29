@@ -416,11 +416,11 @@ static size_t enet_nextRxBufferSize(const net_bufdesc_ring_t *ring, size_t i)
 }
 
 
-static int enet_pktRxFinished(const net_bufdesc_ring_t *ring, size_t i)
+static bool enet_pktRxFinished(const net_bufdesc_ring_t *ring, size_t i)
 {
 	volatile enet_buf_desc_t *desc = (volatile enet_buf_desc_t *)ring->ring + i;
 
-	return desc->flags & ENET_DESC_LAST;
+	return ((desc->flags & ENET_DESC_LAST) != 0u);
 }
 
 
@@ -441,11 +441,11 @@ static void enet_fillRxDesc(const net_bufdesc_ring_t *ring, size_t i, addr_t pa,
 }
 
 
-static int enet_nextTxDone(const net_bufdesc_ring_t *ring, size_t i)
+static bool enet_nextTxDone(const net_bufdesc_ring_t *ring, size_t i)
 {
 	volatile enet_buf_desc_t *desc = (volatile enet_buf_desc_t *)ring->ring + i;
 
-	return !(desc->flags & ENET_DESC_RDY);
+	return ((desc->flags & ENET_DESC_RDY) == 0u);
 }
 
 
