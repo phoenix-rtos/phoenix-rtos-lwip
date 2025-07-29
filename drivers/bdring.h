@@ -11,6 +11,7 @@
 #ifndef PHOENIX_NET_BDRING_H_
 #define PHOENIX_NET_BDRING_H_
 
+#include <stdbool.h>
 #include <sys/types.h>
 #include <stdatomic.h>
 #include "lwip/pbuf.h"
@@ -29,9 +30,9 @@ enum {
 
 typedef struct net_bufdesc_ops_ {
 	size_t (*nextRxBufferSize)(const net_bufdesc_ring_t *ring, size_t i);
-	int (*pktRxFinished)(const net_bufdesc_ring_t *ring, size_t i);
+	bool (*pktRxFinished)(const net_bufdesc_ring_t *ring, size_t i);
 	void (*fillRxDesc)(const net_bufdesc_ring_t *ring, size_t i, addr_t pa, size_t sz, unsigned seg /* = zero */);
-	int (*nextTxDone)(const net_bufdesc_ring_t *ring, size_t i);
+	bool (*nextTxDone)(const net_bufdesc_ring_t *ring, size_t i);
 	void (*fillTxDesc)(const net_bufdesc_ring_t *ring, size_t i, addr_t pa, size_t sz, unsigned seg);
 
 	size_t desc_size;
