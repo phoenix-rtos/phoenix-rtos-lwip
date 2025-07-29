@@ -1,0 +1,12 @@
+#
+# Makefile for Phoenix-RTOS 3 LwIP
+#
+# TDA4VM target
+#
+# Copyright 2025 Phoenix Systems
+#
+
+NET_DRIVERS_SUPPORTED := enet
+NET_DRIVERS ?= $(NET_DRIVERS_SUPPORTED)
+
+DRIVERS_SRCS_enet = tda4vm-enet.c tda4vm-ephy.c $(DRIVERS_SRCS_UTIL)
