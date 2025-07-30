@@ -269,7 +269,7 @@ static inline int ephy_ksz8081rnx_linkSpeed(const eth_phy_state_t *phy, int *ful
 	}
 
 	if (full_duplex != NULL) {
-		*full_duplex = !!(pc1 & (1u << 2));
+		*full_duplex = ((pc1 & (1u << 2)) != 0) ? 1 : 0;
 	}
 
 	return ((pc1 & 0x1) != 0) ? 10 : 100;
@@ -309,7 +309,7 @@ static inline int ephy_rtl8201fi_linkSpeed(const eth_phy_state_t *phy, int *full
 	uint16_t bmcr = ephy_regRead(phy, EPHY_COMMON_00_BMCR);
 
 	if (full_duplex != NULL) {
-		*full_duplex = !!(bmcr & (1 << 8));
+		*full_duplex = ((bmcr & (1 << 8)) != 0) ? 1 : 0;
 	}
 
 	return ((bmcr & (1 << 13)) == 0) ? 10 : 100;
@@ -322,7 +322,7 @@ static inline int ephy_rtl8211fdi_linkSpeed(const eth_phy_state_t *phy, int *ful
 	uint16_t speed;
 
 	if (full_duplex != NULL) {
-		*full_duplex = !!(physr & (1 << 3));
+		*full_duplex = ((physr & (1 << 3)) != 0) ? 1 : 0;
 	}
 
 	speed = (physr >> 4) & 0x3;
