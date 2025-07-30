@@ -1267,7 +1267,7 @@ static int enet_pinConfig(enet_state_t *state)
 }
 
 
-static int enet_initDevice(enet_state_t *state, int irq, int mdio, volatile uint32_t *ocotp_mem)
+static int enet_initDevice(enet_state_t *state, int irq, bool mdio, volatile uint32_t *ocotp_mem)
 {
 	// FIXME: cleanup on error
 	int err;
@@ -1307,7 +1307,7 @@ static int enet_initDevice(enet_state_t *state, int irq, int mdio, volatile uint
 		enet_debug_printf(state, "Pins configured");
 	}
 
-	if (mdio != 0) {
+	if (mdio) {
 		err = enet_initMDIO(state);
 		if (err < 0) {
 			return err;
@@ -1336,7 +1336,7 @@ static int enet_initDevice(enet_state_t *state, int irq, int mdio, volatile uint
 		return err;
 	}
 
-	if (mdio != 0) {
+	if (mdio) {
 		err = register_mdio_bus(&enet_mdio_ops, state);
 		if (err < 0) {
 			enet_printf(state, "Can't register MDIO bus:  %s (%d)", strerror(-err), err);
@@ -1575,7 +1575,8 @@ static int enet_netifInit(struct netif *netif, char *cfg)
 {
 	enet_state_t *state;
 	char *p;
-	int err, irq, mdio = 1;
+	int err, irq;
+	bool mdio = true;
 	volatile uint32_t *ocotp_mem;
 
 	netif->linkoutput = enet_netifOutput;
@@ -1608,7 +1609,7 @@ static int enet_netifInit(struct netif *netif, char *cfg)
 		}
 
 		if (strcmp(p, "no-mdio") == 0) {
-			mdio = 0;
+			mdio = false;
 			p = cfg;
 			continue;
 		}
