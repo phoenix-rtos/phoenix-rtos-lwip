@@ -335,12 +335,6 @@ lowpan6_g3_blacklist_table_lookup(u16_t addr)
   return NULL;
 }
 
-static void
-lowpan6_g3_blacklist_table_remove(struct lowpan6_g3_blacklist_entry *entry)
-{
-  entry->valid_time = 0;
-}
-
 /* Iterate through all the tables in order to
  * update their valid time. It shall be called
  * every minute.
@@ -847,6 +841,7 @@ lowpan6_g3_status_handle(struct netif *netif, struct pbuf *p, struct lowpan6_lin
     }
   } else if (status != g3plc_mac_status_success) {
     LWIP_DEBUGF(LWIP_LOWPAN6_DEBUG, ("lowpan6_g3_status_handle: Sending data failed with status: %02X\n", status));
+  } else {
   }
   /* TODO: do we have to remove a device from blacklist? */
 

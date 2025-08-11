@@ -85,7 +85,6 @@ static void thread_register(thread_data_t *ts)
 static void thread_waittid_thr(void *arg)
 {
 	thread_data_t *data, s;
-	priority(4);
 
 	for (;;) {
 		while ((s.tid = threadJoin(-1, 0)) == -EINTR)
@@ -119,7 +118,7 @@ static void thread_main(void *arg)
 }
 
 
-int sys_thread_opt_new(const char *name, void (* thread)(void *arg), void *arg, int stacksize, int prio, handle_t *id)
+int sys_thread_opt_new(const char *name, void (*thread)(void *arg), void *arg, int stacksize, int prio, handle_t *id)
 {
 	void *stack;
 	int err;
@@ -156,7 +155,7 @@ int sys_thread_opt_new(const char *name, void (* thread)(void *arg), void *arg, 
 }
 
 
-sys_thread_t sys_thread_new(const char *name, void (* thread)(void *arg), void *arg, int stacksize, int prio)
+sys_thread_t sys_thread_new(const char *name, void (*thread)(void *arg), void *arg, int stacksize, int prio)
 {
 	handle_t id;
 	int err;

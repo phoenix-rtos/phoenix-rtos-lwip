@@ -513,6 +513,7 @@ lbp_g3_handle_accepted(struct netif *netif, struct pbuf *p, struct lowpan6_link_
     pbuf_free(reply);
 
     return ret;
+  } else {
   }
 
   return ERR_OK;

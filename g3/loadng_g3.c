@@ -1624,6 +1624,8 @@ loadng_g3_status_handle(struct netif *netif, struct pbuf *p, struct lowpan6_link
       }
       bentry->valid_time = ctx->blacklist_table_ttl;
     }
+    else {
+    }
   } else if (msg_type == LOADNG_G3_MSG_TYPE_RREQ) {
     msg = loadng_g3_pbuf_msg_cast(p, struct loadng_g3_route_msg *);
     if ((msg->flags & LOADNG_G3_RREQ_FL_UNICAST) &&
@@ -1642,6 +1644,7 @@ loadng_g3_status_handle(struct netif *netif, struct pbuf *p, struct lowpan6_link
         }
       }
     }
+  } else {
   }
 
   return ERR_OK;

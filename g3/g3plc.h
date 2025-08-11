@@ -1,3 +1,13 @@
+/*
+ * Phoenix-RTOS --- networking stack
+ *
+ * G3-PLC Adaptation Layer opts
+ *
+ * Copyright 2025 Phoenix Systems
+ *
+ * %LICENSE%
+ */
+
 #ifndef LWIP_HDR_G3PLC_H
 #define LWIP_HDR_G3PLC_H
 /*
@@ -18,7 +28,7 @@ struct g3plc_mac_nb_entry {
     uint16_t short_address;               /* 2 octets (16-bit) */
     uint8_t tone_map[3];                  /* 3 octets (24-bit) */
     uint8_t active_tones;
-    uint8_t tx_coef[6];                   /* number of gain steps requseted for the tones */
+    uint8_t tx_coef[6];                   /* number of gain steps requested for the tones */
     uint8_t tx_res;                       /* tx gain corresponding to one step 0: 6dB, 1: 3dB */
     uint8_t tx_gain;                      /* tx gain to be used */
     uint8_t mod_type;                     /* ps_g3_phy_mod_type_t */
@@ -32,7 +42,7 @@ struct g3plc_mac_nb_entry {
  * containing information needed by ADP layer */
 struct g3plc_mcps_indication {
     uint8_t msdu_linkquality;      /* (forward) LQI value measured during reception of the message */
-    uint8_t security_level;        /* security level of the received message 0x00: unecrypted, 0x05: encrypted */
+    uint8_t security_level;        /* security level of the received message 0x00: unencrypted, 0x05: encrypted */
     uint8_t modulation;            /* extension: modulation scheme and type */
     uint8_t active_tones;
 };
@@ -51,8 +61,6 @@ enum g3plc_mac_status {
     g3plc_mac_status_transaction_expires = 0xf0
 };
 
-struct pbuf;
-struct lowpan6_link_addr;
 
 int g3plc_output(struct netif *netif, struct pbuf *p, const struct lowpan6_link_addr *src, const struct lowpan6_link_addr *dst,
 	uint8_t security_level, uint16_t pan_id, uint8_t qos, uint8_t key_index);

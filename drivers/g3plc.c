@@ -1,4 +1,15 @@
+/*
+ * Phoenix-RTOS --- networking stack
+ *
+ * G3-PLC Adaptation Layer opts
+ *
+ * Copyright 2025 Phoenix Systems
+ *
+ * %LICENSE%
+ */
+
 #include <errno.h>
+#include <stdint.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -35,7 +46,7 @@ struct g3adp_ctl {
 	char name[32];
 };
 
-struct {
+static struct {
 	uint8_t rxstack[1024] __attribute__((aligned(16)));
 	uint8_t txstack[1024] __attribute__((aligned(16)));
 	uint8_t msgstack[1024] __attribute__((aligned(16)));
@@ -74,22 +85,22 @@ struct {
 
 static void *be_memcpy(void *dest, const void *src, size_t n)
 {
-	for (src += n; n > 0; n--) {
-		src--;
-		*(unsigned char *)dest = *(unsigned char *)src;
-		dest++;
+	uint8_t *d = dest;
+	const uint8_t *s = (const uint8_t *)src + n - 1;
+	while (n-- > 0) {
+		*d++ = *s--;
 	}
 	return dest;
 }
 
 
-struct macMibValue setup_nb_table(ps_g3_mac_nb_entry_t *nb_entry)
+static struct macMibValue setup_nb_table(ps_g3_mac_nb_entry_t *nb_entry)
 {
 	struct macMibValue value;
 	uint8_t *ptr = (uint8_t *)value.data;
 
-	*ptr++ = nb_entry->short_address;
-	*ptr++ = nb_entry->short_address >> 8;
+	*ptr++ = nb_entry->short_address && 0xff;
+	*ptr++ = (nb_entry->short_address >> 8) & 0xff;
 	memcpy(ptr, nb_entry->tone_map.tm, sizeof(nb_entry->tone_map));
 	ptr += sizeof(ps_g3_phy_tone_map_t);
 	*ptr++ = nb_entry->tone_actives;
@@ -101,8 +112,8 @@ struct macMibValue setup_nb_table(ps_g3_mac_nb_entry_t *nb_entry)
 	*ptr++ = nb_entry->mod_scheme;
 	*ptr++ = nb_entry->phase_diff;
 	*ptr++ = nb_entry->lqi;
-	*ptr++ = nb_entry->tmr_valid_time;
-	*ptr++ = nb_entry->tmr_valid_time >> 8;
+	*ptr++ = nb_entry->tmr_valid_time & 0xff;
+	*ptr++ = (nb_entry->tmr_valid_time >> 8) & 0xff;
 
 	value.length = ptr - value.data;
 
@@ -112,7 +123,7 @@ struct macMibValue setup_nb_table(ps_g3_mac_nb_entry_t *nb_entry)
 
 static const char *status_to_str(enum macStatus status)
 {
-	struct label {
+	struct {
 		uint8_t id;
 		const char *str;
 	} label[] = {
@@ -230,8 +241,9 @@ static void mlme_beacon_notify_indication(ps_g3_sap_t *sap, ps_g3_mlme_beacon_no
 {
 	DEBUG_LOG("mlme_beacon_notify_indication PAN ID %x\n", indication->pan_id);
 
-	if (scan.is_active == 0)
+	if (scan.is_active == 0) {
 		return;
+	}
 
 	if (scan.buf.elements == scan.buf.size) {
 		DEBUG_LOG("Scan buffer full!\n");
@@ -292,6 +304,8 @@ static void mcps_data_indication(ps_g3_sap_t *sap, ps_g3_mcps_data_indication_t 
 	else if (indication->src_addr.mode == ps_802154_addr_mode__none) {
 		src.addr_len = 0;
 	}
+	else {
+	}
 
 	if (indication->dst_addr.mode == ps_802154_addr_mode__short) {
 		dst.addr_len = 2;
@@ -304,6 +318,8 @@ static void mcps_data_indication(ps_g3_sap_t *sap, ps_g3_mcps_data_indication_t 
 		be_memcpy(dst.addr, indication->dst_addr.long_address.u8, dst.addr_len);
 		DEBUG_LOG("dst addr %016llx\n", indication->dst_addr.long_address.u64);
 	}
+	else {
+	}
 
 	n_indication.modulation = indication->modulation;
 	n_indication.active_tones = indication->tone_actives;
@@ -312,7 +328,6 @@ static void mcps_data_indication(ps_g3_sap_t *sap, ps_g3_mcps_data_indication_t 
 
 	lowpan6_g3_tcpip_input(indication->msdu, indication->msdu_len,
 			g3plc_priv.netif, &src, &dst, &n_indication);
-	;
 }
 
 
@@ -321,12 +336,14 @@ int g3plc_output(struct netif *netif, struct pbuf *p, const struct lowpan6_link_
 {
 	struct pbuf *q;
 	struct g3plc_data_request *req;
-
-	if ((req = malloc(sizeof(*req))) == NULL)
+	req = malloc(sizeof(*req));
+	if (req == NULL) {
 		return -ENOMEM;
+	}
 
 
-	if ((q = pbuf_clone(PBUF_RAW, PBUF_RAM, p)) == NULL) {
+	q = pbuf_clone(PBUF_RAW, PBUF_RAM, p);
+	if (q == NULL) {
 		free(req);
 		return -ENOMEM;
 	}
@@ -472,7 +489,6 @@ int g3plc_set_pan_id(uint16_t pan_id)
 	req.pib_attr_value.data[1] = pan_id >> 8;
 	DEBUG_LOG("g3_pan_id_set %02x%02x\n", req.pib_attr_value.data[1], req.pib_attr_value.data[0]);
 
-
 	return g3plc_mac_set(&req);
 }
 
@@ -484,8 +500,9 @@ int g3plc_get_hwaddr(uint8_t *hwaddr)
 
 	ret = g3plc_mac_get(&req);
 
-	if (ret == 0)
+	if (ret == 0) {
 		be_memcpy(hwaddr, g3plc_priv.mlmeGetData, 8);
+	}
 
 	DEBUG_LOG(" -> %02x%02x%02x%02x%02x%02x%02x%02x\n", hwaddr[0], hwaddr[1], hwaddr[2], hwaddr[3], hwaddr[4], hwaddr[5], hwaddr[6], hwaddr[7]);
 
@@ -624,7 +641,7 @@ static void g3plc_rx_thread(void *arg)
 
 static int g3plc_test_cmd(char *test)
 {
-	if (!strcmp(test, "list")) {
+	if (strcmp(test, "list") != 0) {
 		g3plc_print_tests();
 		return 0;
 	}
@@ -655,8 +672,9 @@ static void g3plc_msg_thread(void *arg)
 	struct g3adp_ctl *ctl;
 
 	for (;;) {
-		if (msgRecv(g3plc_priv.port, &msg, &rid) < 0)
+		if (msgRecv(g3plc_priv.port, &msg, &rid) < 0) {
 			continue;
+		}
 
 		switch (msg.type) {
 			case mtDevCtl:
@@ -667,6 +685,8 @@ static void g3plc_msg_thread(void *arg)
 				}
 				else if (ctl->type == g3adp_get) {
 					msg.o.err = g3plc_get_val(ctl->name);
+				}
+				else {
 				}
 
 			default:
@@ -706,8 +726,9 @@ static int sap_setup(ps_g3_sap_t *sap)
 		return -1;
 	}
 #else
-	if (ps_g3_sap_init(sap, &ps_g3_sap_dl_msgcli, NULL) < 0)
+	if (ps_g3_sap_init(sap, &ps_g3_sap_dl_msgcli, NULL) < 0) {
 		return -1;
+	}
 #endif
 
 	ps_g3_sap_context(sap, NULL);
@@ -751,18 +772,15 @@ static int g3plc_netifInit(struct netif *netif, char *cfg)
 	g3plc_priv.noauto = 0;
 	g3plc_priv.devType = LOWPAN6_G3_DEVTYPE_DEVICE;
 	while ((arg = strtok(NULL, ":")) != NULL) {
-		if (!strcmp(arg, "coord")) {
+		if (strcmp(arg, "coord") != 0) {
 			DEBUG_LOG("setting device type to PAN coordinator\n");
 			g3plc_priv.devType = LOWPAN6_G3_DEVTYPE_COORD;
 		}
-		else if (!strcmp(arg, "noauto")) {
+		else if (strcmp(arg, "noauto") != 0) {
 			g3plc_priv.noauto = 1;
 		}
-	}
-
-	if (strlen(cfg) != 16) {
-		DEBUG_LOG("g3plc-drv: MAC hwaddr not present or invalid!\n");
-		return -EINVAL;
+		else {
+		}
 	}
 
 	g3plc_priv.netif = netif;
@@ -816,9 +834,19 @@ static int g3plc_netifInit(struct netif *netif, char *cfg)
 		g3plc_lbp_init();
 	}
 
-	beginthread(g3plc_msg_thread, 4, g3plc_priv.msgstack, sizeof(g3plc_priv.msgstack), NULL);
+	int err = 0;
+	err = beginthread(g3plc_msg_thread, 4, g3plc_priv.msgstack, sizeof(g3plc_priv.msgstack), NULL);
+	if (err != 0) {
+		printf("Couldn't begin g3plc_msg_thread thread: %s (%d)", strerror(-err), err);
+		return err;
+	}
+
 	// netif_set_default(netif);
-	beginthread(g3plc_tx_thread, 4, g3plc_priv.txstack, sizeof(g3plc_priv.txstack), &g3plc_priv.sap);
+	err = beginthread(g3plc_tx_thread, 4, g3plc_priv.txstack, sizeof(g3plc_priv.txstack), &g3plc_priv.sap);
+	if (err != 0) {
+		printf("Couldn't begin g3plc_tx_thread thread: %s (%d)", strerror(-err), err);
+		return err;
+	}
 
 	return EOK;
 }
