@@ -28,6 +28,7 @@
 #define CHAP_SUPPORT 1
 #define MSCHAP_SUPPORT 1
 #define LWIP_TIMEVAL_PRIVATE 0
+#define LWIP_IPV6                    1
 
 
 #if 0 // debugging LWiP PPPoS

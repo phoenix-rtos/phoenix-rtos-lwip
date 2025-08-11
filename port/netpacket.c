@@ -242,9 +242,6 @@ static void netpacket_linkoutput_full(struct netif *netif, struct pbuf *p, struc
 	/* find netpacket pcb's that are binded to this netif */
 	struct netpacket_pcb *pcb = NULL;
 	for (pcb = netpacket_pcbs; pcb != NULL && pcb->netif != NULL; pcb = pcb->next) {
-		if (pcb == from_pcb)
-			continue;
-
 		if (netif_get_index(pcb->netif) != netif_get_index(netif))
 			continue;
 

@@ -4,6 +4,12 @@ LOCAL_PATH := $(call my-dir)
 SRCS := $(wildcard $(LOCAL_PATH)*.c)
 DEP_LIBS := lwip-drivers lwip-core
 
+
+ifeq ($(LWIP_G3_BUILD), yes)
+LIBS := ps_eap ps_g3_sap libtinyaes hal
+endif
+
+
 # FIXME: use constructors for registration in lwip
 LOCAL_CFLAGS := $(addprefix -DHAVE_DRIVER_,$(sort $(NET_DRIVERS)))
 

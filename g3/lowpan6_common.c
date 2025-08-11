@@ -222,8 +222,7 @@ lowpan6_context_set_iid(ip6_addr_p_t *addr_iid, const u32_t *iid, u8_t ctx_len)
     addr_iid->addr[2] = lwip_htonl(iid[0]);
     addr_iid->addr[3] = lwip_htonl(iid[1]);
   }
-
-  if (ctx_len < 96) {
+  else if (ctx_len < 96) {
     addr_iid->addr[2] |= lwip_htonl(iid[0] & (0xffffffffUL >> (ctx_len - 64)));
     addr_iid->addr[3] = lwip_htonl(iid[1]);
   } else {
@@ -615,9 +614,7 @@ lowpan6_compress_headers(struct netif *netif, u8_t *inbuf, size_t inbuf_size, u8
         lowpan6_header_len += 2;
       }
 
-      if (current_hdr != IP6_NEXTH_FRAGMENT) {
-        buffer[lowpan6_header_len++] = ext_hdr_offset - bytes_elided;
-      }
+      buffer[lowpan6_header_len++] = ext_hdr_offset - bytes_elided;
       MEMCPY(buffer + lowpan6_header_len, inptr + bytes_elided, ext_hdr_offset - bytes_elided);
       lowpan6_header_len += ext_hdr_offset - bytes_elided;
 
@@ -1026,7 +1023,7 @@ lowpan6_decompress_hdr(u8_t *lowpan6_buffer, size_t lowpan6_bufsize,
       lowpan6_offset += 2;
     } else if ((lowpan6_buffer[1] & 0x03) == 0x03) {
       /* DAM=11, no bits available, use other headers (not done here) */
-      LWIP_DEBUGF(LWIP_LOWPAN6_DECOMPRESSION_DEBUG,("DAM == 01, dst compression, 0bits inline, using other headers\n"));
+      LWIP_DEBUGF(LWIP_LOWPAN6_DECOMPRESSION_DEBUG,("DAM == 11, dst compression, 0bits inline, using other headers\n"));
       if (dest->addr_len == 2) {
         iid[0] = 0x000000ffUL;
 #if LWIP_G3_PLC
@@ -1259,6 +1256,8 @@ lowpan6_decompress(struct pbuf *p, u16_t datagram_size, struct lowpan6_context *
     lowpan6_decompress_udp_chksum(q, ip6_offset);
   }
 
+  LWIP_DEBUGF(1, ("decompressed header:"));
+  ip6_debug_print(q);
   /* all done */
   return q;
 }

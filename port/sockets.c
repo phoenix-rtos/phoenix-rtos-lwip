@@ -44,6 +44,7 @@
 #include "netif.h"
 #include "route.h"
 #include "ipsec-api.h"
+#define AF_PACKET 17
 
 #define SOCKTHREAD_PRIO    4
 #define SOCKTHREAD_STACKSZ (4 * _PAGE_SIZE)
@@ -227,7 +228,7 @@ static int socket_ioctl6(int sock, unsigned long request, const void *in_data, v
 		case SIOCDIFADDR_IN6: {
 			struct in6_ifreq *in6_ifreq = (struct in6_ifreq *)in_data;
 			struct netif *netif = netif_find(in6_ifreq->ifr_name);
-			struct sockaddr_in6 sin6;
+			struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)&in6_ifreq->ifr_ifru.ifru_addr;
 			ip6_addr_t ip6addr;
 			s8_t idx;
 
@@ -235,14 +236,12 @@ static int socket_ioctl6(int sock, unsigned long request, const void *in_data, v
 				return -ENXIO;
 			}
 
-			/* The address structure will be converted, so it needs to be copied from the msg.i */
-			memcpy(&sin6, &in6_ifreq->ifr_ifru.ifru_addr, sizeof(struct sockaddr_in6));
-			sa_convert_sys_to_lwip(&sin6, sizeof(struct sockaddr_in6));
-			if (sin6.sin6_family != AF_INET6) {
+			sin6 = (struct sockaddr_in6 *)sa_convert_sys_to_lwip(sin6, sizeof(struct sockaddr_in6));
+			if (sin6->sin6_family != AF_INET6) {
 				return -EINVAL;
 			}
 
-			inet6_addr_to_ip6addr(&ip6addr, &sin6.sin6_addr);
+			inet6_addr_to_ip6addr(&ip6addr, &sin6->sin6_addr);
 			idx = netif_get_ip6_addr_match(netif, &ip6addr);
 			if (idx < 0) {
 				return -ENXIO;
@@ -256,7 +255,7 @@ static int socket_ioctl6(int sock, unsigned long request, const void *in_data, v
 		case SIOCAIFADDR_IN6: {
 			struct in6_aliasreq *in6_ifreq = (struct in6_aliasreq *)in_data;
 			struct netif *netif = netif_find(in6_ifreq->ifra_name);
-			struct sockaddr_in6 sin6;
+			struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)&in6_ifreq->ifrau_addr;
 			ip6_addr_t ip6addr;
 			s8_t idx;
 			u8_t uidx;
@@ -265,16 +264,16 @@ static int socket_ioctl6(int sock, unsigned long request, const void *in_data, v
 				return -ENXIO;
 			}
 
-			/* The address structure will be converted, so it needs to be copied from the msg.i */
-			memcpy(&sin6, &in6_ifreq->ifrau_addr, sizeof(struct sockaddr_in6));
-			sa_convert_sys_to_lwip(&sin6, sizeof(struct sockaddr_in6));
-			if (sin6.sin6_family != AF_INET6) {
+			sin6 = (struct sockaddr_in6 *)sa_convert_sys_to_lwip(sin6, sizeof(struct sockaddr_in6));
+			if (sin6->sin6_family != AF_INET6) {
 				return -EINVAL;
 			}
 
-			inet6_addr_to_ip6addr(&ip6addr, &sin6.sin6_addr);
-			if (netif_add_ip6_address(netif, &ip6addr, &idx) != ERR_OK) { /* If this function succeeds then idx >= 0 */
-				return -ENOMEM;
+			inet6_addr_to_ip6addr(&ip6addr, &sin6->sin6_addr);
+			if ((idx = netif_get_ip6_addr_match(netif, &ip6addr)) < 0) {
+				if (netif_add_ip6_address(netif, &ip6addr, &idx) != ERR_OK) {
+					return -ENOMEM;
+				}
 			}
 
 			uidx = (u8_t)idx;

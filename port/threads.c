@@ -118,7 +118,7 @@ static void thread_main(void *arg)
 }
 
 
-int sys_thread_opt_new(const char *name, void (* thread)(void *arg), void *arg, int stacksize, int prio, handle_t *id)
+int sys_thread_opt_new(const char *name, void (*thread)(void *arg), void *arg, int stacksize, int prio, handle_t *id)
 {
 	void *stack;
 	int err;
@@ -155,7 +155,7 @@ int sys_thread_opt_new(const char *name, void (* thread)(void *arg), void *arg, 
 }
 
 
-sys_thread_t sys_thread_new(const char *name, void (* thread)(void *arg), void *arg, int stacksize, int prio)
+sys_thread_t sys_thread_new(const char *name, void (*thread)(void *arg), void *arg, int stacksize, int prio)
 {
 	handle_t id;
 	int err;
