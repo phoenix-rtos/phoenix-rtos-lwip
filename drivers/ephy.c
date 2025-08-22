@@ -147,6 +147,15 @@ static inline void ephy_mmdWrite(const eth_phy_state_t *phy, uint16_t devad, uin
 }
 
 
+__attribute__((unused)) static inline uint16_t ephy_mmdRead(const eth_phy_state_t *phy, uint16_t devad, uint16_t addr)
+{
+	ephy_regWrite(phy, EPHY_MMD_0D_MACR, devad);
+	ephy_regWrite(phy, EPHY_MMD_0E_MAADR, addr);
+	ephy_regWrite(phy, EPHY_MMD_0D_MACR, (1u << 14) | devad);
+	return ephy_regRead(phy, EPHY_MMD_0E_MAADR);
+}
+
+
 static void ephy_reset(const eth_phy_state_t *phy)
 {
 	if (gpio_valid(&phy->reset)) {
