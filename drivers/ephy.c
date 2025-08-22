@@ -41,6 +41,12 @@ enum {
 	EPHY_COMMON_0F_GBESR = 0x0F, /* 1000Base-T Ext Status */
 };
 
+/* MMD access common regisers */
+enum {
+	EPHY_MMD_0D_MACR = 0x0D, /* MMD Access Ctrl */
+	EPHY_MMD_0E_MAADR,       /* MMD Access Addr Data */
+};
+
 /* KSZ8081-specific registers */
 enum {
 	EPHY_KSZ8081_10_DRCR = 0x10,      /* Digital Reserved Control */
@@ -57,8 +63,6 @@ enum {
 
 /* RTL common registers */
 enum {
-	EPHY_RTL_0D_MACR = 0x0D,   /* MMD Access Ctrl */
-	EPHY_RTL_0E_MAADR,         /* MMD Access Addr Data */
 	EPHY_RTL_1F_PAGESEL = 0x1F /* Page Select */
 };
 
@@ -136,10 +140,10 @@ static void ephy_regWrite(const eth_phy_state_t *phy, uint16_t reg, uint16_t val
 
 static inline void ephy_mmdWrite(const eth_phy_state_t *phy, uint16_t devad, uint16_t addr, uint16_t val)
 {
-	ephy_regWrite(phy, EPHY_RTL_0D_MACR, devad);
-	ephy_regWrite(phy, EPHY_RTL_0E_MAADR, addr);
-	ephy_regWrite(phy, EPHY_RTL_0D_MACR, (1 << 14) | devad);
-	ephy_regWrite(phy, EPHY_RTL_0E_MAADR, val);
+	ephy_regWrite(phy, EPHY_MMD_0D_MACR, devad);
+	ephy_regWrite(phy, EPHY_MMD_0E_MAADR, addr);
+	ephy_regWrite(phy, EPHY_MMD_0D_MACR, (1 << 14) | devad);
+	ephy_regWrite(phy, EPHY_MMD_0E_MAADR, val);
 }
 
 
