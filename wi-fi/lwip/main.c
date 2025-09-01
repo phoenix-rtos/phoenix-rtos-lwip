@@ -156,8 +156,9 @@ static int wifi_ap_is_idle(void)
 	cy_rslt_t result;
 
 	memset(buf, 0, sizeof(buf));
+	clients->count = 4;
 
-	result = whd_wifi_get_associated_client_list(wifi_common.iface.whd_iface, buf, 4);
+	result = whd_wifi_get_associated_client_list(wifi_common.iface.whd_iface, buf, sizeof(buf));
 	if (result == WHD_SUCCESS && clients->count == 0)
 		return 1;
 
