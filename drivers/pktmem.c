@@ -118,11 +118,12 @@ int net_initPktMem(size_t pkt_buf_max_sz)
 	}
 
 	const size_t pktmem_info_sz = sizeof(pktmem_info_t);
+	const size_t align = sizeof(void *);
 
-	pktmem_opts.alloc_sz = PAGE_SIZE * ((pkt_buf_max_sz + pktmem_info_sz + PAGE_SIZE - 1) / PAGE_SIZE);
-	pktmem_opts.pkt_buf_sz = pkt_buf_max_sz;
-	pktmem_opts.pkt_buf_cnt = 1 + (pktmem_opts.alloc_sz - pkt_buf_max_sz - pktmem_info_sz) / pkt_buf_max_sz;
-	if (pktmem_opts.pkt_buf_cnt > sizeof(pktmem_opts.free_mask_full) * 8) {
+	pktmem_opts.pkt_buf_sz = (pkt_buf_max_sz + align - 1) & ~(align - 1);
+	pktmem_opts.alloc_sz = PAGE_SIZE * ((pktmem_opts.pkt_buf_sz + pktmem_info_sz + PAGE_SIZE - 1) / PAGE_SIZE);
+	pktmem_opts.pkt_buf_cnt = (pktmem_opts.alloc_sz - pktmem_info_sz) / pktmem_opts.pkt_buf_sz;
+	if (pktmem_opts.pkt_buf_cnt == 0 || pktmem_opts.pkt_buf_cnt > sizeof(pktmem_opts.free_mask_full) * 8) {
 		return -EINVAL;
 	}
 
@@ -283,14 +284,12 @@ struct pbuf *net_makeDMAPbuf(struct pbuf *p)
 		return p;
 	}
 
-	q = net_allocDMAPbuf(&pa, p->tot_len + ETH_PAD_SIZE);
+	q = net_allocDMAPbuf(&pa, p->tot_len);
 	if (q == NULL) {
 		return NULL;
 	}
 
-	pbuf_header(q, -ETH_PAD_SIZE);
 	err = pbuf_copy(q, p);
-
 	if (err == 0) {
 		return q;
 	}

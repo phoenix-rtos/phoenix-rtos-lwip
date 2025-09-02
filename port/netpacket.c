@@ -96,9 +96,14 @@ err_t netpacket_sendto(struct netpacket_pcb *pcb, struct pbuf *p, u8_t *dst_addr
 	switch (pcb->type) {
 		case SOCK_RAW:
 			LWIP_ASSERT("netpacket_sendto: dst_addr must be NULL in SOCK_RAW connection", dst_addr == NULL);
-
+#if ETH_PAD_SIZE
+			/* add ethpad (not added by user) */
+			packet = pbuf_alloc(PBUF_RAW, ETH_PAD_SIZE, PBUF_POOL);
+			pbuf_chain(packet, p);
+#else
 			/* data in given buffer contains full ethernet frame - do nothing */
 			packet = p;
+#endif
 			break;
 		case SOCK_DGRAM: {
 			LWIP_ASSERT("netpacket_sendto: dst_addr cannot be NULL in SOCK_DGRAM connection", dst_addr != NULL);
@@ -117,7 +122,11 @@ err_t netpacket_sendto(struct netpacket_pcb *pcb, struct pbuf *p, u8_t *dst_addr
 
 	netpacket_linkoutput_full(pcb->netif, packet, pcb);
 	err_t ret = pcb->netif->linkoutput(pcb->netif, packet);
-	if (pcb->type == SOCK_DGRAM) {
+	if (pcb->type == SOCK_DGRAM
+#if ETH_PAD_SIZE
+			|| pcb->type == SOCK_RAW
+#endif
+	) {
 		pbuf_dechain(packet);
 		pbuf_free(packet);
 	}
