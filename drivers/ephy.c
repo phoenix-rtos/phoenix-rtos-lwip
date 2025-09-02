@@ -5,6 +5,8 @@
  *
  * Copyright 2018, 2024 Phoenix Systems
  * Author: Michał Mirosław, Julian Uziembło
+ * Copyright 2018, 2024 Phoenix Systems
+ * Author: Michał Mirosław, Julian Uziembło
  *
  * %LICENSE%
  */
@@ -141,6 +143,7 @@ static void ephy_reset(const eth_phy_state_t *phy)
 {
 	if (gpio_valid(&phy->reset)) {
 		ephy_debug_printf(phy, "ephy_reset: start hardware reset...");
+		ephy_debug_printf(phy, "ephy_reset: start hardware reset...");
 		// TODO: prepare bootstrap pins
 		gpio_set(&phy->reset, 1);
 		usleep(phy->reset_hold_time_us);
@@ -148,6 +151,13 @@ static void ephy_reset(const eth_phy_state_t *phy)
 		gpio_set(&phy->reset, 0);
 		usleep(phy->reset_release_time_us);
 		mdio_unlock_bus(phy->bus);
+		ephy_debug_printf(phy, "ephy_reset: hardware reset complete.");
+	}
+	else {
+		uint16_t res;
+		int retries = 10;
+
+		ephy_debug_printf(phy, "ephy_reset: start software reset...");
 		ephy_debug_printf(phy, "ephy_reset: hardware reset complete.");
 	}
 	else {
@@ -167,6 +177,7 @@ static void ephy_reset(const eth_phy_state_t *phy)
 		}
 
 		ephy_printf(phy, "soft-reset timed out");
+		ephy_printf(phy, "soft-reset timed out");
 	}
 }
 
@@ -184,7 +195,12 @@ static uint32_t ephy_readPhyId(const eth_phy_state_t *phy)
 	ret = ephy_regRead(phy, EPHY_COMMON_03_PHYID2);
 	phyid |= ret;
 	oui |= (ret & 0xFC00) << (18 - 10);
+	oui |= (ret & 0xFC00) << (18 - 10);
 
+	/*
+		ephy_printf(phy, "id 0x%08x (vendor 0x%06x model 0x%02x rev %u)",
+			phyid, oui, (ret >> 4) & 0x3F, ret & 0x0F);
+	*/
 	/*
 		ephy_printf(phy, "id 0x%08x (vendor 0x%06x model 0x%02x rev %u)",
 			phyid, oui, (ret >> 4) & 0x3F, ret & 0x0F);
@@ -222,9 +238,12 @@ static void ephy_setLinkState(const eth_phy_state_t *phy)
 	speed = ephy_linkSpeed(phy, &full_duplex);
 
 	int linkup = (bstat & (1u << 2)) != 0;
+	int linkup = (bstat & (1u << 2)) != 0;
 
 	if (phy->link_state_callback != NULL) {
+	if (phy->link_state_callback != NULL) {
 		phy->link_state_callback(phy->link_state_callback_arg, linkup);
+	}
 	}
 
 	switch (phy->model) {
@@ -257,6 +276,7 @@ static inline int ephy_ksz8081rnx_linkSpeed(const eth_phy_state_t *phy, int *ful
 {
 	uint16_t pc1 = ephy_regRead(phy, EPHY_KSZ8081_1E_PHYCR1);
 
+	if ((pc1 & 0x7) == 0) { /* PHY still in auto-negotiation */
 	if ((pc1 & 0x7) == 0) { /* PHY still in auto-negotiation */
 		return 0;
 	}
@@ -356,6 +376,7 @@ static void ephy_restartAN(const eth_phy_state_t *phy)
 
 
 static void ephy_linkThread(void *arg)
+static void ephy_linkThread(void *arg)
 {
 	eth_phy_state_t *phy = arg;
 	uint16_t stat, irq_reg, irq_mask;
@@ -384,6 +405,7 @@ static void ephy_linkThread(void *arg)
 
 	for (;;) {
 		err = gpio_wait(&phy->irq_gpio, 1, 0);
+		err = gpio_wait(&phy->irq_gpio, 1, 0);
 		// FIXME: thread exit
 
 		if (err == 0) {
@@ -395,10 +417,13 @@ static void ephy_linkThread(void *arg)
 	}
 
 	ephy_printf(phy, "thread finished.");
+	ephy_printf(phy, "thread finished.");
 	endthread();
 }
 
 
+/* ARGS: pfx[-]n:/dev/gpioX[:...] */
+static char *ephy_parsePinArg(char *cfg, const char *pfx, size_t pfx_len, gpio_info_t *gp, unsigned flags)
 /* ARGS: pfx[-]n:/dev/gpioX[:...] */
 static char *ephy_parsePinArg(char *cfg, const char *pfx, size_t pfx_len, gpio_info_t *gp, unsigned flags)
 {
@@ -406,12 +431,17 @@ static char *ephy_parsePinArg(char *cfg, const char *pfx, size_t pfx_len, gpio_i
 	int err;
 
 	if (strncmp(pfx, cfg, pfx_len) != 0) {
+	if (strncmp(pfx, cfg, pfx_len) != 0) {
 		return cfg;
+	}
+
 	}
 
 	cfg += pfx_len;
 
 	p = strchr(cfg, ':');
+	if (p == NULL) {
+		printf("lwip: ephy: %s missing pin GPIO node\n", pfx);
 	if (p == NULL) {
 		printf("lwip: ephy: %s missing pin GPIO node\n", pfx);
 		return cfg - pfx_len;
@@ -422,6 +452,9 @@ static char *ephy_parsePinArg(char *cfg, const char *pfx, size_t pfx_len, gpio_i
 		p++;
 	}
 
+	err = gpio_init(gp, cfg, flags);
+	if (err != 0) {
+		printf("lwip: ephy: %s bad pin info: %s (%d)\n", pfx, strerror(-err), err);
 	err = gpio_init(gp, cfg, flags);
 	if (err != 0) {
 		printf("lwip: ephy: %s bad pin info: %s (%d)\n", pfx, strerror(-err), err);
@@ -479,6 +512,7 @@ static int ephy_config(eth_phy_state_t *phy, char *cfg)
 	char *p;
 
 	if (*cfg == '\0') {
+	if (*cfg == '\0') {
 		return -EINVAL;
 	}
 
@@ -502,23 +536,33 @@ static int ephy_config(eth_phy_state_t *phy, char *cfg)
 		cfg = p;
 
 		if (*cfg == '\0') {
+		if (*cfg == '\0') {
 			return -EINVAL;
+		}
 		}
 
 		phy->addr = strtoul(cfg, &p, 0);
 	}
 	else {
 		printf("lwip: ephy: WARN: setting default bus 0\n");
+	}
+	else {
+		printf("lwip: ephy: WARN: setting default bus 0\n");
 		phy->bus = 0;
 	}
+	}
 
+	if ((phy->addr & ~NETDEV_MDIO_ADDR_MASK) != 0) {
+		printf("lwip: ephy: bad PHY address: 0x%x (valid bits: 0x%x)\n", phy->addr, NETDEV_MDIO_ADDR_MASK);
 	if ((phy->addr & ~NETDEV_MDIO_ADDR_MASK) != 0) {
 		printf("lwip: ephy: bad PHY address: 0x%x (valid bits: 0x%x)\n", phy->addr, NETDEV_MDIO_ADDR_MASK);
 		return -EINVAL;
 	}
 
 	if (*p == '\0') {
+	if (*p == '\0') {
 		return 0;
+	}
 	}
 
 	if (*p != ':') {
@@ -527,13 +571,19 @@ static int ephy_config(eth_phy_state_t *phy, char *cfg)
 	p++;
 
 	while (p != NULL && *p != '\0') {
+	while (p != NULL && *p != '\0') {
 		cfg = p;
 
 		p = ephy_parsePinArg(p, "irq:", 4, &phy->irq_gpio, GPIO_INPUT);
 		if (p == cfg) {
 			p = ephy_parsePinArg(p, "reset:", 6, &phy->reset, GPIO_OUTPUT | GPIO_ACTIVE);
 		}
+		p = ephy_parsePinArg(p, "irq:", 4, &phy->irq_gpio, GPIO_INPUT);
 		if (p == cfg) {
+			p = ephy_parsePinArg(p, "reset:", 6, &phy->reset, GPIO_OUTPUT | GPIO_ACTIVE);
+		}
+		if (p == cfg) {
+			printf("lwip: ephy: unparsed args: %s\n", cfg);
 			printf("lwip: ephy: unparsed args: %s\n", cfg);
 			return -EINVAL;
 		}
@@ -601,9 +651,11 @@ int ephy_enableLoopback(const eth_phy_state_t *phy, bool enable)
 static int ephy_setAltConfig(eth_phy_state_t *phy, int cfg_id)
 {
 	/* NOTE: assuming KSZ8081 RNA/RND/RNB PHY! */
+	/* NOTE: assuming KSZ8081 RNA/RND/RNB PHY! */
 
 	/* CFG id:
 	 * 0: KSZ8081 RND with 50 MHz RMII input clock (PHY_CTRL2[7] = 0)
+	 * 1: KSZ8081 RNA/RNB with 50 MHz RMII input clock (PHY_CTRL2[7] = 1)
 	 * 1: KSZ8081 RNA/RNB with 50 MHz RMII input clock (PHY_CTRL2[7] = 1)
 	 */
 
@@ -700,6 +752,9 @@ int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb
 	err = ephy_config(phy, conf);
 	if (err != 0) {
 		printf("lwip: ephy: Couldn't configure PHY: %s (%d)\n", strerror(-err), err);
+	err = ephy_config(phy, conf);
+	if (err != 0) {
+		printf("lwip: ephy: Couldn't configure PHY: %s (%d)\n", strerror(-err), err);
 		return -EINVAL;
 	}
 	ephy_debug_printf(phy, "PHY configured");
@@ -734,9 +789,13 @@ int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb
 		ephy_printf(phy, "Couldn't init MDIO: %s (%d)", strerror(-err), err);
 		return err;
 	}
+	}
 
 	ephy_reset(phy);
 
+	phyid = ephy_readPhyId(phy);
+	if (phyid == 0u || phyid == ~0u) {
+		ephy_printf(phy, "Couldn't read PHY ID");
 	phyid = ephy_readPhyId(phy);
 	if (phyid == 0u || phyid == ~0u) {
 		ephy_printf(phy, "Couldn't read PHY ID");
@@ -769,8 +828,11 @@ int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb
 	phy->link_state_callback = cb;
 	phy->link_state_callback_arg = cb_arg;
 	ephy_setLinkState(phy);
+	ephy_setLinkState(phy);
 
 	if (gpio_valid(&phy->irq_gpio)) {
+		err = beginthread(ephy_linkThread, 0, phy->th_stack, sizeof(phy->th_stack), phy);
+		if (err != 0) {
 		err = beginthread(ephy_linkThread, 0, phy->th_stack, sizeof(phy->th_stack), phy);
 		if (err != 0) {
 			gpio_set(&phy->reset, 1);
