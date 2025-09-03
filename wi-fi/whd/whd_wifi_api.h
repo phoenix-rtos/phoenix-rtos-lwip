@@ -105,6 +105,22 @@ extern uint32_t whd_bus_spi_attach(whd_driver_t whd_driver, whd_spi_config_t *wh
  */
 extern void whd_bus_spi_detach(whd_driver_t whd_driver);
 
+#elif (CYBSP_WIFI_INTERFACE_TYPE == CYBSP_USB_INTERFACE)
+/** Attach the WLAN Device to a specific USB bus
+ *
+ *  @param  whd_driver        Pointer to handle instance of the driver
+ *  @param  usb_obj           The USB HOST hardware interface
+ *
+ *  @return WHD_SUCCESS or Error code
+ */
+extern whd_result_t  whd_bus_usb_attach(whd_driver_t whd_driver, void *usb_obj);
+
+/** Detach the WLAN Device to a specific USB bus
+ *
+ *  @param  whd_driver         Pointer to handle instance of the driver
+ */
+extern void whd_bus_usb_detach(whd_driver_t whd_driver);
+
 #elif (CYBSP_WIFI_INTERFACE_TYPE == CYBSP_M2M_INTERFACE)
 /** Attach the WLAN Device to M2M bus
  *
@@ -123,7 +139,7 @@ extern uint32_t whd_bus_m2m_attach(whd_driver_t whd_driver, whd_m2m_config_t *wh
 extern void whd_bus_m2m_detach(whd_driver_t whd_driver);
 
 #else
-error "CYBSP_WIFI_INTERFACE_TYPE is not defined"
+#error "CYBSP_WIFI_INTERFACE_TYPE is not defined"
 #endif
 
 /*  @} */

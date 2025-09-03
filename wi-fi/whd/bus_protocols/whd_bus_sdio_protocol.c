@@ -23,9 +23,9 @@
  *  sending/receiving raw packets etc
  */
 
-#include <stdlib.h>
 #include "cybsp.h"
 #if (CYBSP_WIFI_INTERFACE_TYPE == CYBSP_SDIO_INTERFACE)
+#include <stdlib.h>
 
 #include "cyabs_rtos.h"
 #include "cyhal_sdio.h"

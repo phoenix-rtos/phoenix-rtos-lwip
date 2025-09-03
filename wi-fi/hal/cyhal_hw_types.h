@@ -43,6 +43,7 @@
 /*
  #include "TODO: Port specific header file"
  */
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {

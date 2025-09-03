@@ -24,7 +24,6 @@
 #include "whd_bus.h"
 #include "whd_bus_common.h"
 #include "whd_chip_reg.h"
-#include "whd_sdio.h"
 #include "whd_chip_constants.h"
 #include "whd_int.h"
 #include "whd_chip.h"

@@ -113,6 +113,8 @@ typedef struct whd_tko_status whd_tko_status_t;
 #define MAX_BUS_HEADER_SIZE 4 /**< Max bus header size for all bus types (sdio) */
 #elif (CYBSP_WIFI_INTERFACE_TYPE == CYBSP_SPI_INTERFACE)
 #define MAX_BUS_HEADER_SIZE 4 /**< Max bus header size for all bus types (spi) */
+#elif (CYBSP_WIFI_INTERFACE_TYPE == CYBSP_USB_INTERFACE)
+#define MAX_BUS_HEADER_SIZE 4 /**< Max bus header size for all bus types (usb) */
 #elif (CYBSP_WIFI_INTERFACE_TYPE == CYBSP_M2M_INTERFACE)
 #define MAX_BUS_HEADER_SIZE 8 /**< Max bus header size for all bus types (m2m) */
 #else

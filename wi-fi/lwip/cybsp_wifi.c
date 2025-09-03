@@ -58,6 +58,8 @@ extern "C" {
 #define WIFI_MODE_SPI
 #elif (CYHAL_DRIVER_AVAILABLE_DMA && (CYBSP_WIFI_INTERFACE_TYPE == CYBSP_M2M_INTERFACE))
 #define WIFI_MODE_M2M
+#elif (CYHAL_DRIVER_AVAILABLE_USB_DEV && (CYBSP_WIFI_INTERFACE_TYPE == CYBSP_USB_INTERFACE))
+#define WIFI_MODE_USB
 #else
 // For old versions of HAL/BSP fallback to the default interface
 #define WIFI_MODE_SDIO
@@ -191,12 +193,14 @@ static whd_netif_funcs_t netif_if_default = {
 };
 
 #if !defined(WIFI_MODE_M2M)
+#if !defined(WIFI_MODE_USB)
 static const whd_oob_config_t OOB_CONFIG = {
 	.host_oob_pin = CY_WIFI_HOST_WAKE_GPIO,
 	.dev_gpio_sel = DEFAULT_OOB_PIN,
 	.is_falling_edge = (CY_WIFI_HOST_WAKE_IRQ_EVENT == CYHAL_GPIO_IRQ_FALL) ? WHD_TRUE : WHD_FALSE,
 	.intr_priority = CY_WIFI_OOB_INTR_PRIORITY
 };
+#endif /* !defined(WIFI_MODE_USB) */
 
 
 //--------------------------------------------------------------------------------------------------
@@ -491,8 +495,13 @@ static cy_rslt_t _cybsp_wifi_m2m_init_bus(void)
 	return rslt;
 }
 
+#elif defined(WIFI_MODE_USB)
 
-#endif  // defined(WIFI_MODE_M2M)
+extern cy_rslt_t _cybsp_wifi_usb_init_bus(void);
+
+#endif
+
+
 
 
 //--------------------------------------------------------------------------------------------------
@@ -509,6 +518,8 @@ static inline cy_rslt_t _cybsp_wifi_bus_init(void)
 	return _cybsp_wifi_spi_init_bus();
 #elif defined(WIFI_MODE_M2M)
 	return _cybsp_wifi_m2m_init_bus();
+#elif defined(WIFI_MODE_USB)
+	return _cybsp_wifi_usb_init_bus();
 #endif
 }
 
@@ -530,6 +541,8 @@ static inline void _cybsp_wifi_bus_detach(void)
 	whd_bus_spi_detach(whd_drv);
 #elif defined(WIFI_MODE_M2M)
 	whd_bus_m2m_detach(whd_drv);
+#elif defined(WIFI_MODE_USB)
+	whd_bus_usb_detach(whd_drv);
 #endif
 }
 
@@ -543,7 +556,7 @@ cy_rslt_t cybsp_wifi_init_primary_extended(whd_interface_t *interface,
 	whd_buffer_funcs_t *buffer_if,
 	whd_netif_funcs_t *netif_if)
 {
-#if defined(WIFI_MODE_M2M)
+#if defined(WIFI_MODE_M2M) || defined(WIFI_MODE_USB)
 	cy_rslt_t result = CY_RSLT_SUCCESS;
 #else
 	cy_rslt_t result = cyhal_gpio_init(CYBSP_WIFI_WL_REG_ON, CYHAL_GPIO_DIR_OUTPUT,
@@ -611,7 +624,7 @@ cy_rslt_t cybsp_wifi_deinit(whd_interface_t interface)
 
 	if (result == CY_RSLT_SUCCESS) {
 		_cybsp_wifi_bus_detach();
-#if !defined(WIFI_MODE_M2M)
+#if !defined(WIFI_MODE_M2M) || !defined(WIFI_MODE_USB)
 		cyhal_gpio_free(CYBSP_WIFI_WL_REG_ON);
 #endif
 		// While deinit() takes an interface, it only uses it to get the underlying whd driver to

@@ -58,7 +58,13 @@ cy_rslt_t cybsp_init(void);
 
 void cybsp_free(void);
 
+#if defined(__CPU_IMX6ULL)
 #define CYBSP_WIFI_INTERFACE_TYPE CYBSP_SDIO_INTERFACE
+#elif defined(__CPU_IMXRT117X)
+#define CYBSP_WIFI_INTERFACE_TYPE CYBSP_USB_INTERFACE
+#else
+#error "Unsupported TARGET"
+#endif
 
 /**
  * \brief Get the initialized sdio object used for communicating with the WiFi Chip.
