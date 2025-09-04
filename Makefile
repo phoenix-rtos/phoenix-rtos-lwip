@@ -31,7 +31,9 @@ include g3/Makefile
 endif
 
 CFLAGS += -Wundef -Iinclude -Ilib-lwip/src/include -I"$(LWIPOPTS_DIR)"
-CFLAGS += $(CFLAGS) -I$(PREFIX_BUILD)/phrtos3-include -I$(PREFIX_PROJECT)/G3-PLC/ps_g3_phy/api/include
+ifeq ($(LWIP_G3_BUILD), yes)
+CFLAGS += -I$(PREFIX_BUILD)/phrtos3-include -I$(PREFIX_PROJECT)/G3-PLC/ps_g3_phy/api/include
+endif
 
 NAME := lwip-core
 SRCS := $(LWIP_SRCS)
