@@ -1,0 +1,12 @@
+#
+# Makefile for Phoenix-RTOS 3 LwIP
+#
+# sparcv8leon/gr740-mini target
+#
+# Copyright 2025 Phoenix Systems
+#
+
+NET_DRIVERS_SUPPORTED := greth
+NET_DRIVERS ?= $(NET_DRIVERS_SUPPORTED)
+
+DRIVERS_SRCS_greth = greth.c ephy.c null-gpio.c $(DRIVERS_SRCS_UTIL)

@@ -221,7 +221,7 @@ size_t net_reapTxFinished(net_bufdesc_ring_t *ring)
 	i = atomic_load(&ring->tail);
 	head = atomic_load(&ring->head);
 	while (i != head) {
-		if (ring->ops->nextTxDone(ring, i) == 0) {
+		if (!ring->ops->nextTxDone(ring, i)) {
 			break;
 		}
 
