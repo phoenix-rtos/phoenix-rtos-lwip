@@ -130,11 +130,11 @@ static size_t rtl_nextRxBufferSize(const net_bufdesc_ring_t *ring, size_t i)
 }
 
 
-static int rtl_pktRxFinished(const net_bufdesc_ring_t *ring, size_t i)
+static bool rtl_pktRxFinished(const net_bufdesc_ring_t *ring, size_t i)
 {
 	volatile rtl_buf_desc_t *r = ring->ring;
 
-	return r[i].cmd & RTL_DESC_LS;
+	return ((r[i].cmd & RTL_DESC_LS) != 0u);
 }
 
 
@@ -165,11 +165,11 @@ static void rtl_fillRxDesc(const net_bufdesc_ring_t *ring, size_t i, addr_t pa, 
 	rtl_fillDesc(ring, i, pa + ETH_PAD_SIZE, sz - ETH_PAD_SIZE, 0);
 }
 
-static int rtl_nextTxDone(const net_bufdesc_ring_t *ring, size_t i)
+static bool rtl_nextTxDone(const net_bufdesc_ring_t *ring, size_t i)
 {
 	volatile rtl_buf_desc_t *r = ring->ring;
 
-	return !(r[i].cmd & RTL_DESC_OWN);
+	return ((r[i].cmd & RTL_DESC_OWN) == 0u);
 }
 
 

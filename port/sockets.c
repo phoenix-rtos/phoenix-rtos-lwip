@@ -428,7 +428,7 @@ static int socket_ioctl(int sock, unsigned long request, const void *in_data, vo
 					if (!netif_is_ppp(interface)) {
 						sin = (struct sockaddr_in *)&ifreq->ifr_broadaddr;
 						sin->sin_addr.s_addr = ip4_addr_get_u32(netif_ip4_addr(interface)) |
-							~ip4_addr_get_u32(netif_ip4_netmask(interface));
+								~ip4_addr_get_u32(netif_ip4_netmask(interface));
 					}
 					else {
 						return -EOPNOTSUPP;
@@ -753,7 +753,7 @@ static int socket_op(msg_t *msg, int sock)
 			break;
 		case sockmSend:
 			smo->ret = map_errno(lwip_sendto(sock, msg->i.data, msg->i.size, smi->send.flags,
-				smi->send.addrlen == 0 ? NULL : sa_convert_sys_to_lwip(smi->send.addr, smi->send.addrlen), smi->send.addrlen));
+					smi->send.addrlen == 0 ? NULL : sa_convert_sys_to_lwip(smi->send.addr, smi->send.addrlen), smi->send.addrlen));
 			break;
 		case sockmRecv:
 			smo->ret = map_errno(lwip_recvfrom(sock, msg->o.data, msg->o.size, smi->send.flags, (void *)smo->sockname.addr, &salen));
@@ -942,7 +942,7 @@ static int do_getnameinfo(const struct sockaddr *sa, socklen_t addrlen, char *ho
 
 		if (host != NULL) {
 			snprintf(host, hostsz, "%u.%u.%u.%u", (unsigned char)sa->sa_data[2], (unsigned char)sa->sa_data[3],
-				(unsigned char)sa->sa_data[4], (unsigned char)sa->sa_data[5]);
+					(unsigned char)sa->sa_data[4], (unsigned char)sa->sa_data[5]);
 			host[hostsz - 1] = '\0';
 		}
 
@@ -1039,7 +1039,8 @@ static int do_getifaddrs(char *buf, size_t *buflen)
 	int i;
 #endif
 
-	NETIF_FOREACH(netif) {
+	NETIF_FOREACH(netif)
+	{
 		n_netifs++;
 		n_ifaddrs++;
 		/* lwip_netif_name | netif_num | '\0' */
@@ -1072,7 +1073,8 @@ static int do_getifaddrs(char *buf, size_t *buflen)
 	memset(buf, 0, needed);
 	memset(&sa, 0, sizeof(sa));
 	sin = (struct sockaddr_in *)&sa;
-	NETIF_FOREACH(netif) {
+	NETIF_FOREACH(netif)
+	{
 		dest->ifa_flags = netif->flags;
 		sin->sin_family = AF_INET;
 		sin->sin_len = sizeof(struct sockaddr_in);
@@ -1139,7 +1141,7 @@ static void socketsrv_thread(void *arg)
 	const char *node, *serv;
 #endif
 
-	port = (unsigned)arg;
+	port = (uintptr_t)arg;
 
 	while ((err = msgRecv(port, &msg, &respid)) >= 0) {
 		const sockport_msg_t *smi = (const void *)msg.i.raw;
@@ -1235,7 +1237,7 @@ __constructor__(1000) void init_lwip_sockets(void)
 		errout(err, "create_dev(%s)", PATH_SOCKSRV);
 	}
 
-	if ((err = sys_thread_opt_new("socketsrv", socketsrv_thread, (void *)oid.port, SOCKTHREAD_STACKSZ, SOCKTHREAD_PRIO, NULL))) {
+	if ((err = sys_thread_opt_new("socketsrv", socketsrv_thread, (void *)(uintptr_t)oid.port, SOCKTHREAD_STACKSZ, SOCKTHREAD_PRIO, NULL))) {
 		portDestroy(oid.port);
 		errout(err, "thread(socketsrv)");
 	}
