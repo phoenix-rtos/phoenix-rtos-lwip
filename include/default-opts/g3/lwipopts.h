@@ -1,34 +1,34 @@
-#define LWIP_IPV6                    1
-#define LWIP_TCPIP_CORE_LOCKING      1
-#define LWIP_SUPPORT_CUSTOM_PBUF     1
-#define LWIP_NETIF_LOOPBACK          1
-#define LWIP_HAVE_SLIPIF             0
-#define LWIP_NETIF_API               1
-#define LWIP_SOCKET                  1
-#define LWIP_COMPAT_SOCKETS          0
-#define LWIP_ARP                     1
-#define LWIP_ICMP                    1
-#define LWIP_RAW                     1
-#define LWIP_DHCP                    1
-#define LWIP_DNS                     1
-#define LWIP_AUTOIP                  1
-#define LWIP_UDP                     1
-#define LWIP_TCP                     1
-#define LWIP_TCP_KEEPALIVE           1
-#define MEM_LIBC_MALLOC              1
-#define MEMP_MEM_MALLOC              1
-#define LWIP_ERRNO_INCLUDE           "errno.h"
-#define LWIP_DNS_API_DEFINE_ERRORS   0
-#define LWIP_DNS_API_DEFINE_FLAGS    0
-#define LWIP_DNS_API_DECLARE_STRUCTS 0
-#define LWIP_DNS_API_DECLARE_H_ERRNO 0
-#define MEMP_NUM_NETCONN             1024
-#define PPP_SUPPORT                  1
-#define PPPOS_SUPPORT                1
-#define PAP_SUPPORT                  1
-#define CHAP_SUPPORT                 1
-#define MSCHAP_SUPPORT               1
-#define LWIP_TIMEVAL_PRIVATE         0
+#define LWIP_IPV6                     1
+#define LWIP_TCPIP_CORE_LOCKING       1
+#define LWIP_SUPPORT_CUSTOM_PBUF      1
+#define LWIP_NETIF_LOOPBACK           1
+#define LWIP_HAVE_SLIPIF              0
+#define LWIP_NETIF_API                1
+#define LWIP_SOCKET                   1
+#define LWIP_COMPAT_SOCKETS           0
+#define LWIP_ARP                      1
+#define LWIP_ICMP                     1
+#define LWIP_RAW                      1
+#define LWIP_DHCP                     0
+#define LWIP_DNS                      0
+#define LWIP_AUTOIP                   1
+#define LWIP_UDP                      1
+#define LWIP_TCP                      0
+#define LWIP_TCP_KEEPALIVE            0
+#define MEM_LIBC_MALLOC               1
+#define MEMP_MEM_MALLOC               1
+#define LWIP_ERRNO_INCLUDE            "errno.h"
+#define LWIP_DNS_API_DEFINE_ERRORS    0
+#define LWIP_DNS_API_DEFINE_FLAGS     0
+#define LWIP_DNS_API_DECLARE_STRUCTS  0
+#define LWIP_DNS_API_DECLARE_H_ERRNO  0
+#define MEMP_NUM_NETCONN              256
+#define PPP_SUPPORT                   1
+#define PPPOS_SUPPORT                 1
+#define PAP_SUPPORT                   1
+#define CHAP_SUPPORT                  1
+#define MSCHAP_SUPPORT                1
+#define LWIP_TIMEVAL_PRIVATE          0
 #define LWIP_IPV6_SEND_ROUTER_SOLICIT 0
 
 
@@ -55,7 +55,7 @@
 #define IP_FRAG                     1
 #define SO_REUSE                    1
 #define DEFAULT_THREAD_STACKSIZE    (4 * 4096)
-#define TCPIP_THREAD_STACKSIZE      (4 * 4096)
+#define TCPIP_THREAD_STACKSIZE      (1 * 4096)
 #define TCPIP_THREAD_PRIO           3
 #define TCPIP_MBOX_SIZE             256
 #define DEFAULT_RAW_RECVMBOX_SIZE   32
@@ -65,7 +65,7 @@
 #define LWIP_HOOK_FILENAME          "phoenix-hooks.h"
 #define LWIP_EXT_PF                 1
 #define LWIP_NETIF_STATUS_CALLBACK  1
-#define LWIP_DHCP_AUTOIP_COOP       1
+#define LWIP_DHCP_AUTOIP_COOP       0
 #define LWIP_DHCP_AUTOIP_COOP_TRIES 3
 #define LWIP_SO_RCVTIMEO            1
 #define ifreq                       lwip_ifreq
