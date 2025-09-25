@@ -27,7 +27,7 @@
 #include <g3plc.h>
 #include <lbp_g3.h>
 #include "netif-driver.h"
-#include <ps_g3_sap_dl_uart.h>
+#include <ps_g3_sap_dl_posix.h>
 #include <g3_adp_common.h>
 
 struct g3plc_data_request {
@@ -175,7 +175,6 @@ static const char *status_to_str(enum macStatus status)
 	}
 	return "(unknown status)";
 }
-
 
 /* Default initial values. Should be read from cfg in the future */
 static const u8_t psk[] = { 0xAB, 0x10, 0x34, 0x11, 0x45, 0x11, 0x1B, 0xC3,
@@ -635,13 +634,12 @@ static void g3plc_rx_thread(void *arg)
 	ps_g3_sap_t *sap = (ps_g3_sap_t *)arg;
 	for (;;) {
 		ps_g3_sap_update(sap);
-		usleep(1000); /* yield */
 	}
 }
 
 static int g3plc_test_cmd(char *test)
 {
-	if (strcmp(test, "list") != 0) {
+	if (strcmp(test, "list") == 0) {
 		g3plc_print_tests();
 		return 0;
 	}
@@ -697,7 +695,7 @@ static void g3plc_msg_thread(void *arg)
 	}
 }
 
-static int sap_setup(ps_g3_sap_t *sap)
+static int sap_setup(ps_g3_sap_t *sap, const char *path)
 {
 	ps_g3_sap_callbacks_t clbk_adp = {
 		.mcps_data_request = ps_g3_sap_ser_mcps_data_request,
@@ -716,20 +714,16 @@ static int sap_setup(ps_g3_sap_t *sap)
 		.mlme_start_confirm = mlme_start_confirm,
 		/* .mlme_comm_status_indication = mlme_comm_status_indication, */
 	};
-#define USE_SAP_UART 1
-#ifdef USE_SAP_UART
-	ps_g3_sap_dl_uart_cfg_t sap_dl_cfg = {
-		.devname = "/dev/uart3",
+
+	ps_g3_sap_dl_posix_cfg_t sap_dl_cfg = {
+		.path = path,
+		.blocking = 1,
 	};
-	if (ps_g3_sap_init(sap, &ps_g3_sap_dl_uart, &sap_dl_cfg) < 0) {
+
+	if (ps_g3_sap_init(sap, &ps_g3_sap_dl_posix, &sap_dl_cfg) < 0) {
 		printf("ps_g3_sap_init() unable to initialize sap layer");
 		return -1;
 	}
-#else
-	if (ps_g3_sap_init(sap, &ps_g3_sap_dl_msgcli, NULL) < 0) {
-		return -1;
-	}
-#endif
 
 	ps_g3_sap_context(sap, NULL);
 	ps_g3_sap_callbacks(sap, &clbk_adp);
@@ -738,11 +732,12 @@ static int sap_setup(ps_g3_sap_t *sap)
 }
 
 
+/* ARGS: g3plc:MAC address:SAP driver path:[coord:][noauto] */
 static int g3plc_netifInit(struct netif *netif, char *cfg)
 {
 	u8_t hwaddr[8];
 	int i;
-	char *hwaddrStr, *arg;
+	char *hwaddrStr, *arg, *sapPath;
 	oid_t oid;
 
 	if (portCreate(&g3plc_priv.port) != 0) {
@@ -769,17 +764,21 @@ static int g3plc_netifInit(struct netif *netif, char *cfg)
 		hwaddr[i] += hwaddrStr[2 * i + 1] - '0';
 	}
 
+	sapPath = strtok(NULL, ":");
+	if (sapPath == NULL) {
+		DEBUG_LOG("g3plc-drv: SAP driver path not present\n");
+		return -EINVAL;
+	}
+
 	g3plc_priv.noauto = 0;
 	g3plc_priv.devType = LOWPAN6_G3_DEVTYPE_DEVICE;
 	while ((arg = strtok(NULL, ":")) != NULL) {
-		if (strcmp(arg, "coord") != 0) {
+		if (strcmp(arg, "coord") == 0) {
 			DEBUG_LOG("setting device type to PAN coordinator\n");
 			g3plc_priv.devType = LOWPAN6_G3_DEVTYPE_COORD;
 		}
-		else if (strcmp(arg, "noauto") != 0) {
+		else if (strcmp(arg, "noauto") == 0) {
 			g3plc_priv.noauto = 1;
-		}
-		else {
 		}
 	}
 
@@ -792,7 +791,7 @@ static int g3plc_netifInit(struct netif *netif, char *cfg)
 	condCreate(&g3plc_priv.mlmeCond);
 	condCreate(&g3plc_priv.reqsCond);
 
-	if (sap_setup(&g3plc_priv.sap) != 0) {
+	if (sap_setup(&g3plc_priv.sap, sapPath) != 0) {
 		DEBUG_LOG("g3plc-drv: Fail to initialize SAP\n");
 		return -EINVAL;
 	}
@@ -813,7 +812,6 @@ static int g3plc_netifInit(struct netif *netif, char *cfg)
 		DEBUG_LOG("g3plc-drv: Fail to initialize lowpan6 netif\n");
 		return -EINVAL;
 	}
-
 	if (g3plc_priv.noauto) {
 		lowpan6_g3_set_noauto(g3plc_priv.netif, 1);
 	}
