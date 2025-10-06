@@ -27,4 +27,7 @@ else
   LOCAL_CFLAGS += -DLWIP_WIFI=0
 endif
 
+LWIP_MAIN_THREAD_STACKSIZE ?= 4096
+LOCAL_LDFLAGS := -z stack-size=$(LWIP_MAIN_THREAD_STACKSIZE)
+
 include $(binary.mk)
