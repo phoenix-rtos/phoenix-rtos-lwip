@@ -54,11 +54,13 @@ cy_rslt_t cybsp_init(void)
 	// implementations require specific peripheral instances.
 	// NOTE: The full WiFi interface still needs to be initialized via cybsp_wifi_init_primary().
 	// This is typically done when starting up WiFi.
+#if (CYBSP_WIFI_INTERFACE_TYPE == CYBSP_SDIO_INTERFACE)
 	if (CY_RSLT_SUCCESS == result) {
 		// Reserves: CYBSP_WIFI_SDIO, CYBSP_WIFI_SDIO_D0, CYBSP_WIFI_SDIO_D1, CYBSP_WIFI_SDIO_D2,
 		// CYBSP_WIFI_SDIO_D3, CYBSP_WIFI_SDIO_CMD and CYBSP_WIFI_SDIO_CLK.
 		result = cyhal_sdio_init(&sdio_obj);
 	}
+#endif
 
 	// CYHAL_HWMGR_RSLT_ERR_INUSE error code could be returned if any needed for BSP resource was
 	// reserved by user previously. Please review the Device Configurator (design.modus) and the BSP
@@ -69,7 +71,9 @@ cy_rslt_t cybsp_init(void)
 
 void cybsp_free(void)
 {
+#if (CYBSP_WIFI_INTERFACE_TYPE == CYBSP_SDIO_INTERFACE)
 	cyhal_sdio_free(&sdio_obj);
+#endif
 }
 
 

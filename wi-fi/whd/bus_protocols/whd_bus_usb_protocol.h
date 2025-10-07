@@ -51,15 +51,10 @@ extern "C" {
 #define WHD_USB_DL_START               0x3      /* initialize dl state */
 #define WHD_USB_DL_REBOOT              0x4      /* reboot the device in 2 seconds */
 #define WHD_USB_DL_GETVER              0x5      /* returns the bootrom_id_t struct */
-#define WHD_USB_DL_GO_PROTECTED        0x6      /* execute the downloaded code and set reset
-                                                 * event to occur in 2 seconds.  It is the
-                                                 * responsibility of the downloaded code to
-                                                 * clear this event */
+#define WHD_USB_DL_GO_PROTECTED        0x6      /* execute the downloaded code and set reset event to occur in 2 seconds. It is the responsibility of the downloaded code to clear this event */
 #define WHD_USB_DL_EXEC                0x7      /* jump to a supplied address */
-#define WHD_USB_DL_RESETCFG            0x8      /* To support single enum on dongle
-                                                 * - Not used by bootloader */
-#define WHD_USB_DL_DEFER_RESP_OK       0x9      /* Potentially defer the response to setup
-                                                 * if resp unavailable */
+#define WHD_USB_DL_RESETCFG            0x8      /* To support single enum on dongle - not used by bootloader */
+#define WHD_USB_DL_DEFER_RESP_OK       0x9      /* Potentially defer the response to setup if resp unavailable */
 #define WHD_USB_DL_RDHW                0x10     /* Read a hardware address (Ctl-in) */
 #define WHD_USB_DL_RDHW32              0x10     /* Read a 32 bit word */
 #define WHD_USB_DL_RDHW16              0x11     /* Read 16 bits */
@@ -69,14 +64,12 @@ extern "C" {
 
 /* States */
 #define WHD_USB_DL_WAITING             0        /* waiting to rx first pkt */
-#define WHD_USB_DL_READY               1        /* hdr was good, waiting for more of the
-                                                 * compressed image  */
+#define WHD_USB_DL_READY               1        /* hdr was good, waiting for more of the compressed image */
 #define WHD_USB_DL_BAD_HDR             2        /* hdr was corrupted */
 #define WHD_USB_DL_BAD_CRC             3        /* compressed image was corrupted */
 #define WHD_USB_DL_RUNNABLE            4        /* download was successful,waiting for go cmd */
 #define WHD_USB_DL_START_FAIL          5        /* failed to initialize correctly */
-#define WHD_USB_DL_NVRAM_TOOBIG        6        /* host specified nvram data exceeds DL_NVRAM
-                                                 * value */
+#define WHD_USB_DL_NVRAM_TOOBIG        6        /* host specified nvram data exceeds DL_NVRAM value */
 #define WHD_USB_DL_IMAGE_TOOBIG        7        /* firmware image too big */
 
 
@@ -94,18 +87,17 @@ extern "C" {
 
 /* Define max buffer size for receive packet */
 #ifndef WHD_USB_MAX_RECEIVE_BUF_SIZE
-    #if defined (WLAN_MFG_FIRMWARE)
-        #define WHD_USB_MAX_RECEIVE_BUF_SIZE (WHD_USB_MAX_BULK_TRANSFER_SIZE * 10)
-    #else
-        #define WHD_USB_MAX_RECEIVE_BUF_SIZE (WHD_USB_MAX_BULK_TRANSFER_SIZE * 4)
-    #endif /* */
+#if defined(WLAN_MFG_FIRMWARE)
+#define WHD_USB_MAX_RECEIVE_BUF_SIZE (WHD_USB_MAX_BULK_TRANSFER_SIZE * 10)
+#else
+#define WHD_USB_MAX_RECEIVE_BUF_SIZE (WHD_USB_MAX_BULK_TRANSFER_SIZE * 4)
+#endif
 #endif /* WHD_USB_MAX_RECEIVE_BUFFER_SIZE */
 
 /******************************************************
 *             Structures
 ******************************************************/
-struct bootrom_id_le
-{
+struct bootrom_id_le {
     uint32_t chip;            /* Chip id */
     uint32_t chiprev;         /* Chip rev */
     uint32_t ramsize;         /* Size of  RAM */
@@ -127,7 +119,7 @@ void whd_bus_usb_detach(whd_driver_t whd_driver);
 
 
 /* Function from USB Host implementation */
-void whd_bus_usbh_class_init(whd_driver_t whd_driver, bool wait_usb);
+whd_result_t init_usb(whd_driver_t whd_driver, bool wait_usb);
 
 whd_result_t whd_bus_usb_dl_cmd(whd_driver_t whd_driver, uint8_t cmd, void* buffer,
                                 uint32_t buflen);
@@ -135,10 +127,6 @@ whd_result_t whd_bus_usb_dl_go(whd_driver_t whd_driver);
 
 whd_result_t whd_bus_usb_bulk_send(whd_driver_t whd_driver, void* buffer, int len);
 whd_result_t whd_bus_usb_bulk_receive(whd_driver_t whd_driver, void* buffer, int len);
-whd_result_t whd_bus_usb_bulk_receive_timeout(whd_driver_t whd_driver, void* buffer, int len,
-                                              uint32_t timeout);
-
-uint32_t whd_bus_usb_bulk_get_num_bytes_in_rx_buff(whd_driver_t whd_driver);
 
 whd_result_t whd_bus_usb_readreg(whd_driver_t whd_driver, uint32_t regaddr, uint32_t datalen,
                                  uint32_t* value);

@@ -65,7 +65,7 @@ extern "C" {
 #define WIFI_MODE_SDIO
 #endif
 
-#if !defined(WIFI_MODE_M2M)
+#if !(defined(WIFI_MODE_M2M) || defined(WIFI_MODE_USB))
 
 #define SDIO_ENUMERATION_TRIES     (500)
 #define SDIO_RETRY_DELAY_MS        (1)
@@ -166,7 +166,7 @@ typedef cyhal_transfer_t cyhal_sdio_transfer_type_t;
 #define CYHAL_SDIO_XFER_TYPE_WRITE CYHAL_WRITE
 #endif
 
-#endif  // if !defined(WIFI_MODE_M2M)
+#endif /* if !(defined(WIFI_MODE_M2M) || defined(WIFI_MODE_USB)) */
 
 static whd_driver_t whd_drv;
 
@@ -192,16 +192,13 @@ static whd_netif_funcs_t netif_if_default = {
 	.whd_network_process_ethernet_data = cy_network_process_ethernet_data,
 };
 
-#if !defined(WIFI_MODE_M2M)
-#if !defined(WIFI_MODE_USB)
+#if !(defined(WIFI_MODE_M2M) || defined(WIFI_MODE_USB))
 static const whd_oob_config_t OOB_CONFIG = {
 	.host_oob_pin = CY_WIFI_HOST_WAKE_GPIO,
 	.dev_gpio_sel = DEFAULT_OOB_PIN,
 	.is_falling_edge = (CY_WIFI_HOST_WAKE_IRQ_EVENT == CYHAL_GPIO_IRQ_FALL) ? WHD_TRUE : WHD_FALSE,
 	.intr_priority = CY_WIFI_OOB_INTR_PRIORITY
 };
-#endif /* !defined(WIFI_MODE_USB) */
-
 
 //--------------------------------------------------------------------------------------------------
 // _cybsp_wifi_reset_wifi_chip
@@ -216,8 +213,7 @@ static void _cybsp_wifi_reset_wifi_chip(void)
 	cy_rtos_delay_milliseconds(WLAN_POWER_UP_DELAY_MS);
 }
 
-
-#endif  // if !defined(WIFI_MODE_M2M)
+#endif /* !defined(WIFI_MODE_M2M) || !defined(WIFI_MODE_USB) */
 
 
 #if defined(WIFI_MODE_SDIO)
@@ -509,9 +505,10 @@ extern cy_rslt_t _cybsp_wifi_usb_init_bus(void);
 //--------------------------------------------------------------------------------------------------
 static inline cy_rslt_t _cybsp_wifi_bus_init(void)
 {
-#if !defined(WIFI_MODE_M2M)
+#if !(defined(WIFI_MODE_M2M) || defined(WIFI_MODE_USB))
 	_cybsp_wifi_reset_wifi_chip();
 #endif
+
 #if defined(WIFI_MODE_SDIO)
 	return _cybsp_wifi_sdio_init_bus();
 #elif defined(WIFI_MODE_SPI)
@@ -585,17 +582,22 @@ cy_rslt_t cybsp_wifi_init_primary_extended(whd_interface_t *interface,
 				result = whd_wifi_on(whd_drv, interface);
 
 				if (result != CY_RSLT_SUCCESS) {
+					printf("\nWHD: whd_wifi_on FAILED with result %d\n\n", result);fflush(stdout);
 					whd_wifi_off(*interface);
 					_cybsp_wifi_bus_detach();
 				}
 			}
 
 			if (result != CY_RSLT_SUCCESS) {
+				printf("\nWHD: _cybsp_wifi_bus_init FAILED with result %d\n\n", result);fflush(stdout);
 				whd_deinit(*interface);
 			}
 		}
+		else {
+			printf("\nWHD: whd_init FAILED with result %d\n\n", result);fflush(stdout);
+		}
 
-#if !defined(WIFI_MODE_M2M)
+#if !(defined(WIFI_MODE_M2M) || defined(WIFI_MODE_USB))
 		if (result != CY_RSLT_SUCCESS) {
 			cyhal_gpio_free(CYBSP_WIFI_WL_REG_ON);
 		}
@@ -624,7 +626,7 @@ cy_rslt_t cybsp_wifi_deinit(whd_interface_t interface)
 
 	if (result == CY_RSLT_SUCCESS) {
 		_cybsp_wifi_bus_detach();
-#if !defined(WIFI_MODE_M2M) || !defined(WIFI_MODE_USB)
+#if !(defined(WIFI_MODE_M2M) || defined(WIFI_MODE_USB))
 		cyhal_gpio_free(CYBSP_WIFI_WL_REG_ON);
 #endif
 		// While deinit() takes an interface, it only uses it to get the underlying whd driver to

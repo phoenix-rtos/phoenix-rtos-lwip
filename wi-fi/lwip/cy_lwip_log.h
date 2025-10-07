@@ -36,10 +36,11 @@
 
 #include "cy_log.h"
 
-#ifdef ENABLE_WIFI_MIDDLEWARE_LOGS
-#define wm_cy_log_msg cy_log_msg
-#else
-#define wm_cy_log_msg(a, b, c, ...)
-#endif
+#define wm_cy_log_msg(a, b, fmt, ...) fprintf(stderr, #a ", " #b ": " fmt, ##__VA_ARGS__);fflush(stderr)
+// #ifdef ENABLE_WIFI_MIDDLEWARE_LOGS
+// #define wm_cy_log_msg cy_log_msg
+// #else
+// #define wm_cy_log_msg(a, b, c, ...)
+// #endif
 
 #endif /* LIBS_WIFI_MW_CORE_LWIP_WHD_PORT_CY_LWIP_LOG_H_ */

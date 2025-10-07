@@ -130,8 +130,9 @@ int main(int argc, char **argv)
 	}
 
 	/* printf("netsrv: %zu interface%s\n", have_intfs, have_intfs == 1 ? "" : "s"); */
-	if (!have_intfs)
-		exit(1);
+	// TODO: enable LWIP without interfaces upfront
+	// if (!have_intfs)
+	// 	exit(1);
 
 #if LWIP_IPSEC
 	ipsecdev_attach(LWIP_IPSEC_DEV);

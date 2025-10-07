@@ -9,11 +9,14 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
+#include "cy_result.h"
 #include "lwip/sys.h"
 
 #include "cyabs_rtos.h"
 #include "cy_log.h"
 
+#include <stdatomic.h>
+#include <string.h>
 #include <time.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -171,7 +174,7 @@ cy_rslt_t cy_rtos_get_semaphore(cy_semaphore_t *semaphore, cy_time_t timeout_ms,
 	if (semaphore == NULL)
 		return CY_RTOS_BAD_PARAM;
 
-	if (timeout_ms && timeout_ms != CY_RTOS_NEVER_TIMEOUT) {
+	if (timeout_ms != 0 && timeout_ms != CY_RTOS_NEVER_TIMEOUT) {
 		gettime(&now, NULL);
 		timeout = timeout_ms * 1000;
 		when = now + timeout;
@@ -193,7 +196,7 @@ cy_rslt_t cy_rtos_get_semaphore(cy_semaphore_t *semaphore, cy_time_t timeout_ms,
 		if ((err = condWait(semaphore->cond, semaphore->mutex, timeout)) == -ETIME)
 			break;
 
-		if (timeout) {
+		if (timeout != 0) {
 			gettime(&now, NULL);
 
 			if (now >= when)
@@ -263,5 +266,115 @@ cy_rslt_t cy_rtos_delay_milliseconds(cy_time_t num_ms)
 	if (usleep(num_ms * 1000) < 0)
 		return CY_RTOS_GENERAL_ERROR;
 
+	return CY_RSLT_SUCCESS;
+}
+
+
+static inline unsigned cy_rtos_queue_increment(cy_queue_t *queue, unsigned index)
+{
+	return (index + 1) & (queue->length - 1);
+}
+
+
+static inline bool cy_rtos_queue_is_power_of_2(size_t n)
+{
+	return (n & (n - 1)) == 0;
+}
+
+
+/* precondition: length is a power of 2 */
+cy_rslt_t cy_rtos_queue_init(cy_queue_t* queue, size_t length, size_t itemsize)
+{
+	if (queue == NULL) {
+		return CY_RTOS_BAD_PARAM;
+	}
+	if (!cy_rtos_queue_is_power_of_2(length)) {
+		return CY_RTOS_BAD_PARAM;
+	}
+	if (length == 0 || itemsize == 0) {
+		return CY_RTOS_BAD_PARAM;
+	}
+
+	if (queue->data != NULL) {
+		/* queue backed by static array */
+		queue->was_dynamically_allocated = false;
+	}
+	else {
+		queue->data = malloc(length * itemsize);
+		if (queue->data == NULL) {
+			return CY_RTOS_NO_MEMORY;
+		}
+		queue->was_dynamically_allocated = true;
+	}
+	queue->length = length;
+	queue->itemsz = itemsize;
+	atomic_init(&queue->head, 0);
+	atomic_init(&queue->tail, 0);
+
+	return CY_RSLT_SUCCESS;
+}
+
+
+#define PTR_ADD(ptr, offset) (void *)((uint8_t *)(ptr) + (offset))
+
+
+cy_rslt_t cy_rtos_queue_put(cy_queue_t* queue, const void* item_ptr, cy_time_t timeout_ms)
+{
+	const unsigned current_head = atomic_load_explicit(&queue->head, memory_order_relaxed);
+	const unsigned next_head = cy_rtos_queue_increment(queue, current_head);
+	if (next_head == atomic_load_explicit(&queue->tail, memory_order_acquire)) {
+		return CY_RTOS_GENERAL_ERROR;
+	}
+
+	(void)memcpy(PTR_ADD(queue->data, current_head * queue->itemsz), item_ptr, queue->itemsz);
+	atomic_store_explicit(&queue->head, next_head, memory_order_release);
+	return CY_RSLT_SUCCESS;
+}
+
+
+cy_rslt_t cy_rtos_queue_get(cy_queue_t* queue, void* item_ptr, cy_time_t timeout_ms)
+{
+	const unsigned current_tail = atomic_load_explicit(&queue->tail, memory_order_relaxed);
+	if (current_tail == atomic_load_explicit(&queue->head, memory_order_acquire)) {
+		return CY_RTOS_GENERAL_ERROR;
+	}
+
+	(void)memcpy(item_ptr, PTR_ADD(queue->data, current_tail * queue->itemsz), queue->itemsz);
+	atomic_store_explicit(&queue->tail, cy_rtos_queue_increment(queue, current_tail), memory_order_release);
+	return CY_RSLT_SUCCESS;
+}
+
+
+cy_rslt_t cy_rtos_queue_count(cy_queue_t* queue, size_t* num_waiting)
+{
+	*num_waiting = atomic_load(&queue->head) - atomic_load(&queue->tail);
+	return CY_RSLT_SUCCESS;
+}
+
+
+cy_rslt_t cy_rtos_queue_space(cy_queue_t* queue, size_t* num_spaces)
+{
+	size_t num_waiting;
+	/* cy_rtos_queue_count cannot error */
+	(void)cy_rtos_queue_count(queue, &num_waiting);
+	*num_spaces = queue->length - num_waiting;
+	return CY_RSLT_SUCCESS;
+}
+
+
+cy_rslt_t cy_rtos_queue_reset(cy_queue_t* queue)
+{
+	atomic_store(&queue->head, 0);
+	atomic_store(&queue->head, 0);
+	return CY_RSLT_SUCCESS;
+}
+
+
+cy_rslt_t cy_rtos_queue_deinit(cy_queue_t* queue)
+{
+	if (queue->was_dynamically_allocated) {
+		free(queue->data);
+		queue->data = NULL;
+	}
 	return CY_RSLT_SUCCESS;
 }

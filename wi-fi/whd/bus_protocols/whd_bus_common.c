@@ -1,5 +1,5 @@
 /*
- * Copyright 2021, Cypress Semiconductor Corporation (an Infineon company)
+ * Copyright 2023, Cypress Semiconductor Corporation (an Infineon company)
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,8 +18,8 @@
 /** @file
  *
  */
-#include <stdlib.h>
 #include "cyabs_rtos.h"
+#include "whd_utils.h"
 
 #include "whd_bus.h"
 #include "whd_bus_common.h"
@@ -34,10 +34,13 @@
 #include "whd_resource_api.h"
 #include "whd_types_int.h"
 
+#ifdef DOWNLOAD_RAM_BOOTLOADER
+#include "resources.h"
+#endif
 
 /******************************************************
-*                      Macros
-******************************************************/
+ *                      Macros
+ ******************************************************/
 #define WHD_SAVE_INTERRUPTS(flags) \
 	do { \
 		UNUSED_PARAMETER(flags); \
@@ -47,8 +50,8 @@
 	} while (0);
 
 /******************************************************
-*             Constants
-******************************************************/
+ *             Constants
+ ******************************************************/
 #define INDIRECT_BUFFER_SIZE       (1024)
 #define WHD_BUS_ROUND_UP_ALIGNMENT (64)
 #define WHD_BUS_MAX_TRANSFER_SIZE  (WHD_BUS_MAX_BACKPLANE_TRANSFER_SIZE)
@@ -56,8 +59,8 @@
 #define WHD_BUS_WLAN_ALLOW_SLEEP_INVALID_MS ((uint32_t)-1)
 
 /******************************************************
-*             Structures
-******************************************************/
+ *             Structures
+ ******************************************************/
 
 struct whd_bus_common_info {
 	whd_bool_t bus_is_up;
@@ -73,17 +76,17 @@ struct whd_bus_common_info {
 };
 
 /******************************************************
-*             Variables
-******************************************************/
+ *             Variables
+ ******************************************************/
 
 /******************************************************
-*             Function declarations
-******************************************************/
+ *             Function declarations
+ ******************************************************/
 whd_result_t whd_bus_common_write_wifi_nvram_image(whd_driver_t whd_driver);
 
 /******************************************************
-*             Function definitions
-******************************************************/
+ *             Function definitions
+ ******************************************************/
 
 whd_bool_t whd_bus_is_up(whd_driver_t whd_driver)
 {
@@ -110,17 +113,16 @@ whd_bool_t whd_bus_is_flow_controlled(whd_driver_t whd_driver)
 {
 	return whd_driver->bus_common_info->bus_flow_control;
 }
-
+#ifndef PROTO_MSGBUF
 whd_result_t whd_bus_set_backplane_window(whd_driver_t whd_driver, uint32_t addr)
 {
 	uint32_t *curbase = &whd_driver->bus_common_info->backplane_window_current_base_address;
 	return whd_driver->bus_if->whd_bus_set_backplane_window_fptr(whd_driver, addr, curbase);
 }
-
-
+#endif
 void whd_bus_common_info_init(whd_driver_t whd_driver)
 {
-	struct whd_bus_common_info *bus_common = (struct whd_bus_common_info *)malloc(sizeof(struct whd_bus_common_info));
+	struct whd_bus_common_info *bus_common = (struct whd_bus_common_info *)whd_mem_malloc(sizeof(struct whd_bus_common_info));
 
 	if (bus_common != NULL) {
 		whd_driver->bus_common_info = bus_common;
@@ -144,7 +146,7 @@ void whd_bus_common_info_init(whd_driver_t whd_driver)
 void whd_bus_common_info_deinit(whd_driver_t whd_driver)
 {
 	if (whd_driver->bus_common_info != NULL) {
-		free(whd_driver->bus_common_info);
+		whd_mem_free(whd_driver->bus_common_info);
 		whd_driver->bus_common_info = NULL;
 	}
 }
@@ -157,16 +159,16 @@ void whd_delayed_bus_release_schedule_update(whd_driver_t whd_driver, whd_bool_t
 
 uint32_t whd_bus_handle_delayed_release(whd_driver_t whd_driver)
 {
-	uint32_t time_until_release = 0;
-	whd_time_t current_time = 0;
+	cy_time_t time_until_release = 0;
+	cy_time_t current_time = 0;
 	struct whd_bus_common_info *bus_common = whd_driver->bus_common_info;
 
 	if (bus_common->delayed_bus_release_timeout_ms_request != WHD_BUS_WLAN_ALLOW_SLEEP_INVALID_MS) {
 		whd_bool_t schedule =
-			((bus_common->delayed_bus_release_scheduled != 0) ||
-				(bus_common->delayed_bus_release_deadline != 0)) ?
-			WHD_TRUE :
-			WHD_FALSE;
+				((bus_common->delayed_bus_release_scheduled != 0) ||
+						(bus_common->delayed_bus_release_deadline != 0)) ?
+				WHD_TRUE :
+				WHD_FALSE;
 		uint32_t flags;
 
 		WHD_SAVE_INTERRUPTS(flags);
@@ -183,12 +185,12 @@ uint32_t whd_bus_handle_delayed_release(whd_driver_t whd_driver)
 		if (bus_common->delayed_bus_release_timeout_ms != 0) {
 			cy_rtos_get_time(&current_time);
 			bus_common->delayed_bus_release_deadline = current_time +
-				bus_common->delayed_bus_release_timeout_ms;
+					bus_common->delayed_bus_release_timeout_ms;
 			time_until_release = bus_common->delayed_bus_release_timeout_ms;
 		}
 	}
 	else if (bus_common->delayed_bus_release_deadline != 0) {
-		whd_time_t now;
+		cy_time_t now;
 
 		cy_rtos_get_time(&now);
 
@@ -229,8 +231,38 @@ whd_result_t whd_bus_write_wifi_firmware_image(whd_driver_t whd_driver)
 	uint32_t ram_start_address;
 	uint32_t image_size;
 
+#ifdef DOWNLOAD_RAM_BOOTLOADER
+	uint32_t bl_start_address = ((0x8F620000) + (0x460000 - 0x003A0000));
+	volatile uint32_t *rom_address = (volatile uint32_t *)0x8F7C0000;
+	volatile uint32_t *cr4_rst_address = (volatile uint32_t *)0x8F782800;
+	uint32_t romword;
+
+	WPRINT_WHD_DEBUG(("Entering Bootloader Download \n"));
+
+	cyhal_system_delay_ms(1000);
+	WPRINT_WHD_DEBUG(("Bootloader Download Starts \n"));
+	memcpy((void *)bl_start_address, (void *)wifi_bootloader_image_data, sizeof(wifi_bootloader_image_data));
+	WPRINT_WHD_DEBUG(("Bootloader Download Done \n"));
+
+	romword = wifi_bootloader_image_data[0] | (wifi_bootloader_image_data[1] << 8) | (wifi_bootloader_image_data[2] << 16) | (wifi_bootloader_image_data[3] << 24);
+
+	*rom_address = romword;
+
+	*cr4_rst_address = 1;
+
+	cyhal_system_delay_ms(500);
+
+	*cr4_rst_address = 0;
+
+	cyhal_system_delay_ms(500);
+#endif /* DOWNLOAD_RAM_BOOTLOADER */
+
+#ifdef BLHS_SUPPORT
+	CHECK_RETURN(whd_bus_common_blhs(whd_driver, PREP_FW_DOWNLOAD));
+#endif
+
 	/* Pass the ram_start_address to the firmware Download
-     * CR4 chips have offset and CM3 starts from 0 */
+	 * CR4 chips have offset and CM3 starts from 0 */
 
 	ram_start_address = GET_C_VAR(whd_driver, ATCM_RAM_BASE_ADDRESS);
 
@@ -238,20 +270,26 @@ whd_result_t whd_bus_write_wifi_firmware_image(whd_driver_t whd_driver)
 
 	if (result != WHD_SUCCESS) {
 		WPRINT_WHD_ERROR(("Fatal error: download_resource doesn't exist, %s failed at line %d \n", __func__,
-			__LINE__));
+				__LINE__));
 		return result;
 	}
 
 	if (image_size <= 0) {
 		WPRINT_WHD_ERROR(("Fatal error: download_resource cannot load with invalid size, %s failed at line %d \n",
-			__func__, __LINE__));
+				__func__, __LINE__));
 		return WHD_BADARG;
 	}
 
-	result = whd_bus_download_resource(whd_driver, WHD_RESOURCE_WLAN_FIRMWARE, WHD_FALSE, ram_start_address, image_size);
+	result =
+			whd_bus_download_resource(whd_driver, WHD_RESOURCE_WLAN_FIRMWARE, WHD_FALSE, ram_start_address, image_size);
 
 	if (result != WHD_SUCCESS)
 		WPRINT_WHD_ERROR(("Bus common resource download failed, %s failed at %d \n", __func__, __LINE__));
+
+#ifdef BLHS_SUPPORT
+	CHECK_RETURN(whd_bus_common_blhs(whd_driver, POST_FW_DOWNLOAD));
+	CHECK_RETURN(whd_bus_common_blhs(whd_driver, CHK_FW_VALIDATION));
+#endif
 
 	return result;
 }
@@ -269,15 +307,19 @@ whd_result_t whd_bus_resume_after_deep_sleep(whd_driver_t whd_driver)
 }
 
 whd_result_t whd_bus_mem_bytes(whd_driver_t whd_driver, uint8_t direct,
-	uint32_t address, uint32_t size, uint8_t *data)
+		uint32_t address, uint32_t size, uint8_t *data)
 {
 	whd_bus_transfer_direction_t direction = direct ? BUS_WRITE : BUS_READ;
 	CHECK_RETURN(whd_ensure_wlan_bus_is_up(whd_driver));
+#ifndef PROTO_MSGBUF
 	return whd_bus_transfer_backplane_bytes(whd_driver, direction, address, size, data);
+#else
+	return whd_bus_transfer_bytes(whd_driver, direction, BACKPLANE_FUNCTION, address, size, (whd_transfer_bytes_packet_t *)data);
+#endif
 }
 
 whd_result_t whd_bus_transfer_backplane_bytes(whd_driver_t whd_driver, whd_bus_transfer_direction_t direction,
-	uint32_t address, uint32_t size, uint8_t *data)
+		uint32_t address, uint32_t size, uint8_t *data)
 {
 	whd_buffer_t pkt_buffer = NULL;
 	uint8_t *packet;
@@ -288,11 +330,11 @@ whd_result_t whd_bus_transfer_backplane_bytes(whd_driver_t whd_driver, whd_bus_t
 	whd_result_t result;
 
 	result = whd_host_buffer_get(whd_driver, &pkt_buffer, (direction == BUS_READ) ? WHD_NETWORK_RX : WHD_NETWORK_TX,
-		(uint16_t)(whd_bus_get_max_transfer_size(whd_driver) +
-			whd_bus_backplane_read_padd_size(
-				whd_driver) +
-			MAX_BUS_HEADER_SIZE),
-		WHD_BACKPLAIN_BUF_TIMEOUT);
+			(uint16_t)(whd_bus_get_max_transfer_size(whd_driver) +
+					whd_bus_backplane_read_padd_size(
+							whd_driver) +
+					MAX_BUS_HEADER_SIZE),
+			WHD_BACKPLAIN_BUF_TIMEOUT);
 	if (result != WHD_SUCCESS) {
 		WPRINT_WHD_ERROR(("Packet buffer allocation failed in %s at %d \n", __func__, __LINE__));
 		goto done;
@@ -300,11 +342,11 @@ whd_result_t whd_bus_transfer_backplane_bytes(whd_driver_t whd_driver, whd_bus_t
 	packet = (uint8_t *)whd_buffer_get_current_piece_data_pointer(whd_driver, pkt_buffer);
 	CHECK_PACKET_NULL(packet, WHD_NO_REGISTER_FUNCTION_POINTER);
 	for (remaining_buf_size = size; remaining_buf_size != 0;
-		 remaining_buf_size -= transfer_size, address += transfer_size) {
+			remaining_buf_size -= transfer_size, address += transfer_size) {
 		transfer_size = (remaining_buf_size >
-							whd_bus_get_max_transfer_size(whd_driver)) ?
-			whd_bus_get_max_transfer_size(whd_driver) :
-			remaining_buf_size;
+								whd_bus_get_max_transfer_size(whd_driver)) ?
+				whd_bus_get_max_transfer_size(whd_driver) :
+				remaining_buf_size;
 
 		/* Check if the transfer crosses the backplane window boundary */
 		window_offset_address = address & BACKPLANE_ADDRESS_MASK;
@@ -312,7 +354,9 @@ whd_result_t whd_bus_transfer_backplane_bytes(whd_driver_t whd_driver, whd_bus_t
 			/* Adjust the transfer size to within current window */
 			transfer_size = BACKPLANE_WINDOW_SIZE - window_offset_address;
 		}
+#ifndef PROTO_MSGBUF
 		result = whd_bus_set_backplane_window(whd_driver, address);
+#endif
 		if (result == WHD_UNSUPPORTED) {
 			/* No backplane support, write data to address directly */
 			trans_addr = address;
@@ -329,17 +373,17 @@ whd_result_t whd_bus_transfer_backplane_bytes(whd_driver_t whd_driver, whd_bus_t
 			memcpy(((whd_transfer_bytes_packet_t *)packet)->data, data + size - remaining_buf_size, transfer_size);
 			ENABLE_COMPILER_WARNING(diag_suppress = Pa039)
 			result = whd_bus_transfer_bytes(whd_driver, direction, BACKPLANE_FUNCTION,
-				trans_addr, (uint16_t)transfer_size,
-				(whd_transfer_bytes_packet_t *)packet);
+					trans_addr, (uint16_t)transfer_size,
+					(whd_transfer_bytes_packet_t *)packet);
 			if (result != WHD_SUCCESS) {
 				goto done;
 			}
 		}
 		else {
 			result = whd_bus_transfer_bytes(whd_driver, direction, BACKPLANE_FUNCTION,
-				trans_addr,
-				(uint16_t)(transfer_size + whd_bus_backplane_read_padd_size(whd_driver)),
-				(whd_transfer_bytes_packet_t *)packet);
+					trans_addr,
+					(uint16_t)(transfer_size + whd_bus_backplane_read_padd_size(whd_driver)),
+					(whd_transfer_bytes_packet_t *)packet);
 			if (result != WHD_SUCCESS) {
 				WPRINT_WHD_ERROR(("whd_bus_transfer_bytes failed\n"));
 				goto done;
@@ -351,10 +395,12 @@ whd_result_t whd_bus_transfer_backplane_bytes(whd_driver_t whd_driver, whd_bus_t
 	}
 
 done:
+#ifndef PROTO_MSGBUF
 	whd_bus_set_backplane_window(whd_driver, CHIPCOMMON_BASE_ADDRESS);
+#endif
 	if (pkt_buffer != NULL) {
 		CHECK_RETURN(whd_buffer_release(whd_driver, pkt_buffer,
-			(direction == BUS_READ) ? WHD_NETWORK_RX : WHD_NETWORK_TX));
+				(direction == BUS_READ) ? WHD_NETWORK_RX : WHD_NETWORK_TX));
 	}
 	CHECK_RETURN(result);
 

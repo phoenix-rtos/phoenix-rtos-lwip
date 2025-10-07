@@ -11,6 +11,7 @@
 
 #include "lwip/sys.h"
 
+#include "whd_chip_constants.h"
 #include "whd_wifi_api.h"
 #include "whd_wlioctl.h"
 #include "cybsp.h"
@@ -36,8 +37,10 @@
 #define WIFI_DEV_ID   0
 #define WIFI_DEV_NAME "/dev/wifi"
 
-#define AP_SECURITY_MODE WHD_SECURITY_WPA2_AES_PSK
-#define AP_CHANNEL       1
+#define AP_SECURITY_MODE    WHD_SECURITY_WPA2_AES_PSK
+#define AP_CHANSPEC_CHANNEL 1
+#define AP_CHANSPEC_BAND    CHANSPEC_BAND_2G
+#define AP_CHANSPEC         ((((AP_CHANSPEC_BAND) & 0xff) << 8) | (AP_CHANSPEC_CHANNEL & 0xff))
 
 #define SNPRINTF_APPEND(fmt, ...) \
 	do { \
@@ -159,7 +162,7 @@ static int wifi_ap_is_idle(void)
 	clients->count = 4;
 
 	result = whd_wifi_get_associated_client_list(wifi_common.iface.whd_iface, buf, sizeof(buf));
-	if (result == WHD_SUCCESS && clients->count == 0)
+	if (result == CY_RSLT_SUCCESS && clients->count == 0)
 		return 1;
 
 	return 0;
@@ -235,18 +238,18 @@ static void wifi_ap_thread(void *arg)
 			break;
 		}
 
-		result = cyhal_sdio_start_irq_thread(cybsp_get_wifi_sdio_obj());
-		if (result != CY_RSLT_SUCCESS) {
-			wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't start IRQ thread\n");
-			cybsp_free();
-			break;
-		}
+		// result = cyhal_sdio_start_irq_thread(cybsp_get_wifi_sdio_obj());
+		// if (result != CY_RSLT_SUCCESS) {
+		// 	wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't start IRQ thread\n");
+		// 	cybsp_free();
+		// 	break;
+		// }
 
 		result = cybsp_wifi_init_primary(&wifi_common.iface.whd_iface);
 		if (result != CY_RSLT_SUCCESS) {
-			wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't init Wi-Fi interface\n");
+			wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't init Wi-Fi interface primary\n");
 			/* cyhal_sdio_stop_irq_thread can be safely called twice */
-			cyhal_sdio_stop_irq_thread(cybsp_get_wifi_sdio_obj());
+			// cyhal_sdio_stop_irq_thread(cybsp_get_wifi_sdio_obj());
 			cybsp_free();
 			break;
 		}
@@ -257,7 +260,7 @@ static void wifi_ap_thread(void *arg)
 		if (result != CY_RSLT_SUCCESS) {
 			wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't add Wi-Fi interface\n");
 			cybsp_wifi_deinit(wifi_common.iface.whd_iface);
-			cyhal_sdio_stop_irq_thread(cybsp_get_wifi_sdio_obj());
+			// cyhal_sdio_stop_irq_thread(cybsp_get_wifi_sdio_obj());
 			cybsp_free();
 			break;
 		}
@@ -267,29 +270,29 @@ static void wifi_ap_thread(void *arg)
 			wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't bring up Wi-Fi interface\n");
 			cy_lwip_remove_interface(&wifi_common.iface);
 			cybsp_wifi_deinit(wifi_common.iface.whd_iface);
-			cyhal_sdio_stop_irq_thread(cybsp_get_wifi_sdio_obj());
+			// cyhal_sdio_stop_irq_thread(cybsp_get_wifi_sdio_obj());
 			cybsp_free();
 			break;
 		}
 
-		result = whd_wifi_init_ap(wifi_common.iface.whd_iface, &ssid, AP_SECURITY_MODE, key, key_len, AP_CHANNEL);
-		if (result != CY_RSLT_SUCCESS) {
+		result = whd_wifi_init_ap(wifi_common.iface.whd_iface, &ssid, AP_SECURITY_MODE, key, key_len, AP_CHANSPEC);
+		if (result != WHD_SUCCESS) {
 			wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't init Wi-Fi AP\n");
 			cy_lwip_network_down(&wifi_common.iface);
 			cy_lwip_remove_interface(&wifi_common.iface);
 			cybsp_wifi_deinit(wifi_common.iface.whd_iface);
-			cyhal_sdio_stop_irq_thread(cybsp_get_wifi_sdio_obj());
+			// cyhal_sdio_stop_irq_thread(cybsp_get_wifi_sdio_obj());
 			cybsp_free();
 			break;
 		}
 
 		result = whd_wifi_start_ap(wifi_common.iface.whd_iface);
-		if (result != CY_RSLT_SUCCESS) {
+		if (result != WHD_SUCCESS) {
 			wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't start Wi-Fi AP\n");
 			cy_lwip_network_down(&wifi_common.iface);
 			cy_lwip_remove_interface(&wifi_common.iface);
 			cybsp_wifi_deinit(wifi_common.iface.whd_iface);
-			cyhal_sdio_stop_irq_thread(cybsp_get_wifi_sdio_obj());
+			// cyhal_sdio_stop_irq_thread(cybsp_get_wifi_sdio_obj());
 			cybsp_free();
 			break;
 		}
@@ -309,7 +312,7 @@ static void wifi_ap_thread(void *arg)
 		cy_lwip_network_down(&wifi_common.iface);
 		cy_lwip_remove_interface(&wifi_common.iface);
 		cybsp_wifi_deinit(wifi_common.iface.whd_iface);
-		cyhal_sdio_stop_irq_thread(cybsp_get_wifi_sdio_obj());
+		// cyhal_sdio_stop_irq_thread(cybsp_get_wifi_sdio_obj());
 		cybsp_free();
 	}
 
