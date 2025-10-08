@@ -68,8 +68,11 @@
 #include "lwip/tcpip.h"
 #include "lwip/snmp.h"
 
-#include "ps_eap_psk_g3plc.h"
 #include "g3plc.h"
+
+#include <ps_g3_phy_bandplan.h>
+#include <ps_eap_psk_g3plc.h>
+
 #include <string.h>
 
 #define LOWPAN6_BROADCAST_ADDR  0x8001
@@ -111,7 +114,6 @@ static const lowpan6_g3_data_t default_state = {
     .short_mac_addr = {2, {0xFF, 0xFF} },
     .extended_mac_addr = {8, {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}},
     .coord_short_address = {2, { 0x00, 0x00 } },
-    .max_tones = 36, /* TODO: it should be taken from PHY */
     .security_level = 0x05,
     .broadcast_log_table_ttl = 2,
     .low_lqi_value = 0,
@@ -132,7 +134,6 @@ static const lowpan6_g3_data_t default_state = {
     .blacklist_table_ttl = 10,
     .max_join_wait_time = 20,
     .path_discovery_time = 40,
-    .bandplan = ps_eap_band_id__g3_cenelec_a
 };
 
 #if LWIP_6LOWPAN_NUM_CONTEXTS > 0
@@ -1261,6 +1262,7 @@ err_t
 lowpan6_g3_reset(struct netif *netif)
 {
   lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *)netif->state;
+  struct g3plc_bandplan bandplan;
 
   *ctx = default_state;
 
@@ -1272,6 +1274,34 @@ lowpan6_g3_reset(struct netif *netif)
 
   LWIP_DEBUGF(LWIP_LOWPAN6_DEBUG, ("lowpan6_g3_if_init: Device MAC addr %016llx\n",
                                    lowpan6_link_addr_to_u64(lowpan6_data.extended_mac_addr.addr)));
+
+  /* TODO: set band plan */
+
+  if (g3plc_get_bandplan(&bandplan) < 0) {
+    LWIP_DEBUGF(LWIP_LOWPAN6_DEBUG, ("lowpan6_g3_if_init: Can't get band plan\n"));
+    return ERR_VAL;
+  }
+
+  switch (bandplan.id) {
+  case ps_g3_phy_bandplan_id__cenelec_a:
+    ctx->bandplan = ps_eap_band_id__g3_cenelec_a;
+    break;
+  case ps_g3_phy_bandplan_id__cenelec_b:
+    ctx->bandplan = ps_eap_band_id__g3_cenelec_b;
+    break;
+  case ps_g3_phy_bandplan_id__fcc:
+    ctx->bandplan = ps_eap_band_id__g3_fcc;
+    break;
+  case ps_g3_phy_bandplan_id__arib:
+    ctx->bandplan = ps_eap_band_id__g3_arib;
+    break;
+  default:
+    LWIP_DEBUGF(LWIP_LOWPAN6_DEBUG, ("lowpan6_g3_if_init: Unknown band plan ID %u\n", bandplan.id));
+    return ERR_VAL;
+  }
+
+  ctx->max_tones = bandplan.tones;
+
   return ERR_OK;
 }
 
