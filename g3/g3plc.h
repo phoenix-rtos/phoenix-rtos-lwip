@@ -23,6 +23,15 @@ struct g3plc_scan_entry {
   uint8_t valid;
 };
 
+struct g3plc_bandplan {
+  uint8_t id;
+  uint8_t tones;
+  uint8_t carriers;
+  uint8_t tones_per_carrier;
+  uint8_t tx_coef_bits;
+  uint16_t mod_allowed_mask;
+};
+
 /* MAC neighbour table entry */
 struct g3plc_mac_nb_entry {
     uint16_t short_address;               /* 2 octets (16-bit) */
@@ -70,6 +79,7 @@ int g3plc_mac_reset(void);
 int g3plc_set_pan_id(uint16_t pan_id);
 int g3plc_get_hwaddr(uint8_t *hwaddr);
 int g3plc_set_hwaddr(const uint8_t *hwaddr);
+int g3plc_get_bandplan(struct g3plc_bandplan *bandplan);
 int g3plc_set_rc_coord(uint16_t rc_coord);
 int g3plc_set_shortaddr(uint16_t short_addr);
 int g3plc_set_gmk(const uint8_t *gmk, uint8_t gmk_id);

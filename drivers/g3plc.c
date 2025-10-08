@@ -518,6 +518,23 @@ int g3plc_set_hwaddr(const uint8_t *hwaddr)
 	return g3plc_mac_set(&req);
 }
 
+int g3plc_get_bandplan(struct g3plc_bandplan *bandplan)
+{
+	DEBUG_LOG("g3_get_bandplan\n");
+	ps_g3_mlme_get_request_t req = { .pib_attr_id = macExtBandPlan };
+	int ret;
+
+	ret = g3plc_mac_get(&req);
+
+	if (ret == 0) {
+		memcpy(bandplan, g3plc_priv.mlmeGetData, sizeof(struct g3plc_bandplan));
+	}
+
+	DEBUG_LOG(" -> %u %u %u %u %u %u\n", bandplan->id, bandplan->tones, bandplan->carriers, bandplan->tones_per_carrier, bandplan->tx_coef_bits, bandplan->mod_allowed_mask);
+
+	return ret;
+}
+
 int g3plc_set_rc_coord(uint16_t rc_coord)
 {
 	DEBUG_LOG("g3_set_rc_coord %04x\n", rc_coord);
