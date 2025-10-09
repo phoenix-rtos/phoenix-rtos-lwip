@@ -309,6 +309,8 @@ whd_result_t whd_wifi_on(whd_driver_t whd_driver, whd_interface_t *ifpp)
     whd_interface_t ifp;
     uint16_t wlan_chip_id = 0;
 
+    printf("\nWHD: %s: enter\n\n", __FUNCTION__);fflush(stdout);cy_rtos_delay_milliseconds(100);
+
     if (!whd_driver || !ifpp)
     {
         WPRINT_WHD_ERROR( ("Invalid param in func %s at line %d \n",
@@ -529,6 +531,8 @@ whd_result_t whd_wifi_on(whd_driver_t whd_driver, whd_interface_t *ifpp)
         return retval;
     }
 #endif
+
+    printf("\nWHD: %s: exit\n\n", __FUNCTION__);fflush(stdout);cy_rtos_delay_milliseconds(100);
 
     return WHD_SUCCESS;
 }

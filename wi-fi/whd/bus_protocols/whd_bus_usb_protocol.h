@@ -80,18 +80,13 @@ extern "C" {
 #define WHD_USB_RESET_GETVER_LOOP_CNT  (10)
 
 
-#define BCM_MSG_IFNAME_MAX             (16)    /** Maximum length of an interface name in a
-                                                   wl_event_msg_t structure*/
+#define BCM_MSG_IFNAME_MAX             (16)    /** Maximum length of an interface name in a wl_event_msg_t structure */
 
 #define WHD_USB_MAX_BULK_TRANSFER_SIZE (512)
 
 /* Define max buffer size for receive packet */
 #ifndef WHD_USB_MAX_RECEIVE_BUF_SIZE
-#if defined(WLAN_MFG_FIRMWARE)
-#define WHD_USB_MAX_RECEIVE_BUF_SIZE (WHD_USB_MAX_BULK_TRANSFER_SIZE * 10)
-#else
 #define WHD_USB_MAX_RECEIVE_BUF_SIZE (WHD_USB_MAX_BULK_TRANSFER_SIZE * 4)
-#endif
 #endif /* WHD_USB_MAX_RECEIVE_BUFFER_SIZE */
 
 /******************************************************
@@ -121,8 +116,7 @@ void whd_bus_usb_detach(whd_driver_t whd_driver);
 /* Function from USB Host implementation */
 whd_result_t init_usb(whd_driver_t whd_driver, bool wait_usb);
 
-whd_result_t whd_bus_usb_dl_cmd(whd_driver_t whd_driver, uint8_t cmd, void* buffer,
-                                uint32_t buflen);
+whd_result_t whd_bus_usb_dl_cmd(whd_driver_t whd_driver, uint8_t cmd, void* buffer, uint32_t buflen);
 whd_result_t whd_bus_usb_dl_go(whd_driver_t whd_driver);
 
 whd_result_t whd_bus_usb_bulk_send(whd_driver_t whd_driver, void* buffer, int len);

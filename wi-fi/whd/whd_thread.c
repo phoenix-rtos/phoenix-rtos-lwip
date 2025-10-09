@@ -205,6 +205,7 @@ int8_t whd_thread_send_one_packet(whd_driver_t whd_driver)
  * @return    1 : packet was received
  *            0 : no packet waiting
  */
+ #include <unistd.h>
 int8_t whd_thread_receive_one_packet(whd_driver_t whd_driver)
 {
 #ifndef PROTO_MSGBUF
@@ -231,7 +232,6 @@ int8_t whd_thread_receive_one_packet(whd_driver_t whd_driver)
         	/* Check if recive bdc Event or Data pack */
 			whd_event_t *event = (whd_event_t *)(data + sizeof(bdc_header_t));
 
-            printf("");
 			if (ntoh16(event->eth.ethertype) == 0x886C /* <- ETHER_TYPE_BRCM */)
 			{
 				whd_process_bdc_event(whd_driver, recv_buffer,

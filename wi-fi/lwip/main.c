@@ -256,25 +256,6 @@ static void wifi_ap_thread(void *arg)
 
 		wifi_common.iface.role = CY_LWIP_AP_NW_INTERFACE;
 
-		result = cy_lwip_add_interface(&wifi_common.iface, &ap_addr);
-		if (result != CY_RSLT_SUCCESS) {
-			wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't add Wi-Fi interface\n");
-			cybsp_wifi_deinit(wifi_common.iface.whd_iface);
-			// cyhal_sdio_stop_irq_thread(cybsp_get_wifi_sdio_obj());
-			cybsp_free();
-			break;
-		}
-
-		result = cy_lwip_network_up(&wifi_common.iface);
-		if (result != CY_RSLT_SUCCESS) {
-			wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't bring up Wi-Fi interface\n");
-			cy_lwip_remove_interface(&wifi_common.iface);
-			cybsp_wifi_deinit(wifi_common.iface.whd_iface);
-			// cyhal_sdio_stop_irq_thread(cybsp_get_wifi_sdio_obj());
-			cybsp_free();
-			break;
-		}
-
 		result = whd_wifi_init_ap(wifi_common.iface.whd_iface, &ssid, AP_SECURITY_MODE, key, key_len, AP_CHANSPEC);
 		if (result != WHD_SUCCESS) {
 			wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't init Wi-Fi AP\n");
@@ -290,6 +271,25 @@ static void wifi_ap_thread(void *arg)
 		if (result != WHD_SUCCESS) {
 			wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't start Wi-Fi AP\n");
 			cy_lwip_network_down(&wifi_common.iface);
+			cy_lwip_remove_interface(&wifi_common.iface);
+			cybsp_wifi_deinit(wifi_common.iface.whd_iface);
+			// cyhal_sdio_stop_irq_thread(cybsp_get_wifi_sdio_obj());
+			cybsp_free();
+			break;
+		}
+
+		result = cy_lwip_add_interface(&wifi_common.iface, &ap_addr);
+		if (result != CY_RSLT_SUCCESS) {
+			wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't add Wi-Fi interface\n");
+			cybsp_wifi_deinit(wifi_common.iface.whd_iface);
+			// cyhal_sdio_stop_irq_thread(cybsp_get_wifi_sdio_obj());
+			cybsp_free();
+			break;
+		}
+
+		result = cy_lwip_network_up(&wifi_common.iface);
+		if (result != CY_RSLT_SUCCESS) {
+			wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't bring up Wi-Fi interface\n");
 			cy_lwip_remove_interface(&wifi_common.iface);
 			cybsp_wifi_deinit(wifi_common.iface.whd_iface);
 			// cyhal_sdio_stop_irq_thread(cybsp_get_wifi_sdio_obj());

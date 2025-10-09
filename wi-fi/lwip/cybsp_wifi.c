@@ -493,6 +493,7 @@ static cy_rslt_t _cybsp_wifi_m2m_init_bus(void)
 
 #elif defined(WIFI_MODE_USB)
 
+// TODO: pass config with usb device filename etc.
 extern cy_rslt_t _cybsp_wifi_usb_init_bus(void);
 
 #endif

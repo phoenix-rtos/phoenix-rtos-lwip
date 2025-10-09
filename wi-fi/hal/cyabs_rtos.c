@@ -23,11 +23,11 @@
 
 
 cy_rslt_t cy_rtos_create_thread(cy_thread_t *thread, cy_thread_entry_fn_t entry_function,
-	const char *name, void *stack, uint32_t stack_size,
-	cy_thread_priority_t priority, cy_thread_arg_t arg)
+		const char *name, void *stack, uint32_t stack_size,
+		cy_thread_priority_t priority, cy_thread_arg_t arg)
 {
 	cy_log_msg(CYLF_RTOS, CY_LOG_DEBUG, "cy_rtos_create_thread (thread=%p name=%s stack=%p stack_size=%u priority=%d)\n",
-		thread, name, stack, stack_size, priority);
+			thread, name, stack, stack_size, priority);
 
 	if (thread == NULL)
 		return CY_RTOS_BAD_PARAM;
@@ -145,7 +145,7 @@ cy_rslt_t cy_rtos_deinit_mutex(cy_mutex_t *mutex)
 cy_rslt_t cy_rtos_init_semaphore(cy_semaphore_t *semaphore, uint32_t maxcount, uint32_t initcount)
 {
 	cy_log_msg(CYLF_RTOS, CY_LOG_DEBUG, "cy_rtos_init_semaphore (semaphore=%p maxcount=%u initcount=%u)\n",
-		semaphore, maxcount, initcount);
+			semaphore, maxcount, initcount);
 
 	if (semaphore == NULL)
 		return CY_RTOS_BAD_PARAM;
@@ -283,7 +283,7 @@ static inline bool cy_rtos_queue_is_power_of_2(size_t n)
 
 
 /* precondition: length is a power of 2 */
-cy_rslt_t cy_rtos_queue_init(cy_queue_t* queue, size_t length, size_t itemsize)
+cy_rslt_t cy_rtos_queue_init(cy_queue_t *queue, size_t length, size_t itemsize)
 {
 	if (queue == NULL) {
 		return CY_RTOS_BAD_PARAM;
@@ -318,7 +318,7 @@ cy_rslt_t cy_rtos_queue_init(cy_queue_t* queue, size_t length, size_t itemsize)
 #define PTR_ADD(ptr, offset) (void *)((uint8_t *)(ptr) + (offset))
 
 
-cy_rslt_t cy_rtos_queue_put(cy_queue_t* queue, const void* item_ptr, cy_time_t timeout_ms)
+cy_rslt_t cy_rtos_queue_put(cy_queue_t *queue, const void *item_ptr, cy_time_t timeout_ms)
 {
 	const unsigned current_head = atomic_load_explicit(&queue->head, memory_order_relaxed);
 	const unsigned next_head = cy_rtos_queue_increment(queue, current_head);
@@ -332,7 +332,7 @@ cy_rslt_t cy_rtos_queue_put(cy_queue_t* queue, const void* item_ptr, cy_time_t t
 }
 
 
-cy_rslt_t cy_rtos_queue_get(cy_queue_t* queue, void* item_ptr, cy_time_t timeout_ms)
+cy_rslt_t cy_rtos_queue_get(cy_queue_t *queue, void *item_ptr, cy_time_t timeout_ms)
 {
 	const unsigned current_tail = atomic_load_explicit(&queue->tail, memory_order_relaxed);
 	if (current_tail == atomic_load_explicit(&queue->head, memory_order_acquire)) {
@@ -345,14 +345,14 @@ cy_rslt_t cy_rtos_queue_get(cy_queue_t* queue, void* item_ptr, cy_time_t timeout
 }
 
 
-cy_rslt_t cy_rtos_queue_count(cy_queue_t* queue, size_t* num_waiting)
+cy_rslt_t cy_rtos_queue_count(cy_queue_t *queue, size_t *num_waiting)
 {
 	*num_waiting = atomic_load(&queue->head) - atomic_load(&queue->tail);
 	return CY_RSLT_SUCCESS;
 }
 
 
-cy_rslt_t cy_rtos_queue_space(cy_queue_t* queue, size_t* num_spaces)
+cy_rslt_t cy_rtos_queue_space(cy_queue_t *queue, size_t *num_spaces)
 {
 	size_t num_waiting;
 	/* cy_rtos_queue_count cannot error */
@@ -362,7 +362,7 @@ cy_rslt_t cy_rtos_queue_space(cy_queue_t* queue, size_t* num_spaces)
 }
 
 
-cy_rslt_t cy_rtos_queue_reset(cy_queue_t* queue)
+cy_rslt_t cy_rtos_queue_reset(cy_queue_t *queue)
 {
 	atomic_store(&queue->head, 0);
 	atomic_store(&queue->head, 0);
@@ -370,9 +370,9 @@ cy_rslt_t cy_rtos_queue_reset(cy_queue_t* queue)
 }
 
 
-cy_rslt_t cy_rtos_queue_deinit(cy_queue_t* queue)
+cy_rslt_t cy_rtos_queue_deinit(cy_queue_t *queue)
 {
-	if (queue->was_dynamically_allocated) {
+	if (queue->was_dynamically_allocated && queue->data != NULL) {
 		free(queue->data);
 		queue->data = NULL;
 	}

@@ -38,6 +38,7 @@
  *             Structures
  ******************************************************/
 
+// TODO: store fd/path/whatever else here
 struct whd_bus_priv {
 	void *usb_obj;
 };
@@ -47,11 +48,9 @@ struct rdl_state_le {
 	uint32_t bytes;
 };
 
-#pragma pack(1)
 
 /* SDIO bus specific header - Software header */
-typedef struct
-{
+typedef struct {
 	uint8_t sequence;              /* Rx/Tx sequence number */
 	uint8_t channel_and_flags;     /*  4 MSB Channel number, 4 LSB arbitrary flag */
 	uint8_t next_length;           /* Length of next data frame, reserved for Tx */
@@ -59,19 +58,16 @@ typedef struct
 	uint8_t wireless_flow_control; /* Flow control bits, reserved for Tx */
 	uint8_t bus_data_credit;       /* Maximum Sequence number allowed by firmware for Tx */
 	uint8_t _reserved[2];          /* Reserved */
-} sdpcm_sw_header_t;
+} __attribute__((packed)) sdpcm_sw_header_t;
 
 /* SDPCM header definitions */
-typedef struct
-{
+typedef struct {
 	uint16_t frametag[2];
 	sdpcm_sw_header_t sw_header;
-} sdpcm_header_t;
-
-#pragma pack()
+} __attribute__((packed)) sdpcm_header_t;
 
 
-static uint16_t chipid;
+// static uint16_t chipid;
 
 
 /******************************************************
@@ -236,16 +232,16 @@ static bool whd_bus_usb_dl_needed(whd_driver_t whd_driver)
 	if (id.chip == WHD_USB_POSTBOOT_ID) {
 		WPRINT_WHD_INFO(("Firmware already downloaded\n"));
 
-		if (chipid != 0) {
-			whd_chip_set_chip_id(whd_driver, chipid);
-		}
+		// if (chipid != 0) {
+		whd_chip_set_chip_id(whd_driver, id.chip);
+		// }
 
 		whd_bus_usb_dl_cmd(whd_driver, WHD_USB_DL_RESETCFG, &id, sizeof(id));
 		return false;
 	}
 	else {
-		chipid = id.chip;
-		whd_chip_set_chip_id(whd_driver, chipid);
+		// chipid = id.chip;
+		whd_chip_set_chip_id(whd_driver, id.chip);
 	}
 
 	return true;
@@ -450,8 +446,9 @@ whd_result_t whd_bus_usb_send_buffer(whd_driver_t whd_driver, whd_buffer_t buffe
 			/* We need to send only CDC header + data, so find offset without sdpcm_header_t */
 			cdc_header_t *cdc_header = (cdc_header_t *)(data + sdpcm_header_size);
 			uint32_t cdc_size = size - sdpcm_header_size;
-			printf("\tREAL SIZE: %u\n", cdc_size);fflush(stdout);
-			
+			printf("\tREAL SIZE: %u\n", cdc_size);
+			fflush(stdout);
+
 			/* Send control request */
 			CHECK_RETURN(whd_bus_usb_send_ctrl(whd_driver, cdc_header, &cdc_size));
 
@@ -488,9 +485,8 @@ whd_result_t whd_bus_usb_read_frame(whd_driver_t whd_driver, whd_buffer_t *buffe
 
 	/* Check if we have something in rx_queue */
 	if (whd_bus_rx_queue_size()) {
-		/* Take a queue data */
-		whd_bus_rx_queue_dequeue(buffer);
-		return WHD_SUCCESS;
+		/* Take queue data */
+		return whd_bus_rx_queue_dequeue(buffer);
 	}
 
 	return 1;

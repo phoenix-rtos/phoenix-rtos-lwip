@@ -72,7 +72,7 @@ extern whd_result_t whd_init(whd_driver_t *whd_driver_ptr, whd_init_config_t *wh
  *  @{
  */
 
-#if (CYBSP_WIFI_INTERFACE_TYPE == CYBSP_SDIO_INTERFACE) && !defined(COMPONENT_WIFI_INTERFACE_OCI)
+#if (CYBSP_WIFI_INTERFACE_TYPE == CYBSP_SDIO_INTERFACE) && !defined(WIFI_MODE_OCI)
 /** Attach the WLAN Device to a specific SDIO bus
  *
  *  @param  whd_driver         Pointer to handle instance of the driver
@@ -139,7 +139,7 @@ extern whd_result_t  whd_bus_m2m_attach(whd_driver_t whd_driver, whd_m2m_config_
  */
 extern void whd_bus_m2m_detach(whd_driver_t whd_driver);
 
-#elif defined(COMPONENT_WIFI_INTERFACE_OCI)
+#elif defined(WIFI_MODE_OCI)
 /** Attach the WLAN Device to AXI(OCI) bus
  *
  *  @param  whd_driver        Pointer to handle instance of the driver
@@ -156,7 +156,7 @@ extern uint32_t whd_bus_oci_attach(whd_driver_t whd_driver, whd_oci_config_t *wh
  */
 extern void whd_bus_oci_detach(whd_driver_t whd_driver);
 #else
-error "CYBSP_WIFI_INTERFACE_TYPE or COMPONENT_WIFI_INTERFACE_OCI is not defined"
+#error "CYBSP_WIFI_INTERFACE_TYPE or WIFI_MODE_OCI is not defined"
 #endif
 
 /*  @} */

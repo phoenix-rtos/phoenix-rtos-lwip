@@ -231,8 +231,13 @@ whd_result_t whd_sdpcm_init(whd_driver_t whd_driver)
     int ac;
 
     /* Create the sdpcm packet queue semaphore */
-    if (cy_rtos_init_mutex(&sdpcm_info->send_queue_mutex) != WHD_SUCCESS)
+    if (cy_rtos_init_semaphore(&sdpcm_info->send_queue_mutex, 1, 0) != WHD_SUCCESS)
     {
+        return WHD_SEMAPHORE_ERROR;
+    }
+    if (cy_rtos_set_semaphore(&sdpcm_info->send_queue_mutex, WHD_FALSE) != WHD_SUCCESS)
+    {
+        WPRINT_WHD_ERROR( ("Error setting semaphore in %s at %d \n", __func__, __LINE__) );
         return WHD_SEMAPHORE_ERROR;
     }
 
@@ -272,7 +277,7 @@ void whd_sdpcm_quit(whd_driver_t whd_driver)
     int ac;
 
     /* Delete the SDPCM queue mutex */
-    (void)cy_rtos_deinit_mutex(&sdpcm_info->send_queue_mutex);    /* Ignore return - not much can be done about failure */
+    (void)cy_rtos_deinit_semaphore(&sdpcm_info->send_queue_mutex);    /* Ignore return - not much can be done about failure */
 
     /* Free any left over packets in the queue */
     for (ac = 0; ac <= MAX_WMM_AC; ac++)
@@ -429,6 +434,7 @@ void whd_sdpcm_process_rx_packet(whd_driver_t whd_driver, whd_buffer_t buffer)
                                                      sdpcm_header.sw_header.header_length) );
 
             whd_process_bdc(whd_driver, buffer);
+            printf("\nSDPCM: processing BDC\n\n");fflush(stdout);
 
         }
         break;
@@ -442,6 +448,7 @@ void whd_sdpcm_process_rx_packet(whd_driver_t whd_driver, whd_buffer_t buffer)
                                                      sdpcm_header.sw_header.header_length) );
 
             whd_process_bdc_event(whd_driver, buffer, size);
+            printf("\nSDPCM: processing BDC event\n\n");fflush(stdout);
         }
         break;
 
@@ -495,7 +502,7 @@ whd_result_t whd_sdpcm_get_packet_to_send(whd_driver_t whd_driver, whd_buffer_t 
 #endif /* (CYBSP_WIFI_INTERFACE_TYPE != CYBSP_USB_INTERFACE) */
 
     /* There is a packet waiting to be sent - send it then fix up queue and release packet */
-    if (cy_rtos_get_mutex(&sdpcm_info->send_queue_mutex, CY_RTOS_NEVER_TIMEOUT) != WHD_SUCCESS)
+    if (cy_rtos_get_semaphore(&sdpcm_info->send_queue_mutex, CY_RTOS_NEVER_TIMEOUT, false) != WHD_SUCCESS)
     {
         /* Could not obtain mutex, push back the flow control semaphore */
         WPRINT_WHD_ERROR( ("Error manipulating a semaphore, %s failed at %d \n", __func__, __LINE__) );
@@ -523,7 +530,7 @@ whd_result_t whd_sdpcm_get_packet_to_send(whd_driver_t whd_driver, whd_buffer_t 
     }
     sdpcm_info->npkt_in_q[ac]--;
     sdpcm_info->totpkt_in_q--;
-    result = cy_rtos_set_mutex(&sdpcm_info->send_queue_mutex);
+    result = cy_rtos_set_semaphore(&sdpcm_info->send_queue_mutex, false);
     if (result != WHD_SUCCESS)
     {
         WPRINT_WHD_ERROR( ("Error setting semaphore in %s at %d \n", __func__, __LINE__) );
@@ -609,7 +616,7 @@ whd_result_t whd_send_to_bus(whd_driver_t whd_driver, whd_buffer_t buffer,
                         (char *)data);
 
     /* Add the length of the SDPCM header and pass "down" */
-    if (cy_rtos_get_mutex(&sdpcm_info->send_queue_mutex, CY_RTOS_NEVER_TIMEOUT) != WHD_SUCCESS)
+    if (cy_rtos_get_semaphore(&sdpcm_info->send_queue_mutex, CY_RTOS_NEVER_TIMEOUT, false) != WHD_SUCCESS)
     {
         /* Could not obtain mutex */
         /* Fatal error */
@@ -633,7 +640,7 @@ whd_result_t whd_send_to_bus(whd_driver_t whd_driver, whd_buffer_t buffer,
         {
             WPRINT_WHD_ERROR( ("buffer release failed in %s at %d \n", __func__, __LINE__) );
         }
-        result = cy_rtos_set_mutex(&sdpcm_info->send_queue_mutex);
+        result = cy_rtos_set_semaphore(&sdpcm_info->send_queue_mutex, false);
         if (result != WHD_SUCCESS)
         {
             WPRINT_WHD_ERROR( ("Error setting semaphore in %s at %d \n", __func__, __LINE__) );
@@ -654,7 +661,7 @@ whd_result_t whd_send_to_bus(whd_driver_t whd_driver, whd_buffer_t buffer,
     }
     sdpcm_info->npkt_in_q[ac]++;
     sdpcm_info->totpkt_in_q++;
-    result = cy_rtos_set_mutex(&sdpcm_info->send_queue_mutex);
+    result = cy_rtos_set_semaphore(&sdpcm_info->send_queue_mutex, false);
     if (result != WHD_SUCCESS)
         WPRINT_WHD_ERROR( ("Error setting semaphore in %s at %d \n", __func__, __LINE__) );
 
@@ -666,11 +673,26 @@ whd_result_t whd_send_to_bus(whd_driver_t whd_driver, whd_buffer_t buffer,
 /******************************************************
 *             Static Functions
 ******************************************************/
+// static void dump_queue_counts(whd_driver_t whd_driver)
+// {
+//     whd_sdpcm_info_t *sdpcm_info = &whd_driver->sdpcm_info;
+//     size_t counts[sizeof(sdpcm_info->send_queue_head) / sizeof(sdpcm_info->send_queue_head[0])] = { 0 };
+
+//     printf("WHD: Queues:\n");fflush(stdout);
+//     for (int i = 0; i < sizeof(sdpcm_info->send_queue_head) / sizeof(sdpcm_info->send_queue_head[0]); i++) {
+//         whd_buffer_header_t *current = (whd_buffer_header_t *)whd_buffer_get_current_piece_data_pointer(whd_driver, sdpcm_info->send_queue_tail[i]);
+//         while (current != NULL && current != sdpcm_info->send_queue_head[i]) {
+//             counts[i]++;
+//             current = current->queue_next;
+//         }
+//         printf("\t queue[%d]: count=%zu\n", i, counts[i]);
+//     }
+//     printf("\n");
+// }
 
 static whd_buffer_t whd_sdpcm_get_next_buffer_in_queue(whd_driver_t whd_driver, whd_buffer_t buffer)
 {
     whd_buffer_header_t *packet = (whd_buffer_header_t *)whd_buffer_get_current_piece_data_pointer(whd_driver, buffer);
-    
     return packet->queue_next;
 }
 

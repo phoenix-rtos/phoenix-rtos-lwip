@@ -188,6 +188,7 @@ whd_result_t whd_wifi_init_ap(whd_interface_t ifp, whd_ssid_t *ssid, whd_securit
 	uint32_t auth_mfp = WL_MFP_NONE;
 	uint16_t event_entry = (uint16_t)0xFF;
 
+	printf("\nWHD: %s: enter\n\n", __FUNCTION__);fflush(stdout);cy_rtos_delay_milliseconds(500);
 
 	CHECK_IFP_NULL(ifp);
 
@@ -506,6 +507,8 @@ whd_result_t whd_wifi_init_ap(whd_interface_t ifp, whd_ssid_t *ssid, whd_securit
 		}
 	}
 
+	printf("\nWHD: %s: exit\n\n", __FUNCTION__);fflush(stdout);
+
 	return WHD_SUCCESS;
 }
 
@@ -516,6 +519,8 @@ whd_result_t whd_wifi_start_ap(whd_interface_t ifp)
 	whd_ap_int_info_t *ap;
 	whd_interface_t prim_ifp;
 	whd_driver_t whd_driver;
+
+	printf("\nWHD: %s: enter\n\n", __FUNCTION__);fflush(stdout);
 
 	CHECK_IFP_NULL(ifp);
 
@@ -543,6 +548,8 @@ whd_result_t whd_wifi_start_ap(whd_interface_t ifp)
 	ap->is_waiting_event = WHD_FALSE;
 
 	whd_wifi_set_ap_is_up(whd_driver, WHD_TRUE);
+
+	printf("WHD: %s: exit\n", __FUNCTION__);fflush(stdout);
 	return WHD_SUCCESS;
 }
 

@@ -95,7 +95,9 @@ void deinit_usb(whd_driver_t whd_driver)
 {
 	// TODO: deinit queue, exit both threads
 	whd_bus_usb_device_info.rx.should_exit = true;
-	(void)close(whd_bus_usb_device_info.usb_device_fd);
+	if (whd_bus_usb_device_info.usb_device_fd != -1) {
+		(void)close(whd_bus_usb_device_info.usb_device_fd);
+	}
 	whd_bus_usb_device_info.usb_device_fd = -1;
 	whd_bus_usb_device_info.usb_device_oid = (oid_t) { 0 };
 	whd_bus_usb_device_info.usb_device_ready = false;
@@ -136,6 +138,7 @@ whd_result_t init_usb(whd_driver_t whd_driver, bool wait_usb)
 			2048,
 			max(whd_driver->thread_info.thread_priority - 1, 0),
 			NULL);
+
 	if (retval != WHD_SUCCESS) {
 		fprintf(stderr, "Could not start whd_usb_rx thread: %d\n", retval);
 		return WHD_HAL_ERROR;
@@ -225,14 +228,14 @@ static void whd_usb_rx_thread(void *arg)
 		}
 
 		if (!(whd_bus_usb_device_info.fw_started && (whd_bus_is_up(whd_driver) == WHD_TRUE))) {
-			cy_rtos_delay_milliseconds(100);
+			cy_rtos_delay_milliseconds(10);
 			continue;
 		}
 
 		if (!whd_bus_rx_queue_is_full()) {
 			if (whd_host_buffer_get(whd_driver, &whd_rx_buffer, WHD_NETWORK_RX, WHD_USB_MAX_RECEIVE_BUF_SIZE, CY_RTOS_NEVER_TIMEOUT) != WHD_SUCCESS) {
 				WPRINT_WHD_ERROR(("whd_host_buffer_get failed\n"));
-				cy_rtos_delay_milliseconds(100);
+				cy_rtos_delay_milliseconds(1);
 				continue;
 			}
 
@@ -652,7 +655,7 @@ size_t whd_bus_rx_queue_size(void)
 /* Adds an element to the end of the queue  */
 whd_result_t whd_bus_rx_queue_enqueue(whd_buffer_t *data)
 {
-	cy_rslt_t status = cy_rtos_queue_put(&whd_bus_usb_device_info.rx.queue, data, CY_RTOS_NEVER_TIMEOUT);
+	cy_rslt_t status = cy_rtos_queue_put(&whd_bus_usb_device_info.rx.queue, &data, CY_RTOS_NEVER_TIMEOUT);
 	return status ? WHD_QUEUE_ERROR : WHD_SUCCESS;
 }
 
