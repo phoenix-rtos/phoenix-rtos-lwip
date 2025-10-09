@@ -27,15 +27,18 @@
 
 /* EPHY common registers */
 enum {
-	EPHY_COMMON_00_BMCR = 0x00, /* Basic Mode Control */
-	EPHY_COMMON_01_BMSR,        /* Basic Mode Status */
-	EPHY_COMMON_02_PHYID1,      /* PHY Identifier 1 */
-	EPHY_COMMON_03_PHYID2,      /* PHY Identifier 2 */
-	EPHY_COMMON_04_ANAR,        /* Auto-Neg Advertising */
-	EPHY_COMMON_05_ANLPAR,      /* Auto-Neg Link Partner Ability */
-	EPHY_COMMON_06_ANER,        /* Auto-Neg Expansion */
-	EPHY_COMMON_07_ANPR,        /* Auto-Neg Next Page */
-	EPHY_COMMON_08_LPNPAR,      /* Link Partner Next Page Ability */
+	EPHY_COMMON_00_BMCR = 0x00,  /* Basic Mode Control */
+	EPHY_COMMON_01_BMSR,         /* Basic Mode Status */
+	EPHY_COMMON_02_PHYID1,       /* PHY Identifier 1 */
+	EPHY_COMMON_03_PHYID2,       /* PHY Identifier 2 */
+	EPHY_COMMON_04_ANAR,         /* Auto-Neg Advertising */
+	EPHY_COMMON_05_ANLPAR,       /* Auto-Neg Link Partner Ability */
+	EPHY_COMMON_06_ANER,         /* Auto-Neg Expansion */
+	EPHY_COMMON_07_ANPR,         /* Auto-Neg Next Page */
+	EPHY_COMMON_08_LPNPAR,       /* Link Partner Next Page Ability */
+	EPHY_COMMON_09_GBCR,         /* 1000Base-T Control */
+	EPHY_COMMON_0A_GBSR,         /* 1000Base-T Status */
+	EPHY_COMMON_0F_GBESR = 0x0F, /* 1000Base-T Ext Status */
 };
 
 /* KSZ8081-specific registers */
@@ -82,9 +85,6 @@ enum {
 /* RTL8211-specific registers */
 enum {
 	/* Page 0/0xa42 (default) */
-	EPHY_RTL8211_09_GBCR,          /* 1000Base-T Control */
-	EPHY_RTL8211_0A_GBSR,          /* 1000Base-T Status */
-	EPHY_RTL8211_0F_GBESR = 0x0F,  /* 1000Base-T Ext Status */
 	EPHY_RTL8211_12_INER = 0x12,   /* Interrupt Enable */
 	EPHY_RTL8211_18_PHYCR1 = 0x18, /* PHY Specific Control 1 */
 	EPHY_RTL8211_19_PHYCR2,        /* PHY Specific Control 2 */
@@ -104,6 +104,12 @@ enum {
 
 	/* Page 0xd40 */
 	EPHY_RTL8211_PAGE0D40_16_INTBCR, /* INTB Pin Control */
+};
+
+/* KSZ9031MNX-specific registers*/
+enum {
+	EPHY_KSZ9031_1B_ICSR = 0x1B,  /* PHY Control */
+	EPHY_KSZ9031_1F_PHYCR = 0x1F, /* PHY Control */
 };
 
 
@@ -236,6 +242,7 @@ static void ephy_setLinkState(const eth_phy_state_t *phy)
 			ephy_printf(phy, "link is %s %uMbps/%s (ctl %04x, status %04x, adv %04x, lpa %04x, pctl %04x,%04x)",
 					(linkup != 0) ? "UP  " : "DOWN", speed, (full_duplex != 0) ? "Full" : "Half", bctl, bstat, adv, lpa, pc1, pc2);
 			break;
+		case ephy_ksz9031mnx:
 		case ephy_rtl8201fi:
 			ephy_printf(phy, "link is %s %uMbps/%s (ctl %04x, status %04x, adv %04x, lpa %04x)",
 					(linkup != 0) ? "UP  " : "DOWN", speed, (full_duplex != 0) ? "Full" : "Half", bctl, bstat, adv, lpa);
@@ -266,6 +273,34 @@ static inline int ephy_ksz8081rnx_linkSpeed(const eth_phy_state_t *phy, int *ful
 	}
 
 	return ((pc1 & 0x1) != 0) ? 10 : 100;
+}
+
+
+static inline int ephy_ksz9031mnx_linkSpeed(const eth_phy_state_t *phy, int *full_duplex)
+{
+	uint16_t st = ephy_regRead(phy, EPHY_COMMON_01_BMSR);
+	/* PHY still in auto-negotiation */
+	if ((st & (1u << 5)) == 0) {
+		return 0;
+	}
+
+	uint16_t pc = ephy_regRead(phy, EPHY_KSZ9031_1F_PHYCR);
+	if (full_duplex != NULL) {
+		*full_duplex = ((pc & (1u << 3)) != 0) ? 1 : 0;
+	}
+
+	if ((pc & (1u << 4)) != 0) {
+		return 10;
+	}
+	else if ((pc & (1u << 5)) != 0) {
+		return 100;
+	}
+	else if ((pc & (1u << 6)) != 0) {
+		return 1000;
+	}
+	else {
+		return 0;
+	}
 }
 
 
@@ -312,6 +347,8 @@ int ephy_linkSpeed(const eth_phy_state_t *phy, int *full_duplex)
 		case ephy_ksz8081rnb:
 		case ephy_ksz8081rnd:
 			return ephy_ksz8081rnx_linkSpeed(phy, full_duplex);
+		case ephy_ksz9031mnx:
+			return ephy_ksz9031mnx_linkSpeed(phy, full_duplex);
 		case ephy_rtl8201fi:
 			return ephy_rtl8201fi_linkSpeed(phy, full_duplex);
 		case ephy_rtl8211fdi:
@@ -345,9 +382,13 @@ static void ephy_restartAN(const eth_phy_state_t *phy)
 	uint16_t bmcr = ephy_bmcrMaxSpeedMask(phy) | (1u << 12) | (1u << 9) | (1u << 8);
 	if (phy->model == ephy_rtl8211fdi) {
 		/* adv: 1000M-FD */
-		ephy_regWrite(phy, EPHY_RTL8211_09_GBCR, (1u << 9));
+		ephy_regWrite(phy, EPHY_COMMON_09_GBCR, (1u << 9));
 		/* don't adv: 1000Base-T EEE (MMD write) */
 		ephy_mmdWrite(phy, 0x7, 0x3c /* EEEAR */, 0);
+	}
+	if (phy->model == ephy_ksz9031mnx) {
+		/* adv: 1000M-FD */
+		ephy_regWrite(phy, EPHY_COMMON_09_GBCR, (1u << 9));
 	}
 	/* adv: no-next-page, no-rem-fault, no-pause, no-T4, 100M/10M-FD & 10M-HD, 802.3 */
 	ephy_regWrite(phy, EPHY_COMMON_04_ANAR, (1u << 8) | (1u << 6) | (1u << 5) | 1u);
@@ -355,40 +396,30 @@ static void ephy_restartAN(const eth_phy_state_t *phy)
 }
 
 
+void ephy_macInterrupt(const eth_phy_state_t *phy)
+{
+	uint16_t stat;
+
+	stat = ephy_regRead(phy, phy->irq.reg);
+	if ((stat & phy->irq.mask) != 0) {
+		ephy_setLinkState(phy);
+	}
+}
+
+
 static void ephy_linkThread(void *arg)
 {
 	eth_phy_state_t *phy = arg;
-	uint16_t stat, irq_reg, irq_mask;
+	uint16_t stat;
 	int err;
-
-	switch (phy->model) {
-		case ephy_ksz8081rna:
-		case ephy_ksz8081rnb:
-		case ephy_ksz8081rnd:
-			irq_reg = EPHY_KSZ8081_1B_ICSR;
-			irq_mask = 0x00FF;
-			break;
-		case ephy_rtl8201fi:
-			irq_reg = EPHY_RTL8201_1E_IISDR;
-			irq_mask = 0xE800;
-			break;
-		case ephy_rtl8211fdi:
-			irq_reg = EPHY_RTL8211_1D_INSR;
-			irq_mask = 0x06BD;
-			break;
-		default:
-			/* unreachable */
-			endthread();
-			return;
-	}
 
 	for (;;) {
 		err = gpio_wait(&phy->irq_gpio, 1, 0);
 		// FIXME: thread exit
 
 		if (err == 0) {
-			stat = ephy_regRead(phy, irq_reg);
-			if ((stat & irq_mask) != 0) {
+			stat = ephy_regRead(phy, phy->irq.reg);
+			if ((stat & phy->irq.mask) != 0) {
 				ephy_setLinkState(phy);
 			}
 		}
@@ -449,6 +480,9 @@ static __attribute__((unused)) char *ephy_parsePhyModel(eth_phy_state_t *phy, ch
 	}
 	else if (strcmp(cfg, "ksz8081rnd") == 0) {
 		phy->model = ephy_ksz8081rnd;
+	}
+	else if (strcmp(cfg, "ksz9031mnx") == 0) {
+		phy->model = ephy_ksz9031mnx;
 	}
 	else if (strcmp(cfg, "rtl8201fi-vc-cg") == 0) {
 		phy->model = ephy_rtl8201fi;
@@ -517,14 +551,16 @@ static int ephy_config(eth_phy_state_t *phy, char *cfg)
 		return -EINVAL;
 	}
 
-	if (*p == '\0') {
-		return 0;
-	}
-
 	if (*p != ':') {
 		return -EINVAL;
 	}
 	p++;
+
+	if (strcmp(p, "irq:MAC") == 0) {
+		phy->irq.type = ephy_mac_irq;
+		return 0;
+	}
+	phy->irq.type = ephy_gpio_irq;
 
 	while (p != NULL && *p != '\0') {
 		cfg = p;
@@ -754,12 +790,22 @@ int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb
 			if (err < 0) {
 				return err;
 			}
+			phy->irq.reg = EPHY_KSZ8081_1B_ICSR;
+			phy->irq.mask = 0x00FF;
+			break;
+		case ephy_ksz9031mnx:
+			phy->irq.reg = EPHY_KSZ9031_1B_ICSR;
+			phy->irq.mask = 0x00FF;
 			break;
 		case ephy_rtl8201fi:
 			ephy_rtl8201fi_init(phy);
+			phy->irq.reg = EPHY_RTL8201_1E_IISDR;
+			phy->irq.mask = 0xE800;
 			break;
 		case ephy_rtl8211fdi:
 			ephy_rtl8211fdi_init(phy);
+			phy->irq.reg = EPHY_RTL8211_1D_INSR;
+			phy->irq.mask = 0x06BD;
 			break;
 		default:
 			/* unreachable */
@@ -770,36 +816,39 @@ int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb
 	phy->link_state_callback_arg = cb_arg;
 	ephy_setLinkState(phy);
 
-	if (gpio_valid(&phy->irq_gpio)) {
+	if (phy->irq.type == ephy_gpio_irq) {
+		if (!gpio_valid(&phy->irq_gpio)) {
+			ephy_printf(phy, "WARN: irq_gpio not valid, could not start PHY IRQ thread");
+			return -ENODEV;
+		}
 		err = beginthread(ephy_linkThread, 0, phy->th_stack, sizeof(phy->th_stack), phy);
 		if (err != 0) {
 			gpio_set(&phy->reset, 1);
 			return err;
 		}
-
-		/* enable link up/down IRQ signal */
-		switch (phy->model) {
-			case ephy_ksz8081rna:
-			case ephy_ksz8081rnb:
-			case ephy_ksz8081rnd:
-				ephy_regWrite(phy, EPHY_KSZ8081_1B_ICSR, (1 << 8) | (1 << 10));
-				break;
-			case ephy_rtl8201fi:
-				ephy_regWrite(phy, EPHY_RTL_1F_PAGESEL, 7);
-				ephy_regWrite(phy, EPHY_RTL8201_PAGE07_13_IWELFR, ephy_regRead(phy, EPHY_RTL8201_PAGE07_13_IWELFR) | (1 << 13));
-				ephy_regWrite(phy, EPHY_RTL_1F_PAGESEL, 0);
-				break;
-			case ephy_rtl8211fdi:
-				ephy_regWrite(phy, EPHY_RTL8211_12_INER, (1 << 4));
-				break;
-			default:
-				/* unreachable */
-				break;
-		}
 	}
-	else {
-		ephy_printf(phy, "WARN: irq_gpio not valid, could not start PHY IRQ thread");
-		return -ENODEV;
+
+	/* enable link up/down IRQ signal */
+	switch (phy->model) {
+		case ephy_ksz8081rna:
+		case ephy_ksz8081rnb:
+		case ephy_ksz8081rnd:
+			ephy_regWrite(phy, EPHY_KSZ8081_1B_ICSR, (1 << 8) | (1 << 10));
+			break;
+		case ephy_ksz9031mnx:
+			ephy_regWrite(phy, EPHY_KSZ9031_1B_ICSR, (1 << 8) | (1 << 10));
+			break;
+		case ephy_rtl8201fi:
+			ephy_regWrite(phy, EPHY_RTL_1F_PAGESEL, 7);
+			ephy_regWrite(phy, EPHY_RTL8201_PAGE07_13_IWELFR, ephy_regRead(phy, EPHY_RTL8201_PAGE07_13_IWELFR) | (1 << 13));
+			ephy_regWrite(phy, EPHY_RTL_1F_PAGESEL, 0);
+			break;
+		case ephy_rtl8211fdi:
+			ephy_regWrite(phy, EPHY_RTL8211_12_INER, (1 << 4));
+			break;
+		default:
+			/* unreachable */
+			break;
 	}
 
 	ephy_restartAN(phy);
