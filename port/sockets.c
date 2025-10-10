@@ -177,9 +177,27 @@ static void inet6_addr_netmask_from_ip6addr(struct in6_addr *dst, const ip6_addr
 	}
 }
 
+
 static int socket_ioctl6(int sock, unsigned long request, const void *in_data, void *out_data)
 {
 	switch (request) {
+		case SIOCGIFADDR_IN6: {
+
+			struct in6_ifreq *in6_ifreq = (struct in6_ifreq *)out_data;
+			struct netif *netif = netif_find(in6_ifreq->ifr_name);
+			struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)&in6_ifreq->ifr_addr;
+
+			if (netif == NULL) {
+				return -ENXIO;
+			}
+
+			for (int i = 0; i < LWIP_IPV6_NUM_ADDRESSES; i++) {
+				inet6_addr_from_ip6addr(&sin6->sin6_addr, netif_ip6_addr(netif, i));
+				sin6 = (struct sockaddr_in6 *)((void *)sin6 + sizeof(struct in6_ifreq));
+			}
+
+			return EOK;
+		}
 		case SIOCGIFNETMASK_IN6:
 		case SIOCGIFAFLAG_IN6:
 		case SIOCGIFALIFETIME_IN6: {
@@ -649,6 +667,7 @@ static int socket_ioctl(int sock, unsigned long request, const void *in_data, vo
 		}
 
 #if LWIP_IPV6
+		case SIOCGIFADDR_IN6:
 		case SIOCGIFDSTADDR_IN6:
 		case SIOCGIFNETMASK_IN6:
 		case SIOCDIFADDR_IN6:
