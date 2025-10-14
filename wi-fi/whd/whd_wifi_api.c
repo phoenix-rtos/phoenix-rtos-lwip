@@ -1609,14 +1609,14 @@ static whd_result_t whd_wifi_prepare_join(whd_interface_t ifp, whd_security_t au
        {
         algos = KEY_ALGO_MASK(CRYPTO_ALGO_AES_GCM256);
         mask = algos | KEY_ALGO_MASK(CRYPTO_ALGO_AES_CCM);
-        WPRINT_WHD_DEBUG( ("set_wsec_info algos (0x%lx) mask (0x%lx)\n",algos, mask ) );
+        WPRINT_WHD_DEBUG( ("set_wsec_info algos (0x%" PRIx32 ") mask (0x%" PRIx32 ")\n", algos, mask) );
         CHECK_RETURN(whd_set_wsec_info_algos(ifp, algos, mask));
        }
-       else if ( auth_type == WHD_SECURITY_WPA3_ENT_AES_CCMP )
+       else if (auth_type == WHD_SECURITY_WPA3_ENT_AES_CCMP)
        {
         algos = KEY_ALGO_MASK(CRYPTO_ALGO_AES_CCM);
         mask = algos | KEY_ALGO_MASK(CRYPTO_ALGO_AES_GCM256);
-        WPRINT_WHD_DEBUG( ("set_wsec_info algos (0x%lx) mask (0x%lx)\n",algos, mask ) );
+        WPRINT_WHD_DEBUG( ("set_wsec_info algos (0x%" PRIx32 ") mask (0x%" PRIx32 ")\n", algos, mask) );
         CHECK_RETURN(whd_set_wsec_info_algos(ifp, algos, mask));
        }
     }
@@ -1919,8 +1919,8 @@ static void whd_wifi_active_join_deinit(whd_interface_t ifp, cy_semaphore_t *sta
 static uint32_t whd_wifi_join_wait_for_complete(whd_interface_t ifp, cy_semaphore_t *semaphore)
 {
     whd_result_t result;
-    uint32_t start_time;
-    uint32_t current_time;
+    cy_time_t start_time;
+    cy_time_t current_time;
     whd_bool_t done = WHD_FALSE;
 
     cy_rtos_get_time(&start_time);
@@ -4557,7 +4557,7 @@ whd_iovar_mkbuf(const char *name, char *data, uint32_t datalen, char *iovar_buf,
         memmove(&iovar_buf[iovar_len], data, datalen);
 
     /* copy the name to the beginning of the buffer */
-    strncpy(iovar_buf, name, (iovar_len - 1) );
+    strcpy(iovar_buf, name);
 
     return WHD_SUCCESS;
 }
@@ -4950,7 +4950,7 @@ whd_result_t whd_arp_hostip_list_add(whd_interface_t ifp, uint32_t *host_ipv4_li
         {
             for (new_index = 0; new_index < count; new_index++)
             {
-                WPRINT_WHD_DEBUG( ("%s() curr:%ld of %ld curr:0x%lx new:%ld of %ld:0x%lx\n", __func__, curr_index,
+                WPRINT_WHD_DEBUG( ("%s() curr:%" PRIu32 " of %" PRIu32 " curr:0x%" PRIx32 " new:%" PRIu32" of %" PRIu32 ":0x%" PRIx32 "\n", __func__, curr_index,
                                    filled, current_ipv4_list[curr_index],
                                    new_index, count, host_ipv4_list[new_index]) );
                 if (current_ipv4_list[curr_index] == host_ipv4_list[new_index])
@@ -4960,9 +4960,8 @@ whd_result_t whd_arp_hostip_list_add(whd_interface_t ifp, uint32_t *host_ipv4_li
                     if (new_index < count)
                     {
                         /* copy next one down */
-                        WPRINT_WHD_DEBUG( ("move %ld (+1) of %ld \n", new_index, count) );
+                        WPRINT_WHD_DEBUG( ("move %" PRIu32 " (+1) of %" PRIu32 " \n", new_index, count) );
                         host_ipv4_list[new_index] = host_ipv4_list[new_index + 1];
-
                     }
                     break;
                 }
@@ -4977,10 +4976,10 @@ whd_result_t whd_arp_hostip_list_add(whd_interface_t ifp, uint32_t *host_ipv4_li
     if (count > 0)
     {
         uint32_t new_index;
-        WPRINT_WHD_DEBUG( ("%s() whd_wifi_set_iovar_buffer( %p, %lx)\n", __func__, host_ipv4_list, count) );
+        WPRINT_WHD_DEBUG( ("%s() whd_wifi_set_iovar_buffer( %p, %" PRIx32 ")\n", __func__, host_ipv4_list, count) );
         for (new_index = 0; new_index < count; new_index++)
         {
-            WPRINT_WHD_DEBUG( ("  0x%lx\n", host_ipv4_list[new_index]) );
+            WPRINT_WHD_DEBUG( ("  0x%" PRIx32 "\n", host_ipv4_list[new_index]) );
         }
 #ifdef CYCFG_ULP_SUPPORT_ENABLED
         CHECK_RETURN(whd_configure_wowl(ifp, WL_WOWL_ARPOFFLOAD));
@@ -5036,9 +5035,9 @@ whd_result_t whd_arp_hostip_list_clear_id(whd_interface_t ifp, uint32_t ipv4_add
         }
 
         /* remove the one address from the list and re-write arp_hostip list */
-        for (index = 0; index < filled; index++)
+		for (index = 0; index < filled; index++)
         {
-            WPRINT_WHD_DEBUG( ("%d %s() drop() 0x%lx == 0x%lx ? %s\n", __LINE__, __func__, host_ipv4_list[index],
+            WPRINT_WHD_DEBUG( ("%d %s() drop() 0x%" PRIx32 " == 0x%" PRIx32 " ? %s\n", __LINE__, __func__, host_ipv4_list[index],
                                ipv4_addr, (host_ipv4_list[index] == ipv4_addr) ? "DROP" : "") );
             if (host_ipv4_list[index] == ipv4_addr)
             {
@@ -5052,7 +5051,7 @@ whd_result_t whd_arp_hostip_list_clear_id(whd_interface_t ifp, uint32_t ipv4_add
                 /* IP addresses must be added one at a time */
                 for (drop = 0; drop < filled; drop++)
                 {
-                    whd_ret = whd_arp_hostip_list_add(ifp, &host_ipv4_list[drop], sizeof(uint32_t) );
+                    whd_ret = whd_arp_hostip_list_add(ifp, &host_ipv4_list[drop], sizeof(uint32_t));
                 }
                 break;
             }
@@ -5231,7 +5230,7 @@ whd_result_t whd_arp_stats_print(whd_arp_stats_t *arp_stats, const char *title)
     {
         WPRINT_MACRO( ("%s\n", title) );
     }
-    WPRINT_MACRO( ("                  version: 0x%lx\n", (unsigned long int)arp_stats->version) );
+    WPRINT_MACRO( ("                  version: 0x%" PRIx32 "\n", arp_stats->version) );
     WPRINT_MACRO( ("          host_ip_entries: %d\n", (int)arp_stats->stats.host_ip_entries) );
     WPRINT_MACRO( ("         host_ip_overflow: %d\n", (int)arp_stats->stats.host_ip_overflow) );
     WPRINT_MACRO( ("        arp_table_entries: %d\n", (int)arp_stats->stats.arp_table_entries) );
@@ -5858,15 +5857,15 @@ whd_result_t
 whd_get_wowl_cap(whd_interface_t ifp, uint32_t *value)
 {
     whd_result_t ret;
-    ret = whd_wifi_get_iovar_value(ifp, IOVAR_STR_WOWL, value );
-    WPRINT_WHD_DEBUG( ("%s : wowl %lx\n",__func__ ,*value));
+    ret = whd_wifi_get_iovar_value(ifp, IOVAR_STR_WOWL, value);
+    WPRINT_WHD_DEBUG( ("%s : wowl %" PRIx32 "\n", __func__, *value) );
     return ret;
 }
 
 whd_result_t
 whd_set_wowl_cap(whd_interface_t ifp, uint32_t value)
 {
-    WPRINT_WHD_DEBUG( ("%s : wowl %lx\n",__func__ , (unsigned long)value));
+    WPRINT_WHD_DEBUG( ("%s : wowl %" PRIx32 "\n", __func__, value) );
     return whd_wifi_set_iovar_value(ifp, IOVAR_STR_WOWL, value);
 }
 
@@ -5874,14 +5873,14 @@ whd_result_t
 whd_wowl_clear(whd_interface_t ifp)
 {
     uint32_t value = 0;
-    WPRINT_WHD_ERROR( ("%s :  %lx\n", __func__, (unsigned long)value));
+    WPRINT_WHD_ERROR( ("%s :  %" PRIx32 "\n", __func__, value) );
     return whd_wifi_set_iovar_value(ifp, IOVAR_STR_WOWL_CLEAR, value);
 }
 
 whd_result_t
 whd_wowl_activate(whd_interface_t ifp, uint32_t value)
 {
-    WPRINT_WHD_ERROR( ("%s :  %lx\n", __func__, (unsigned long)value));
+    WPRINT_WHD_ERROR( ("%s :  %" PRIx32 "\n", __func__, value) );
     return whd_wifi_set_iovar_value(ifp, IOVAR_STR_WOWL_ACTIVATE, value);
 }
 
@@ -5911,7 +5910,7 @@ whd_set_wowl_pattern(whd_interface_t ifp, char* opt, uint32_t offset, uint8_t ma
          return WHD_BUFFER_ALLOC_FAIL;
     }
 
-    strncpy(data, opt, strlen(opt));
+    strcpy(data, opt);
     data += strlen(opt) + 1;
 
     wl_pattern = (wl_wowl_pattern_t *)data;
