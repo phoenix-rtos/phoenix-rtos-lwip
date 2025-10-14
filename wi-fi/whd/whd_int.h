@@ -140,7 +140,9 @@ struct whd_driver
     uint16_t (*read_ptr)(struct whd_driver *whd_driver, uint32_t mem_offset);
     void (*write_ptr)(struct whd_driver *whd_driver, uint32_t mem_offset, uint16_t value);
     cy_semaphore_t host_suspend_mutex;
+#ifdef PROTO_MSGBUF
     cy_event_t host_suspend_event_wait;
+#endif
     uint8_t host_trigger_suspend_flag;
     uint8_t ack_d2h_suspend; /* 1: D3_ack_suspend(suspend from host), 0: Non D3_ack_suspend(suspend from WHD) */
     uint8_t dma_index_sz;
