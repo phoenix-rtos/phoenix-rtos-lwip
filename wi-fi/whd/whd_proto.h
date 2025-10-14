@@ -24,7 +24,7 @@
 #ifndef INCLUDED_WHD_PROTO_H_
 #define INCLUDED_WHD_PROTO_H_
 
-#include "whd.h"
+#include "whd_int.h"
 
 #ifdef __cplusplus
 extern "C" {
