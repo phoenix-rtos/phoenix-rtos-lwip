@@ -135,15 +135,17 @@ struct whd_driver
     int whd_ioctl_log_index;
     cy_semaphore_t whd_log_mutex;
 
-    struct whd_ram_shared_info *ram_shared;
-    struct whd_msgbuf *msgbuf;
-    uint16_t (*read_ptr)(struct whd_driver *whd_driver, uint32_t mem_offset);
-    void (*write_ptr)(struct whd_driver *whd_driver, uint32_t mem_offset, uint16_t value);
-    cy_semaphore_t host_suspend_mutex;
-    cy_event_t host_suspend_event_wait;
-    uint8_t host_trigger_suspend_flag;
-    uint8_t ack_d2h_suspend; /* 1: D3_ack_suspend(suspend from host), 0: Non D3_ack_suspend(suspend from WHD) */
-    uint8_t dma_index_sz;
+	struct whd_ram_shared_info *ram_shared;
+	struct whd_msgbuf *msgbuf;
+	uint16_t (*read_ptr)(struct whd_driver *whd_driver, uint32_t mem_offset);
+	void (*write_ptr)(struct whd_driver *whd_driver, uint32_t mem_offset, uint16_t value);
+	cy_semaphore_t host_suspend_mutex;
+#ifdef PROTO_MSGBUF
+	cy_event_t host_suspend_event_wait;
+#endif
+	uint8_t host_trigger_suspend_flag;
+	uint8_t ack_d2h_suspend; /* 1: D3_ack_suspend(suspend from host), 0: Non D3_ack_suspend(suspend from WHD) */
+	uint8_t dma_index_sz;
 #ifdef CYCFG_ULP_SUPPORT_ENABLED
     uint32_t ds_exit_in_progress;
     deepsleep_cb_info_t ds_cb_info;
