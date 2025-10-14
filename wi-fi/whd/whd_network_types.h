@@ -1,5 +1,5 @@
 /*
- * Copyright 2021, Cypress Semiconductor Corporation (an Infineon company)
+ * Copyright 2024, Cypress Semiconductor Corporation (an Infineon company)
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,7 +28,8 @@
 #define INC_WHD_NETWORK_TYPES_H_
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 
 /******************************************************
@@ -43,16 +44,18 @@ extern "C" {
  * Indicates transmit/receive direction that the packet buffer has
  * been used for. This is needed if tx/rx pools are separate.
  */
-typedef enum {
-	WHD_NETWORK_TX, /**< Transmit direction */
-	WHD_NETWORK_RX  /**< Receive direction */
+typedef enum
+{
+    WHD_NETWORK_TX, /**< Transmit direction */
+    WHD_NETWORK_RX  /**< Recieve direction */
 } whd_buffer_dir_t;
 
 /**
  * Allows WHD to perform buffer related operations like, allocating, releasing, retrieving the current pointer of and size of a packet buffer.
  */
-struct whd_buffer_funcs {
-	/** Allocates a packet buffer
+struct whd_buffer_funcs
+{
+    /** Allocates a packet buffer
      *
      *  Implemented in the port layer interface which is specific to the
      *  buffering scheme in use.
@@ -73,10 +76,10 @@ struct whd_buffer_funcs {
      *  @return            WHD_SUCCESS or error code
      *
      */
-	whd_result_t (*whd_host_buffer_get)(whd_buffer_t *buffer, whd_buffer_dir_t direction, unsigned short size,
-		unsigned long timeout_ms);
+    whd_result_t (*whd_host_buffer_get)(whd_buffer_t *buffer, whd_buffer_dir_t direction, uint16_t size,
+                                        uint32_t timeout_ms);
 
-	/** Releases a packet buffer
+    /** Releases a packet buffer
      *
      *  Implemented in the port layer interface, which will be specific to the
      *  buffering scheme in use.
@@ -91,9 +94,9 @@ struct whd_buffer_funcs {
      *                     been used for. This might be needed if tx/rx pools are separate.
      *
      */
-	void (*whd_buffer_release)(whd_buffer_t buffer, whd_buffer_dir_t direction);
+    void (*whd_buffer_release)(whd_buffer_t buffer, whd_buffer_dir_t direction);
 
-	/** Retrieves the current pointer of a packet buffer
+    /** Retrieves the current pointer of a packet buffer
      *
      *  Implemented in the port layer interface which is specific to the
      *  buffering scheme in use.
@@ -105,9 +108,9 @@ struct whd_buffer_funcs {
      *
      *  @return        The packet buffer's current pointer.
      */
-	uint8_t *(*whd_buffer_get_current_piece_data_pointer)(whd_buffer_t buffer);
+    uint8_t *(*whd_buffer_get_current_piece_data_pointer)(whd_buffer_t buffer);
 
-	/** Retrieves the size of a packet buffer
+    /** Retrieves the size of a packet buffer
      *
      *  Implemented in the port layer interface which is specific to the
      *  buffering scheme in use.
@@ -120,9 +123,9 @@ struct whd_buffer_funcs {
      *
      *  @return         The size of the packet buffer.
      */
-	uint16_t (*whd_buffer_get_current_piece_size)(whd_buffer_t buffer);
+    uint16_t (*whd_buffer_get_current_piece_size)(whd_buffer_t buffer);
 
-	/** Sets the current size of a WHD packet
+    /** Sets the current size of a WHD packet
      *
      *  Implemented in the port layer interface which is specific to the
      *  buffering scheme in use.
@@ -133,9 +136,9 @@ struct whd_buffer_funcs {
      *
      *  @return        WHD_SUCCESS or error code
      */
-	whd_result_t (*whd_buffer_set_size)(whd_buffer_t buffer, unsigned short size);
+    whd_result_t (*whd_buffer_set_size)(whd_buffer_t buffer, uint16_t size);
 
-	/** Moves the current pointer of a packet buffer
+    /** Moves the current pointer of a packet buffer
      *
      *  Implemented in the port layer interface which is specific to the buffering scheme in use.
      *
@@ -155,7 +158,7 @@ struct whd_buffer_funcs {
      *
      *  @return                   WHD_SUCCESS or error code
      */
-	whd_result_t (*whd_buffer_add_remove_at_front)(whd_buffer_t *buffer, int32_t add_remove_amount);
+    whd_result_t (*whd_buffer_add_remove_at_front)(whd_buffer_t *buffer, int32_t add_remove_amount);
 };
 /*  @} */
 
@@ -167,8 +170,9 @@ struct whd_buffer_funcs {
 /**
  * Contains functions which allows WHD to pass received data to the network stack, to send an ethernet frame to WHD, etc
  */
-struct whd_netif_funcs {
-	/** Called by WHD to pass received data to the network stack
+struct whd_netif_funcs
+{
+    /** Called by WHD to pass received data to the network stack
      *
      *
      *  Packets received from the Wi-Fi network by WHD are forwarded to by calling function ptr which
@@ -195,7 +199,7 @@ struct whd_netif_funcs {
      *                    releasing this buffer is transferred from WHD at this point.
      *
      */
-	void (*whd_network_process_ethernet_data)(whd_interface_t ifp, whd_buffer_t buffer);
+    void (*whd_network_process_ethernet_data)(whd_interface_t ifp, whd_buffer_t buffer);
 };
 
 /** To send an ethernet frame to WHD (called by the Network Stack)
