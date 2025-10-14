@@ -34,6 +34,7 @@ extern "C" {
 #define CYBSP_SDIO_INTERFACE (0)
 #define CYBSP_SPI_INTERFACE  (1)
 #define CYBSP_M2M_INTERFACE  (2)
+#define CYBSP_USB_INTERFACE  (3)
 
 #ifdef __cplusplus
 }
