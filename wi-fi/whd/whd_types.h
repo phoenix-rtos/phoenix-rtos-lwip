@@ -26,6 +26,7 @@
 #include "cy_result.h"
 #include "cyhal_hw_types.h"
 #include "cyhal_gpio.h"
+#include "cyabs_rtos.h"
 
 #ifndef INCLUDED_WHD_TYPES_H_
 #define INCLUDED_WHD_TYPES_H_
@@ -1079,7 +1080,7 @@ typedef struct whd_auth_req_status
 /**
  * Time value in milliseconds
  */
-typedef uint32_t whd_time_t;
+typedef cy_time_t whd_time_t;
 
 /**
  * Structure for storing a WEP key
