@@ -1,3 +1,3 @@
-#define WHD_VERSION "v2.1.0-dirty"
-#define WHD_BRANCH  "v2.1.0"
-#define WHD_DATE    "2021-11-08 16:40:27 +0800"
+#define WHD_VERSION "3.3.0.24096"
+#define WHD_BRANCH "v3.3.0"
+#define WHD_DATE "2024-07-05 06:07:25 -0500"

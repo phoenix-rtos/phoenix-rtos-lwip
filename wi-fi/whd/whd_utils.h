@@ -1,5 +1,5 @@
 /*
- * Copyright 2021, Cypress Semiconductor Corporation (an Infineon company)
+ * Copyright 2024, Cypress Semiconductor Corporation (an Infineon company)
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,11 +24,40 @@
 #include "whd_events_int.h"
 #include "whd_types_int.h"
 
+#ifdef PROTO_MSGBUF
+#include "whd_hw.h"
+#endif
+
 #ifndef INCLUDED_WHD_UTILS_H_
 #define INCLUDED_WHD_UTILS_H_
 
 #ifdef __cplusplus
 extern "C" {
+#endif
+
+#define  NBBY  8
+#define  setbit(a, i)   ( ( (uint8_t *)a )[(int)(i) / (int)(NBBY)] |= (uint8_t)(1 << ( (i) % NBBY ) ) )
+#define  clrbit(a, i)   ( ( (uint8_t *)a )[(int)(i) / (int)(NBBY)] &= (uint8_t) ~(1 << ( (i) % NBBY ) ) )
+#define  isset(a, i)    ( ( (const uint8_t *)a )[(int)(i) / (int)(NBBY)]& (1 << ( (i) % NBBY ) ) )
+#define  isclr(a, i)    ( ( ( (const uint8_t *)a )[(int)(i) / (int)(NBBY)]& (1 << ( (i) % NBBY ) ) ) == 0 )
+
+#define  CEIL(x, y)     ( ( (x) + ( (y) - 1 ) ) / (y) )
+#define  ROUNDUP(x, y)      ( ( ( (x) + ( (y) - 1 ) ) / (y) ) * (y) )
+#define  ROUNDDN(p, align)  ( (p)& ~( (align) - 1 ) )
+
+/**
+ * Get the offset (in bytes) of a member within a structure
+ */
+#define OFFSET(type, member)                          ( (uint32_t)&( (type *)0 )->member )
+
+/**
+ * determine size (number of elements) in an array
+ */
+#define ARRAY_SIZE(a)                                 (sizeof(a) / sizeof(a[0]) )
+
+#ifdef PROTO_MSGBUF
+uint32_t whd_dmapool_init(uint32_t memory_size);
+void* whd_dmapool_alloc( int size);
 #endif
 
 /** Searches for a specific WiFi Information Element in a byte array
@@ -132,7 +161,7 @@ void whd_ioctl_info_to_string(uint32_t cmd, char *ioctl_str, uint16_t ioctl_str_
  *
  * @param[in] cmd  The event value in numeric form.
  * @param[in] flag  The status value in numeric form.
- * @param[in] reason  The reason value in numeric form.
+ * @param[in] reason  The reson value in numeric form.
  * @param[out] ioctl_str  The string representation of event, status and reason.
  * @param[out] ioctl_str_len  The str_len of ioctl_str.
  *
@@ -175,6 +204,56 @@ bool whd_str_to_ip(const char *ip4addr, size_t len, void *dest);
  * @return
  */
 uint8_t whd_ip4_to_string(const void *ip4addr, char *p);
+
+
+/*!
+ ******************************************************************************
+ * The wrapper function for memory allocation.
+ * It allocates the requested memory and returns a pointer to it.
+ * In default implementation it uses The C library function malloc().
+ *
+ * Use macro WHD_USE_CUSTOM_MALLOC_IMPL (-D) for custom whd_mem_malloc/
+ * whd_mem_calloc/whd_mem_free inplemetation.
+ *
+ * @param[in] size     :  This is the size of the memory block, in bytes.
+ *
+ * @return
+ *  This function returns a pointer to the allocated memory, or NULL if the
+ *  request fails.
+ */
+void *whd_mem_malloc(size_t size);
+
+/*!
+ ******************************************************************************
+ * The wrapper function for memory allocation.
+ * It allocates the requested memory and sets allocated memory to zero.
+ * In default implementation it uses The C library function calloc().
+ *
+ * Use macro WHD_USE_CUSTOM_MALLOC_IMPL (-D) for custom whd_mem_malloc/
+ * whd_mem_calloc/whd_mem_free inplemetation.
+ *
+ * @param[in] nitems   :  This is the number of elements to be allocated.
+ * @param[in] size     :  This is the size of elements.
+ *
+ * @return
+ *  This function returns a pointer to the allocated memory, or NULL if the
+ *  request fails.
+ */
+void *whd_mem_calloc(size_t nitems, size_t size);
+
+/*!
+ ******************************************************************************
+ * The wrapper function for free allocated memory.
+ * In default implementation it uses The C library function free().
+ *
+ * Use macro WHD_USE_CUSTOM_MALLOC_IMPL (-D) for custom whd_mem_malloc/
+ * whd_mem_calloc/whd_mem_free inplemetation.
+ *
+ * @param[in] ptr     :  pointer to a memory block previously allocated
+ *                       with whd_mem_malloc, whd_mem_calloc
+ * @return
+ */
+void whd_mem_free(void *ptr);
 
 #ifdef __cplusplus
 } /* extern "C" */
