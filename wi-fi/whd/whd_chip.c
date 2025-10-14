@@ -728,8 +728,8 @@ whd_result_t whd_ioctl_print(whd_driver_t whd_driver)
                 data++;
             }
 
-            if (strlen( (char *)data ) <= WHD_IOVAR_STRING_SIZE)
-                strncpy(iovar, (char *)data, strlen( (char *)data ) );
+			if (strlen((char *)data) <= WHD_IOVAR_STRING_SIZE)
+				strcpy(iovar, (char *)data);
 
             iovar_string_size = strlen( (const char *)data );
             iovar[iovar_string_size] = '\0';

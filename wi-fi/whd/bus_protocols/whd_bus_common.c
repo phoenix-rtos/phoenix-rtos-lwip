@@ -157,9 +157,9 @@ void whd_delayed_bus_release_schedule_update(whd_driver_t whd_driver, whd_bool_t
 
 uint32_t whd_bus_handle_delayed_release(whd_driver_t whd_driver)
 {
-    uint32_t time_until_release = 0;
-    uint32_t current_time = 0;
-    struct whd_bus_common_info *bus_common = whd_driver->bus_common_info;
+	uint32_t time_until_release = 0;
+	cy_time_t current_time = 0;
+	struct whd_bus_common_info *bus_common = whd_driver->bus_common_info;
 
     if (bus_common->delayed_bus_release_timeout_ms_request != WHD_BUS_WLAN_ALLOW_SLEEP_INVALID_MS)
     {
@@ -180,17 +180,15 @@ uint32_t whd_bus_handle_delayed_release(whd_driver_t whd_driver)
     {
         bus_common->delayed_bus_release_scheduled = WHD_FALSE;
 
-        if (bus_common->delayed_bus_release_timeout_ms != 0)
-        {
-            cy_rtos_get_time(&current_time);
-            bus_common->delayed_bus_release_deadline = current_time +
-                                                       bus_common->delayed_bus_release_timeout_ms;
-            time_until_release = bus_common->delayed_bus_release_timeout_ms;
-        }
-    }
-    else if (bus_common->delayed_bus_release_deadline != 0)
-    {
-        whd_time_t now;
+		if (bus_common->delayed_bus_release_timeout_ms != 0) {
+			cy_rtos_get_time(&current_time);
+			bus_common->delayed_bus_release_deadline = current_time +
+					bus_common->delayed_bus_release_timeout_ms;
+			time_until_release = bus_common->delayed_bus_release_timeout_ms;
+		}
+	}
+	else if (bus_common->delayed_bus_release_deadline != 0) {
+		cy_time_t now;
 
         cy_rtos_get_time(&now);
 

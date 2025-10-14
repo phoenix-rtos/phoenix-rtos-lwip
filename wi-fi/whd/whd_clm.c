@@ -150,31 +150,27 @@ whd_result_t whd_process_clm_data(whd_interface_t ifp)
             whd_buffer_t response;
             void *data;
 
-            WPRINT_WHD_DEBUG( ("clmload (%" PRIu32 " byte file) failed with return %" PRIu32 "; ", clm_blob_size,
-                               ret) );
-            data = (int *)whd_proto_get_iovar_buffer(whd_driver, &buffer, 4, IOVAR_STR_CLMLOAD_STATUS);
-            CHECK_IOCTL_BUFFER(data);
-            ret_clmload_status = whd_proto_get_iovar(ifp, buffer, &response);
-            if (ret_clmload_status != WHD_SUCCESS)
-            {
-                WPRINT_WHD_DEBUG( ("clmload_status failed with return %lu\n", ret_clmload_status) );
-            }
-            else
-            {
-                uint8_t *clmload_status = (uint8_t *)whd_buffer_get_current_piece_data_pointer(whd_driver, response);
-                if (clmload_status != NULL)
-                {
-                    WPRINT_WHD_DEBUG( ("clmload_status is %d\n", *clmload_status) );
-                    CHECK_RETURN(whd_buffer_release(whd_driver, response, WHD_NETWORK_RX) );
-                }
-            }
-        }
-    }
-    else
-    {
-        WPRINT_WHD_ERROR( ("Memory allocation failure, %s failed at %d \n", __func__, __LINE__) );
-        ret = WHD_MALLOC_FAILURE;
-    }
+			WPRINT_WHD_DEBUG(("clmload (%" PRIu32 " byte file) failed with return %" PRIu32 "; ", clm_blob_size,
+					ret));
+			data = (int *)whd_proto_get_iovar_buffer(whd_driver, &buffer, 4, IOVAR_STR_CLMLOAD_STATUS);
+			CHECK_IOCTL_BUFFER(data);
+			ret_clmload_status = whd_proto_get_iovar(ifp, buffer, &response);
+			if (ret_clmload_status != WHD_SUCCESS) {
+				WPRINT_WHD_DEBUG(("clmload_status failed with return %u\n", ret_clmload_status));
+			}
+			else {
+				uint8_t *clmload_status = (uint8_t *)whd_buffer_get_current_piece_data_pointer(whd_driver, response);
+				if (clmload_status != NULL) {
+					WPRINT_WHD_DEBUG(("clmload_status is %d\n", *clmload_status));
+					CHECK_RETURN(whd_buffer_release(whd_driver, response, WHD_NETWORK_RX));
+				}
+			}
+		}
+	}
+	else {
+		WPRINT_WHD_ERROR(("Memory allocation failure, %s failed at %d \n", __func__, __LINE__));
+		ret = WHD_MALLOC_FAILURE;
+	}
 
     return ret;
 }
