@@ -29,7 +29,7 @@
  * including Cypress's product in a High Risk Product, the manufacturer
  * of such system or application assumes all risk of such use and in doing
  * so agrees to indemnify Cypress against all liability.
-*/
+ */
 
 /** @file
  *  Implementation of a simple DHCP server
@@ -556,9 +556,9 @@ static void cy_dhcp_thread_func(cy_thread_arg_t thread_input)
 static const uint8_t *find_option(const dhcp_header_t *request, uint8_t option_num)
 {
 	const uint8_t *option_ptr = request->options;
-	while ((option_ptr[0] != DHCP_END_OPTION_CODE) &&                      /* Check for end-of-options flag */
-		(option_ptr[0] != option_num) &&                                   /* Check for matching option number */
-		(option_ptr < ((const uint8_t *)request) + sizeof(dhcp_header_t))) /* Check for buffer overrun */
+	while ((option_ptr[0] != DHCP_END_OPTION_CODE) &&                          /* Check for end-of-options flag */
+			(option_ptr[0] != option_num) &&                                   /* Check for matching option number */
+			(option_ptr < ((const uint8_t *)request) + sizeof(dhcp_header_t))) /* Check for buffer overrun */
 	{
 		option_ptr += option_ptr[1] + 2;
 	}
@@ -851,9 +851,9 @@ static cy_rslt_t cy_udp_send(cy_lwip_udp_socket_t *socket, const cy_lwip_ip_addr
 	cy_network_activity_notify(CY_NETWORK_ACTIVITY_TX);
 
 	/* Return back to disconnected state
-     * Note: We are ignoring the return for this as we MUST return CY_RSLT_SUCCESS otherwise the caller may attempt to
-     * free the packet a second time.
-     */
+	 * Note: We are ignoring the return for this as we MUST return CY_RSLT_SUCCESS otherwise the caller may attempt to
+	 * free the packet a second time.
+	 */
 	netconn_disconnect(socket->conn_handler);
 	return CY_RSLT_SUCCESS;
 }
@@ -915,4 +915,4 @@ static cy_rslt_t internal_packet_create(cy_lwip_packet_t **packet, uint16_t cont
 	*available_space = 0;
 	return CY_RSLT_LWIP_DHCP_TIMEOUT;
 }
-#endif  //LWIP_IPV4
+#endif  // LWIP_IPV4

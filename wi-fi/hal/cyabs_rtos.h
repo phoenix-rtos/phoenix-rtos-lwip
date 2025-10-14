@@ -1,4 +1,4 @@
-/***********************************************************************************************/ /**
+/****************************************************************************************************
  * \file cyabs_rtos.h
  *
  * \brief
@@ -166,8 +166,8 @@ typedef struct {
  *         CY_RTOS_GENERAL_ERROR]
  */
 cy_rslt_t cy_rtos_create_thread(cy_thread_t *thread, cy_thread_entry_fn_t entry_function,
-	const char *name, void *stack, uint32_t stack_size,
-	cy_thread_priority_t priority, cy_thread_arg_t arg);
+		const char *name, void *stack, uint32_t stack_size,
+		cy_thread_priority_t priority, cy_thread_arg_t arg);
 
 /** Exit the current thread.
  *

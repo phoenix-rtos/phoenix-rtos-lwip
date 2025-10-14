@@ -51,11 +51,11 @@ extern "C" {
  * \par Result Format
  *
    \verbatim
-              Module base             Type    Library specific error code
-      +------------------------------+------+------------------------------+
-      |CY_RSLT_MODULE_MIDDLEWARE_BASE| 0x2  |           Error Code         |
-      +------------------------------+------+------------------------------+
-                14-bits               2-bits            16-bits
+			  Module base             Type    Library specific error code
+	  +------------------------------+------+------------------------------+
+	  |CY_RSLT_MODULE_MIDDLEWARE_BASE| 0x2  |           Error Code         |
+	  +------------------------------+------+------------------------------+
+				14-bits               2-bits            16-bits
 
    Refer to the macro section of this document for library specific error codes.
    \endverbatim
@@ -146,7 +146,7 @@ extern "C" {
  * @}
  */
 
-/** 
+/**
  * @defgroup tcpip_mw_defines TCP/IP socket results/error codes
  * @ingroup group_utils_enums
  * @{
@@ -189,7 +189,7 @@ extern "C" {
  * @}
  */
 
-/** 
+/**
  * @defgroup tls_mw_defines TLS results/error codes
  * @ingroup group_utils_enums
  * @{

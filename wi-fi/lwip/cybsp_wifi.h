@@ -1,4 +1,4 @@
-/***********************************************************************************************/ /**
+/****************************************************************************************************
  * \file cybsp_wifi.h
  *
  * \brief
@@ -85,10 +85,10 @@ extern "C" {
  * @return CY_RSLT_SUCCESS for successful initialization or error if initialization failed.
  */
 cy_rslt_t cybsp_wifi_init_primary_extended(whd_interface_t *interface,
-	whd_init_config_t *init_config,
-	whd_resource_source_t *resource_if,
-	whd_buffer_funcs_t *buffer_if,
-	whd_netif_funcs_t *netif_if);
+		whd_init_config_t *init_config,
+		whd_resource_source_t *resource_if,
+		whd_buffer_funcs_t *buffer_if,
+		whd_netif_funcs_t *netif_if);
 
 /**
  * Initializes the primary interface for the WiFi driver on the board using the default

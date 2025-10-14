@@ -23,13 +23,12 @@
 #define INCLUDED_WHD_DEBUG_H
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 /******************************************************
-*                      Macros
-******************************************************/
+ *                      Macros
+ ******************************************************/
 #define WPRINT_ENABLE_WHD_ERROR
 /* #define WPRINT_ENABLE_WHD_INFO */
 /* #define WPRINT_ENABLE_WHD_DEBUG */
@@ -37,30 +36,56 @@ extern "C"
 #define WHD_ENABLE_STATS
 /*#define WHD_LOGGING_BUFFER_ENABLE*/
 
-#if defined (__GNUC__)
-#define WHD_TRIGGER_BREAKPOINT( ) do { __asm__ ("bkpt"); } while (0)
+#if defined(__GNUC__)
+#define WHD_TRIGGER_BREAKPOINT() \
+	do { \
+		__asm__("bkpt"); \
+	} while (0)
 
-#elif defined (__IAR_SYSTEMS_ICC__)
-#define WHD_TRIGGER_BREAKPOINT( ) do { __asm("bkpt 0"); } while (0)
+#elif defined(__IAR_SYSTEMS_ICC__)
+#define WHD_TRIGGER_BREAKPOINT() \
+	do { \
+		__asm("bkpt 0"); \
+	} while (0)
 
 #else
-#define WHD_TRIGGER_BREAKPOINT( )
+#define WHD_TRIGGER_BREAKPOINT()
 #endif
 
 #ifdef WPRINT_ENABLE_ERROR
-#define WPRINT_ERROR(args)                      do { WPRINT_MACRO(args); } while (0)
-#define whd_assert(error_string, assertion) do { if (!(assertion) ){ WHD_TRIGGER_BREAKPOINT(); } } while (0)
+#define WPRINT_ERROR(args) \
+	do { \
+		WPRINT_MACRO(args); \
+	} while (0)
+#define whd_assert(error_string, assertion) \
+	do { \
+		if (!(assertion)) { \
+			WHD_TRIGGER_BREAKPOINT(); \
+		} \
+	} while (0)
 #define whd_minor_assert(error_string, \
-                         assertion)   do { if (!(assertion) ) WPRINT_MACRO( (error_string) ); } while (0)
+		assertion) \
+	do { \
+		if (!(assertion)) \
+			WPRINT_MACRO((error_string)); \
+	} while (0)
 #else
 #define whd_assert(error_string, \
-                   assertion)         do { if (!(assertion) ){ WPRINT_MACRO( (error_string) ); } } while (0)
-#define whd_minor_assert(error_string, assertion)   do { (void)(assertion); } while (0)
+		assertion) \
+	do { \
+		if (!(assertion)) { \
+			WPRINT_MACRO((error_string)); \
+		} \
+	} while (0)
+#define whd_minor_assert(error_string, assertion) \
+	do { \
+		(void)(assertion); \
+	} while (0)
 #endif
 
 /******************************************************
-*             Print declarations
-******************************************************/
+ *             Print declarations
+ ******************************************************/
 /* IF MFG TEST is enabled then disable all LOGGING VIA UART as
  + * this interrupts communication between WL TOOL and MFG Test APP
  + * via STDIO UART causing Wrong Message Exchange and failure.
@@ -69,9 +94,15 @@ extern "C"
 #define WPRINT_MACRO(args)
 #else
 #if defined(WHD_LOGGING_BUFFER_ENABLE)
-#define WPRINT_MACRO(args) do { whd_buffer_printf args; } while (0 == 1)
+#define WPRINT_MACRO(args) \
+	do { \
+		whd_buffer_printf args; \
+	} while (0 == 1)
 #else
-#define WPRINT_MACRO(args) do { printf args;} while (0 == 1)
+#define WPRINT_MACRO(args) \
+	do { \
+		printf args; \
+	} while (0 == 1)
 #endif
 #endif
 
@@ -102,12 +133,18 @@ extern "C"
 #endif
 
 #define WHD_STATS_INCREMENT_VARIABLE(whd_driver, var) \
-    do { whd_driver->whd_stats.var++; } while (0)
+	do { \
+		whd_driver->whd_stats.var++; \
+	} while (0)
 
 #define WHD_STATS_CONDITIONAL_INCREMENT_VARIABLE(whd_driver, condition, var) \
-    do { if (condition){ whd_driver->whd_stats.var++; }} while (0)
+	do { \
+		if (condition) { \
+			whd_driver->whd_stats.var++; \
+		} \
+	} while (0)
 
-#if (defined(__GNUC__) && (__GNUC__ >= 6) )
+#if (defined(__GNUC__) && (__GNUC__ >= 6))
 #define __FUNCTION__ __func__
 #endif
 
@@ -122,20 +159,20 @@ int whd_buffer_printf(const char *format, ...);
 
 typedef struct
 {
-    uint32_t buffer_write;
-    uint32_t buffer_read;
-    char buffer[LOGGING_BUFFER_SIZE + 1];
-    whd_bool_t roll_over;
-    whd_bool_t over_write;
+	uint32_t buffer_write;
+	uint32_t buffer_read;
+	char buffer[LOGGING_BUFFER_SIZE + 1];
+	whd_bool_t roll_over;
+	whd_bool_t over_write;
 } whd_logging_t;
 #else
 #define whd_print_logbuffer()
 #endif /* WHD_LOGGING_BUFFER_ENABLE */
 
 #ifdef WHD_IOCTL_LOG_ENABLE
-#define WHD_IOCTL_LOG_ADD(x, y, z) whd_ioctl_log_add(x, y, z)
+#define WHD_IOCTL_LOG_ADD(x, y, z)          whd_ioctl_log_add(x, y, z)
 #define WHD_IOCTL_LOG_ADD_EVENT(w, x, y, z) whd_ioctl_log_add_event(w, x, y, z)
-#define WHD_IOCTL_PRINT(x) whd_ioctl_print(x)
+#define WHD_IOCTL_PRINT(x)                  whd_ioctl_print(x)
 #else
 #define WHD_IOCTL_LOG_ADD(x, y, z)
 #define WHD_IOCTL_LOG_ADD_EVENT(w, x, y, z)

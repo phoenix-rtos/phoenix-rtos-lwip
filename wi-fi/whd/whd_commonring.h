@@ -21,71 +21,69 @@
 #include "cyabs_rtos.h"
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 #ifndef MIN
-#define MIN(x, y) ( (x) < (y) ? (x) : (y) )
+#define MIN(x, y) ((x) < (y) ? (x) : (y))
 #endif /* MIN */
 
 #ifndef MAX
-#define MAX(x, y) ( (x) > (y) ? (x) : (y) )
+#define MAX(x, y) ((x) > (y) ? (x) : (y))
 #endif /* MAX */
 
-struct whd_commonring
-{
-    uint16_t r_ptr;
-    uint16_t w_ptr;
-    uint16_t f_ptr;
-    uint16_t depth;
-    uint16_t item_len;
+struct whd_commonring {
+	uint16_t r_ptr;
+	uint16_t w_ptr;
+	uint16_t f_ptr;
+	uint16_t depth;
+	uint16_t item_len;
 
-    void *buf_addr;
+	void *buf_addr;
 
-    int (*cr_ring_bell)(void *ctx);
-    int (*cr_update_rptr)(void *ctx);
-    int (*cr_update_wptr)(void *ctx);
-    int (*cr_write_rptr)(void *ctx);
-    int (*cr_write_wptr)(void *ctx);
+	int (*cr_ring_bell)(void *ctx);
+	int (*cr_update_rptr)(void *ctx);
+	int (*cr_update_wptr)(void *ctx);
+	int (*cr_write_rptr)(void *ctx);
+	int (*cr_write_wptr)(void *ctx);
 
-    void *cr_ctx;
+	void *cr_ctx;
 
-    cy_semaphore_t lock;
-    //unsigned long flags;
-    uint8_t inited;
-    uint8_t was_full;
+	cy_semaphore_t lock;
+	// unsigned long flags;
+	uint8_t inited;
+	uint8_t was_full;
 
-    //atomic_t outstanding_tx;
+	// atomic_t outstanding_tx;
 };
 
 void whd_commonring_register_cb(struct whd_commonring *commonring,
-                                int (*cr_ring_bell)(void *ctx),
-                                int (*cr_update_rptr)(void *ctx),
-                                int (*cr_update_wptr)(void *ctx),
-                                int (*cr_write_rptr)(void *ctx),
-                                int (*cr_write_wptr)(void *ctx), void *ctx);
+		int (*cr_ring_bell)(void *ctx),
+		int (*cr_update_rptr)(void *ctx),
+		int (*cr_update_wptr)(void *ctx),
+		int (*cr_write_rptr)(void *ctx),
+		int (*cr_write_wptr)(void *ctx), void *ctx);
 whd_result_t whd_commonring_config(struct whd_commonring *commonring, uint16_t depth,
-                           uint16_t item_len, void *buf_addr);
+		uint16_t item_len, void *buf_addr);
 whd_result_t whd_commonring_lock(struct whd_commonring *commonring);
 void whd_commonring_unlock(struct whd_commonring *commonring);
 bool whd_commonring_write_available(struct whd_commonring *commonring);
 void *whd_commonring_reserve_for_write(struct whd_commonring *commonring);
 void *whd_commonring_reserve_for_write_multiple(struct whd_commonring *commonring,
-                                                uint16_t n_items, uint16_t *alloced);
+		uint16_t n_items, uint16_t *alloced);
 int whd_commonring_write_complete(struct whd_commonring *commonring);
 void whd_commonring_write_cancel(struct whd_commonring *commonring,
-                                 uint16_t n_items);
+		uint16_t n_items);
 void *whd_commonring_get_read_ptr(struct whd_commonring *commonring,
-                                  uint16_t *n_items);
+		uint16_t *n_items);
 int whd_commonring_read_complete(struct whd_commonring *commonring,
-                                 uint16_t n_items);
+		uint16_t n_items);
 
-#define whd_commonring_n_items(commonring) (commonring->depth)
+#define whd_commonring_n_items(commonring)  (commonring->depth)
 #define whd_commonring_len_item(commonring) (commonring->item_len)
 
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
 
-#endif    /* INCLUDED_WHD_COMMONRING_H */
+#endif /* INCLUDED_WHD_COMMONRING_H */

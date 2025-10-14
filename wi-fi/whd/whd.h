@@ -25,8 +25,7 @@
 #define INCLUDED_WHD_H
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 /**
@@ -74,12 +73,11 @@ typedef struct whd_bus_funcs whd_spi_funcs_t;
 /**
  * Structure for storing WHD init configurations
  */
-typedef struct whd_init_config
-{
-    void *thread_stack_start;   /**< Pointer to the WHD thread stack  */
-    uint32_t thread_stack_size; /**< Size of the WHD thread stack  */
-    uint32_t thread_priority;   /**< Priority to be set to WHD Thread */
-    whd_country_code_t country; /**< Variable to strore country code information */
+typedef struct whd_init_config {
+	void *thread_stack_start;   /**< Pointer to the WHD thread stack  */
+	uint32_t thread_stack_size; /**< Size of the WHD thread stack  */
+	uint32_t thread_priority;   /**< Priority to be set to WHD Thread */
+	whd_country_code_t country; /**< Variable to strore country code information */
 } whd_init_config_t;
 
 #ifdef __cplusplus

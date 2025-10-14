@@ -1,4 +1,4 @@
-/***********************************************************************************************/ /**
+/****************************************************************************************************
  * \file cy_network_buffer_lwip.c
  *
  * \brief
@@ -42,8 +42,8 @@ whd_result_t cy_buffer_pool_init(void *tx_packet_pool, void *rx_packet_pool)
 	CY_UNUSED_PARAMETER(rx_packet_pool);
 
 	/*
-     * Not used for LwIP.
-     */
+	 * Not used for LwIP.
+	 */
 
 	return WHD_SUCCESS;
 }
@@ -53,7 +53,7 @@ whd_result_t cy_buffer_pool_init(void *tx_packet_pool, void *rx_packet_pool)
 // cy_host_buffer_get
 //--------------------------------------------------------------------------------------------------
 whd_result_t cy_host_buffer_get(whd_buffer_t *buffer, whd_buffer_dir_t direction,
-	unsigned short size, unsigned long timeout_ms)
+		unsigned short size, unsigned long timeout_ms)
 {
 	struct pbuf *p = NULL;
 	uint32_t counter = 0;
@@ -130,8 +130,8 @@ whd_result_t cy_buffer_set_size(whd_buffer_t buffer, unsigned short size)
 	struct pbuf *pbuffer = (struct pbuf *)buffer;
 
 	if (size > ((uint16_t)WHD_LINK_MTU +
-				   LWIP_MEM_ALIGN_SIZE(LWIP_MEM_ALIGN_SIZE(sizeof(struct pbuf))) +
-				   LWIP_MEM_ALIGN_SIZE(size))) {
+					   LWIP_MEM_ALIGN_SIZE(LWIP_MEM_ALIGN_SIZE(sizeof(struct pbuf))) +
+					   LWIP_MEM_ALIGN_SIZE(size))) {
 		return WHD_BUFFER_SIZE_SET_ERROR;
 	}
 

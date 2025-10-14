@@ -35,29 +35,29 @@
 extern "C" {
 #endif
 
-#define  NBBY  8
-#define  setbit(a, i)   ( ( (uint8_t *)a )[(int)(i) / (int)(NBBY)] |= (uint8_t)(1 << ( (i) % NBBY ) ) )
-#define  clrbit(a, i)   ( ( (uint8_t *)a )[(int)(i) / (int)(NBBY)] &= (uint8_t) ~(1 << ( (i) % NBBY ) ) )
-#define  isset(a, i)    ( ( (const uint8_t *)a )[(int)(i) / (int)(NBBY)]& (1 << ( (i) % NBBY ) ) )
-#define  isclr(a, i)    ( ( ( (const uint8_t *)a )[(int)(i) / (int)(NBBY)]& (1 << ( (i) % NBBY ) ) ) == 0 )
+#define NBBY         8
+#define setbit(a, i) (((uint8_t *)a)[(int)(i) / (int)(NBBY)] |= (uint8_t)(1 << ((i) % NBBY)))
+#define clrbit(a, i) (((uint8_t *)a)[(int)(i) / (int)(NBBY)] &= (uint8_t)~(1 << ((i) % NBBY)))
+#define isset(a, i)  (((const uint8_t *)a)[(int)(i) / (int)(NBBY)] & (1 << ((i) % NBBY)))
+#define isclr(a, i)  ((((const uint8_t *)a)[(int)(i) / (int)(NBBY)] & (1 << ((i) % NBBY))) == 0)
 
-#define  CEIL(x, y)     ( ( (x) + ( (y) - 1 ) ) / (y) )
-#define  ROUNDUP(x, y)      ( ( ( (x) + ( (y) - 1 ) ) / (y) ) * (y) )
-#define  ROUNDDN(p, align)  ( (p)& ~( (align) - 1 ) )
+#define CEIL(x, y)        (((x) + ((y) - 1)) / (y))
+#define ROUNDUP(x, y)     ((((x) + ((y) - 1)) / (y)) * (y))
+#define ROUNDDN(p, align) ((p) & ~((align) - 1))
 
 /**
  * Get the offset (in bytes) of a member within a structure
  */
-#define OFFSET(type, member)                          ( (uint32_t)&( (type *)0 )->member )
+#define OFFSET(type, member) ((uint32_t)&((type *)0)->member)
 
 /**
  * determine size (number of elements) in an array
  */
-#define ARRAY_SIZE(a)                                 (sizeof(a) / sizeof(a[0]) )
+#define ARRAY_SIZE(a) (sizeof(a) / sizeof(a[0]))
 
 #ifdef PROTO_MSGBUF
 uint32_t whd_dmapool_init(uint32_t memory_size);
-void* whd_dmapool_alloc( int size);
+void *whd_dmapool_alloc(int size);
 #endif
 
 /** Searches for a specific WiFi Information Element in a byte array
@@ -114,8 +114,8 @@ whd_bool_t whd_is_wpa_ie(vendor_specific_ie_header_t *wpaie, whd_tlv8_header_t *
 whd_tlv8_header_t *whd_parse_dot11_tlvs(const whd_tlv8_header_t *tlv_buf, uint32_t buflen, dot11_ie_id_t key);
 
 /******************************************************
-*             Debug helper functionality
-******************************************************/
+ *             Debug helper functionality
+ ******************************************************/
 #ifdef WPRINT_ENABLE_WHD_DEBUG
 const char *whd_event_to_string(whd_event_num_t var);
 char *whd_ssid_to_string(uint8_t *value, uint8_t length, char *ssid_buf, uint8_t ssid_buf_len);

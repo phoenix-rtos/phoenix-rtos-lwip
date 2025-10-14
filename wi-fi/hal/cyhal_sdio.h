@@ -1,29 +1,29 @@
-/***************************************************************************/ /**
-* \file cyhal_sdio.h
-*
-* \brief
-* Provides a high level interface for interacting with the Cypress SDIO interface.
-* This interface abstracts out the chip specific details. If any chip specific
-* functionality is necessary, or performance is critical the low level functions
-* can be used directly.
-*
-********************************************************************************
-* \copyright
-* Copyright 2018-2019 Cypress Semiconductor Corporation
-* SPDX-License-Identifier: Apache-2.0
-*
-* Licensed under the Apache License, Version 2.0 (the "License");
-* you may not use this file except in compliance with the License.
-* You may obtain a copy of the License at
-*
-*     http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*******************************************************************************/
+/********************************************************************************
+ * \file cyhal_sdio.h
+ *
+ * \brief
+ * Provides a high level interface for interacting with the Cypress SDIO interface.
+ * This interface abstracts out the chip specific details. If any chip specific
+ * functionality is necessary, or performance is critical the low level functions
+ * can be used directly.
+ *
+ ********************************************************************************
+ * \copyright
+ * Copyright 2018-2019 Cypress Semiconductor Corporation
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *******************************************************************************/
 
 /**
  * \addtogroup group_hal_sdio SDIO (Secure Digital Input Output)
@@ -74,22 +74,22 @@ extern "C" {
 
 /** Incorrect parameter value define */
 #define CYHAL_SDIO_RSLT_ERR_BAD_PARAM CY_RSLT_CREATE(CY_RSLT_TYPE_ERROR, \
-	CYHAL_RSLT_MODULE_SDIO, \
-	CYHAL_SDIO_BAD_ARGUMENT)
+		CYHAL_RSLT_MODULE_SDIO, \
+		CYHAL_SDIO_BAD_ARGUMENT)
 
 /** Clock initialization error define */
 #define CYHAL_SDIO_RSLT_ERR_CLOCK CY_RSLT_CREATE(CY_RSLT_TYPE_ERROR, \
-	CYHAL_RSLT_MODULE_SDIO, \
-	CYHAL_SDIO_CLOCK_ERROR)
+		CYHAL_RSLT_MODULE_SDIO, \
+		CYHAL_SDIO_CLOCK_ERROR)
 
 /** Semaphore not initiated error define */
 #define CYHAL_SDIO_RSLT_ERR_SEMA_NOT_INITED CY_RSLT_CREATE(CY_RSLT_TYPE_ERROR, \
-	CYHAL_RSLT_MODULE_SDIO, \
-	CYHAL_SDIO_SEMA_NOT_INITED)
+		CYHAL_RSLT_MODULE_SDIO, \
+		CYHAL_SDIO_SEMA_NOT_INITED)
 
 /** Error define based on SDIO lower function return value */
 #define CYHAL_SDIO_RSLT_ERR_FUNC_RET(retVal) CY_RSLT_CREATE(CY_RSLT_TYPE_ERROR, \
-	CYHAL_RSLT_MODULE_SDIO, (retVal))
+		CYHAL_RSLT_MODULE_SDIO, (retVal))
 
 /** \} group_hal_sdio_macros */
 
@@ -203,7 +203,7 @@ cy_rslt_t cyhal_sdio_configure(cyhal_sdio_t *obj, const cyhal_sdio_cfg_t *config
  * @return The status of the configure request
  */
 cy_rslt_t cyhal_sdio_send_cmd(const cyhal_sdio_t *obj, cyhal_transfer_t direction, cyhal_sdio_command_t command,
-	uint32_t argument, uint32_t *response);
+		uint32_t argument, uint32_t *response);
 
 /** Performs a bulk data transfer (CMD=53) to the SDIO block.
  *
@@ -218,7 +218,7 @@ cy_rslt_t cyhal_sdio_send_cmd(const cyhal_sdio_t *obj, cyhal_transfer_t directio
  * @return The status of the configure request
  */
 cy_rslt_t cyhal_sdio_bulk_transfer(cyhal_sdio_t *obj, cyhal_transfer_t direction, uint32_t argument,
-	uint32_t *data, uint16_t length, uint32_t *response);
+		uint32_t *data, uint16_t length, uint32_t *response);
 
 /** Performs a bulk asynchronus data transfer (CMD=53) to the SDIO block.
  *
@@ -230,7 +230,7 @@ cy_rslt_t cyhal_sdio_bulk_transfer(cyhal_sdio_t *obj, cyhal_transfer_t direction
  * @return The status of the configure request
  */
 cy_rslt_t cyhal_sdio_transfer_async(cyhal_sdio_t *obj, cyhal_transfer_t direction, uint32_t argument,
-	const uint32_t *data, uint16_t length);
+		const uint32_t *data, uint16_t length);
 
 /** Checks if the specified SDIO is in use
  *

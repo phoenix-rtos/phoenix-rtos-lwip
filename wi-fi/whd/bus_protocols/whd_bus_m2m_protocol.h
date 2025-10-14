@@ -26,16 +26,18 @@ extern "C" {
 #endif
 
 /******************************************************
-*             Function declarations
-******************************************************/
+ *             Function declarations
+ ******************************************************/
 extern void whd_delayed_bus_release_schedule_update(whd_driver_t whd_driver, whd_bool_t is_scheduled);
 #define DELAYED_BUS_RELEASE_SCHEDULE(whd_driver, schedule) \
-    do {  whd_delayed_bus_release_schedule_update(whd_driver, schedule); } while (0)
+	do { \
+		whd_delayed_bus_release_schedule_update(whd_driver, schedule); \
+	} while (0)
 
 
 /******************************************************
-*             Global variables
-******************************************************/
+ *             Global variables
+ ******************************************************/
 
 
 #ifdef __cplusplus

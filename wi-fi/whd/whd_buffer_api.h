@@ -25,21 +25,20 @@
 #include "whd_int.h"
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 /******************************************************
-*                      Macros
-******************************************************/
+ *                      Macros
+ ******************************************************/
 
 /******************************************************
-*             Structures
-******************************************************/
+ *             Structures
+ ******************************************************/
 
 /******************************************************
-*             Function prototypes
-******************************************************/
+ *             Function prototypes
+ ******************************************************/
 /** Allocates a packet buffer
  *
  *  Implemented in the port layer interface which is specific to the
@@ -60,7 +59,7 @@ extern "C"
  *
  */
 whd_result_t whd_host_buffer_get(whd_driver_t whd_driver, whd_buffer_t *buffer, whd_buffer_dir_t direction,
-                                 uint16_t size, uint32_t timeout_ms);
+		uint16_t size, uint32_t timeout_ms);
 
 /** Releases a packet buffer
  *

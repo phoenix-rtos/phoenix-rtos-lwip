@@ -1,4 +1,4 @@
-/***********************************************************************************************/ /**
+/****************************************************************************************************
  * \file cy_utils.h
  *
  * \brief
@@ -72,16 +72,16 @@ static inline void CY_HALT(void)
 
 
 /*******************************************************************************
-*  Data manipulation defines
-*******************************************************************************/
+ *  Data manipulation defines
+ *******************************************************************************/
 
 /** Get the lower 8 bits of a 16-bit value. */
-#define CY_LO8(x) ((uint8_t)((x)&0xFFU))
+#define CY_LO8(x) ((uint8_t)((x) & 0xFFU))
 /** Get the upper 8 bits of a 16-bit value. */
 #define CY_HI8(x) ((uint8_t)((uint16_t)(x) >> 8U))
 
 /** Get the lower 16 bits of a 32-bit value. */
-#define CY_LO16(x) ((uint16_t)((x)&0xFFFFU))
+#define CY_LO16(x) ((uint16_t)((x) & 0xFFFFU))
 /** Get the upper 16 bits of a 32-bit value. */
 #define CY_HI16(x) ((uint16_t)((uint32_t)(x) >> 16U))
 
@@ -90,17 +90,17 @@ static inline void CY_HALT(void)
 
 /** Swap the byte ordering of a 32-bit value */
 #define CY_SWAP_ENDIAN32(x) \
-	((uint32_t)((((x) >> 24U) & 0x000000FFU) | (((x)&0x00FF0000U) >> 8U) | \
-		(((x)&0x0000FF00U) << 8U) | ((x) << 24U)))
+	((uint32_t)((((x) >> 24U) & 0x000000FFU) | (((x) & 0x00FF0000U) >> 8U) | \
+			(((x) & 0x0000FF00U) << 8U) | ((x) << 24U)))
 
 /** Swap the byte ordering of a 64-bit value */
 #define CY_SWAP_ENDIAN64(x) ((uint64_t)(((uint64_t)CY_SWAP_ENDIAN32((uint32_t)(x)) << 32U) | \
-	CY_SWAP_ENDIAN32((uint32_t)((x) >> 32U))))
+		CY_SWAP_ENDIAN32((uint32_t)((x) >> 32U))))
 
 
 /*******************************************************************************
-*   Memory model definitions
-*******************************************************************************/
+ *   Memory model definitions
+ *******************************************************************************/
 #if defined(__ARMCC_VERSION)
 /** To create cross compiler compatible code, use the CY_NOINIT, CY_SECTION, CY_UNUSED, CY_ALIGN
  * attributes at the first place of declaration/definition.
@@ -229,8 +229,8 @@ static inline void CY_HALT(void)
  *
  **************************************************************************************************/
 #define CY_GET_REG24(addr) (((uint32_t)(*((const volatile uint8_t *)(addr)))) | \
-	(((uint32_t)(*((const volatile uint8_t *)(addr) + 1))) << 8U) | \
-	(((uint32_t)(*((const volatile uint8_t *)(addr) + 2))) << 16U))
+		(((uint32_t)(*((const volatile uint8_t *)(addr) + 1))) << 8U) | \
+		(((uint32_t)(*((const volatile uint8_t *)(addr) + 2))) << 16U))
 
 
 /***************************************************************************************************
@@ -411,11 +411,11 @@ static inline void CY_HALT(void)
  *  both a and b must be positive.
  *
  **************************************************************************************************/
-#define CY_SYSLIB_DIV_ROUNDUP(a, b) ((((a)-1U) / (b)) + 1U)
+#define CY_SYSLIB_DIV_ROUNDUP(a, b) ((((a) - 1U) / (b)) + 1U)
 
 /*******************************************************************************
-*  Provides the macros for MISRA violation documentation in Coverity tool.
-*******************************************************************************/
+ *  Provides the macros for MISRA violation documentation in Coverity tool.
+ *******************************************************************************/
 
 /** \cond INTERNAL */
 
@@ -429,12 +429,10 @@ static inline void CY_HALT(void)
 	_Pragma(CY_COVERITY_PRAGMA_STR(coverity compliance fp MISRA MESSAGE))
 
 #define CY_MISRA_DEVIATE_BLOCK_START(MISRA, COUNT, MESSAGE) \
-	_Pragma(CY_COVERITY_PRAGMA_STR(coverity compliance block(deviate \
-															 : COUNT MISRA MESSAGE)))
+	_Pragma(CY_COVERITY_PRAGMA_STR(coverity compliance block(deviate : COUNT MISRA MESSAGE)))
 
 #define CY_MISRA_FP_BLOCK_START(MISRA, COUNT, MESSAGE) \
-	_Pragma(CY_COVERITY_PRAGMA_STR(coverity compliance block(fp \
-															 : COUNT MISRA MESSAGE)))
+	_Pragma(CY_COVERITY_PRAGMA_STR(coverity compliance block(fp : COUNT MISRA MESSAGE)))
 
 #define CY_MISRA_BLOCK_END(MISRA) \
 	_Pragma(CY_COVERITY_PRAGMA_STR(coverity compliance end_block MISRA))

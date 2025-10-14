@@ -40,8 +40,8 @@
  *****************************************************/
 
 /******************************************************
-*               Function Definitions
-******************************************************/
+ *               Function Definitions
+ ******************************************************/
 /** Called by WHD to pass received data to the network stack
  *
  *
@@ -71,17 +71,15 @@
  */
 whd_result_t whd_network_process_ethernet_data(whd_interface_t ifp, whd_buffer_t buffer)
 {
-    whd_driver_t whd_driver = ifp->whd_driver;
-    if (whd_driver->network_if->whd_network_process_ethernet_data)
-    {
-        whd_driver->network_if->whd_network_process_ethernet_data(ifp, buffer);
-        return WHD_SUCCESS;
-    }
-    else
-    {
-        WPRINT_WHD_INFO( ("Function pointers not provided .\n") );
-    }
-    return WHD_WLAN_NOFUNCTION;
+	whd_driver_t whd_driver = ifp->whd_driver;
+	if (whd_driver->network_if->whd_network_process_ethernet_data) {
+		whd_driver->network_if->whd_network_process_ethernet_data(ifp, buffer);
+		return WHD_SUCCESS;
+	}
+	else {
+		WPRINT_WHD_INFO(("Function pointers not provided .\n"));
+	}
+	return WHD_WLAN_NOFUNCTION;
 }
 
 /** Sends a data packet.
@@ -93,5 +91,5 @@ whd_result_t whd_network_process_ethernet_data(whd_interface_t ifp, whd_buffer_t
  */
 whd_result_t whd_network_send_ethernet_data(whd_interface_t ifp, whd_buffer_t buffer)
 {
-    return whd_proto_tx_queue_data(ifp, buffer);
+	return whd_proto_tx_queue_data(ifp, buffer);
 }

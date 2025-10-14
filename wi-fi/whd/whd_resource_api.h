@@ -28,8 +28,7 @@
 #define INCLUDED_WHD_RESOURCE_API_H_
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 #define BLOCK_SIZE 1024 /**< Size of the block */
@@ -41,16 +40,15 @@ extern "C"
 /**
  * Type of resources
  */
-typedef enum
-{
-    WHD_RESOURCE_WLAN_FIRMWARE, /**< Resource type: WLAN Firmware */
-    WHD_RESOURCE_WLAN_NVRAM,    /**< Resource type: NVRAM file */
-    WHD_RESOURCE_WLAN_CLM,      /**< Resource type: CLM_BLOB file */
+typedef enum {
+	WHD_RESOURCE_WLAN_FIRMWARE, /**< Resource type: WLAN Firmware */
+	WHD_RESOURCE_WLAN_NVRAM,    /**< Resource type: NVRAM file */
+	WHD_RESOURCE_WLAN_CLM,      /**< Resource type: CLM_BLOB file */
 } whd_resource_type_t;
 
 /******************************************************
-*                 Global Variables
-******************************************************/
+ *                 Global Variables
+ ******************************************************/
 
 /** @addtogroup res WHD Resource API
  *  @brief Functions that enable WHD to download WLAN firmware, NVRAM and CLM BLOB on a particular hardware platform.
@@ -73,70 +71,69 @@ typedef enum
  * the physical number of blocks in the data and each call to whd_get_resource_block will read data from the external memory
  * and make it available via an internal buffer.
  */
-struct whd_resource_source
-{
-    /** Gets the size of the resource for respective resource type
-     *
-     *
-     *  @param whd_drv     Pointer to handle instance of the driver
-     *  @param resource    Type of resource - WHD_RESOURCE_WLAN_FIRMWARE, WHD_RESOURCE_WLAN_NVRAM, WHD_RESOURCE_WLAN_CLM
-     *  @param size_out    Size of the resource
-     *
-     *  @return            WHD_SUCCESS or error code
-     *
-     */
-    uint32_t (*whd_resource_size)(whd_driver_t whd_drv, whd_resource_type_t resource, uint32_t *size_out);
+struct whd_resource_source {
+	/** Gets the size of the resource for respective resource type
+	 *
+	 *
+	 *  @param whd_drv     Pointer to handle instance of the driver
+	 *  @param resource    Type of resource - WHD_RESOURCE_WLAN_FIRMWARE, WHD_RESOURCE_WLAN_NVRAM, WHD_RESOURCE_WLAN_CLM
+	 *  @param size_out    Size of the resource
+	 *
+	 *  @return            WHD_SUCCESS or error code
+	 *
+	 */
+	uint32_t (*whd_resource_size)(whd_driver_t whd_drv, whd_resource_type_t resource, uint32_t *size_out);
 
-    /** Gets the resource block for specified resource type
-     *
-     *  @param whd_drv     Pointer to handle instance of the driver
-     *  @param type        Type of resource - WHD_RESOURCE_WLAN_FIRMWARE, WHD_RESOURCE_WLAN_NVRAM, WHD_RESOURCE_WLAN_CLM
-     *  @param blockno     The number of block
-     *  @param data        Pointer to a block of data
-     *  @param size_out    Size of the resource
-     *
-     *  @return            WHD_SUCCESS or error code
-     *
-     */
-    uint32_t (*whd_get_resource_block)(whd_driver_t whd_drv, whd_resource_type_t type,
-                                       uint32_t blockno, const uint8_t **data, uint32_t *size_out);
+	/** Gets the resource block for specified resource type
+	 *
+	 *  @param whd_drv     Pointer to handle instance of the driver
+	 *  @param type        Type of resource - WHD_RESOURCE_WLAN_FIRMWARE, WHD_RESOURCE_WLAN_NVRAM, WHD_RESOURCE_WLAN_CLM
+	 *  @param blockno     The number of block
+	 *  @param data        Pointer to a block of data
+	 *  @param size_out    Size of the resource
+	 *
+	 *  @return            WHD_SUCCESS or error code
+	 *
+	 */
+	uint32_t (*whd_get_resource_block)(whd_driver_t whd_drv, whd_resource_type_t type,
+			uint32_t blockno, const uint8_t **data, uint32_t *size_out);
 
-    /** Gets block count for the specified resource_type
-     *
-     *  @param whd_drv      Pointer to handle instance of the driver
-     *  @param type         Type of resource - WHD_RESOURCE_WLAN_FIRMWARE, WHD_RESOURCE_WLAN_NVRAM, WHD_RESOURCE_WLAN_CLM
-     *  @param block_count  Pointer to store block count for the resource
-     *
-     *  @return             WHD_SUCCESS or error code
-     *
-     */
-    uint32_t (*whd_get_resource_no_of_blocks)(whd_driver_t whd_drv, whd_resource_type_t type, uint32_t *block_count);
+	/** Gets block count for the specified resource_type
+	 *
+	 *  @param whd_drv      Pointer to handle instance of the driver
+	 *  @param type         Type of resource - WHD_RESOURCE_WLAN_FIRMWARE, WHD_RESOURCE_WLAN_NVRAM, WHD_RESOURCE_WLAN_CLM
+	 *  @param block_count  Pointer to store block count for the resource
+	 *
+	 *  @return             WHD_SUCCESS or error code
+	 *
+	 */
+	uint32_t (*whd_get_resource_no_of_blocks)(whd_driver_t whd_drv, whd_resource_type_t type, uint32_t *block_count);
 
-    /** Gets block size for the specified resource_type
-     *
-     *  @param whd_drv      Pointer to handle instance of the driver
-     *  @param type         Type of resources - WHD_RESOURCE_WLAN_FIRMWARE, WHD_RESOURCE_WLAN_NVRAM, WHD_RESOURCE_WLAN_CLM
-     *  @param size_out     Pointer to store size of the block
-     *
-     *  @return             WHD_SUCCESS or error code
-     *
-     */
-    uint32_t (*whd_get_resource_block_size)(whd_driver_t whd_drv, whd_resource_type_t type, uint32_t *size_out);
+	/** Gets block size for the specified resource_type
+	 *
+	 *  @param whd_drv      Pointer to handle instance of the driver
+	 *  @param type         Type of resources - WHD_RESOURCE_WLAN_FIRMWARE, WHD_RESOURCE_WLAN_NVRAM, WHD_RESOURCE_WLAN_CLM
+	 *  @param size_out     Pointer to store size of the block
+	 *
+	 *  @return             WHD_SUCCESS or error code
+	 *
+	 */
+	uint32_t (*whd_get_resource_block_size)(whd_driver_t whd_drv, whd_resource_type_t type, uint32_t *size_out);
 
-    /** Gets the resource for specified resource type
-     *
-     *  @param whd_drv     Pointer to handle instance of the driver
-     *  @param type        Type of resource - WHD_RESOURCE_WLAN_FIRMWARE, WHD_RESOURCE_WLAN_NVRAM, WHD_RESOURCE_WLAN_CLM
-     *  @param offset      offset address to store buffer
-     *  @param size        Pointer to a size of buffer
-     *  @param size_out    Pointer to store size of buffer
-     *  @param buffer      Pointer to a buffer
-     *
-     *  @return            WHD_SUCCESS or error code
-     *
-     */
-    uint32_t (*whd_resource_read)(whd_driver_t whd_drv, whd_resource_type_t type,
-                                  uint32_t offset, uint32_t size, uint32_t *size_out, void *buffer);
+	/** Gets the resource for specified resource type
+	 *
+	 *  @param whd_drv     Pointer to handle instance of the driver
+	 *  @param type        Type of resource - WHD_RESOURCE_WLAN_FIRMWARE, WHD_RESOURCE_WLAN_NVRAM, WHD_RESOURCE_WLAN_CLM
+	 *  @param offset      offset address to store buffer
+	 *  @param size        Pointer to a size of buffer
+	 *  @param size_out    Pointer to store size of buffer
+	 *  @param buffer      Pointer to a buffer
+	 *
+	 *  @return            WHD_SUCCESS or error code
+	 *
+	 */
+	uint32_t (*whd_resource_read)(whd_driver_t whd_drv, whd_resource_type_t type,
+			uint32_t offset, uint32_t size, uint32_t *size_out, void *buffer);
 };
 
 /** @} */

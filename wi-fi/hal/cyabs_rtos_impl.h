@@ -1,4 +1,4 @@
-/***********************************************************************************************/ /**
+/****************************************************************************************************
  * \file cyabs_rtos_impl.h
  *
  * \brief
@@ -46,16 +46,16 @@ extern "C" {
  */
 
 /******************************************************
-*                 Constants
-******************************************************/
+ *                 Constants
+ ******************************************************/
 // TODO: Replace these with proper values for the target RTOS
 #define CY_RTOS_MIN_STACK_SIZE 300          /**< Minimum stack size */
 #define CY_RTOS_ALIGNMENT_MASK 0x00000007UL /**< Checks for 8-bit alignment */
 
 
 /******************************************************
-*                 Type Definitions
-******************************************************/
+ *                 Type Definitions
+ ******************************************************/
 
 // TODO: Replace all priority values with values specific to the RTOS
 /** RTOS thread priority.

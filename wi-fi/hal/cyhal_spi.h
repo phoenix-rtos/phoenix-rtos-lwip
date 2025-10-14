@@ -1,29 +1,29 @@
-/***************************************************************************/ /**
-* \file cyhal_spi.h
-*
-* \brief
-* Provides a high level interface for interacting with the Cypress SPI.
-* This interface abstracts out the chip specific details. If any chip specific
-* functionality is necessary, or performance is critical the low level functions
-* can be used directly.
-*
-********************************************************************************
-* \copyright
-* Copyright 2018-2019 Cypress Semiconductor Corporation
-* SPDX-License-Identifier: Apache-2.0
-*
-* Licensed under the Apache License, Version 2.0 (the "License");
-* you may not use this file except in compliance with the License.
-* You may obtain a copy of the License at
-*
-*     http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*******************************************************************************/
+/********************************************************************************
+ * \file cyhal_spi.h
+ *
+ * \brief
+ * Provides a high level interface for interacting with the Cypress SPI.
+ * This interface abstracts out the chip specific details. If any chip specific
+ * functionality is necessary, or performance is critical the low level functions
+ * can be used directly.
+ *
+ ********************************************************************************
+ * \copyright
+ * Copyright 2018-2019 Cypress Semiconductor Corporation
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *******************************************************************************/
 
 /**
  * \addtogroup group_hal_spi SPI (Serial Peripheral Interface)
@@ -136,8 +136,8 @@ typedef struct
  * @return The status of the init request
  */
 cy_rslt_t cyhal_spi_init(cyhal_spi_t *obj, cyhal_gpio_t mosi, cyhal_gpio_t miso, cyhal_gpio_t sclk, cyhal_gpio_t ssel,
-	const cyhal_clock_divider_t *clk,
-	uint8_t bits, cyhal_spi_mode_t mode, bool is_slave);
+		const cyhal_clock_divider_t *clk,
+		uint8_t bits, cyhal_spi_mode_t mode, bool is_slave);
 
 /** Release a SPI object
  *
@@ -195,7 +195,7 @@ cy_rslt_t cyhal_spi_write(cyhal_spi_t *obj, uint32_t value);
  * @note Both MOSI and MISO pins required to be non-NC for this API to operate
  */
 cy_rslt_t cyhal_spi_transfer(cyhal_spi_t *obj, const uint8_t *tx, size_t tx_length, uint8_t *rx, size_t rx_length,
-	uint8_t write_fill);
+		uint8_t write_fill);
 
 /** Begin the SPI transfer. Buffer pointers and lengths are specified in tx_buff and rx_buff
  *
@@ -208,7 +208,7 @@ cy_rslt_t cyhal_spi_transfer(cyhal_spi_t *obj, const uint8_t *tx, size_t tx_leng
  * @note Both MOSI and MISO pins required to be non-NC for this API to operate
  */
 cy_rslt_t cyhal_spi_transfer_async(cyhal_spi_t *obj, const uint8_t *tx, size_t tx_length, uint8_t *rx,
-	size_t rx_length);
+		size_t rx_length);
 
 /** Checks if the specified SPI peripheral is in use
  *

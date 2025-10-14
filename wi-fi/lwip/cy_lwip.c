@@ -29,7 +29,7 @@
  * including Cypress's product in a High Risk Product, the manufacturer
  * of such system or application assumes all risk of such use and in doing
  * so agrees to indemnify Cypress against all liability.
-*/
+ */
 
 #include <string.h>
 #include <stdint.h>
@@ -72,11 +72,11 @@ int errno;
 #define MULTICAST_IP_TO_MAC(ip) \
 	{ \
 		(uint8_t)0x01, \
-			(uint8_t)0x00, \
-			(uint8_t)0x5e, \
-			(uint8_t)((ip)[1] & 0x7F), \
-			(uint8_t)(ip)[2], \
-			(uint8_t)(ip)[3] \
+		(uint8_t)0x00, \
+		(uint8_t)0x5e, \
+		(uint8_t)((ip)[1] & 0x7F), \
+		(uint8_t)(ip)[2], \
+		(uint8_t)(ip)[3] \
 	}
 
 #define IPV6_MULTICAST_TO_MAC_PREFIX (0x33)
@@ -91,7 +91,7 @@ int errno;
 #define MAX_NW_INTERFACE (2)
 
 struct netif *cy_lwip_ip_handle[MAX_NW_INTERFACE];
-#define IP_HANDLE(interface) (cy_lwip_ip_handle[(interface)&3])
+#define IP_HANDLE(interface) (cy_lwip_ip_handle[(interface) & 3])
 
 #define MAX_AUTO_IP_RETRIES (5)
 
@@ -117,11 +117,11 @@ struct netif *cy_lwip_ip_handle[MAX_NW_INTERFACE] = {
 
 /* Interface init status */
 bool ip_networking_inited[MAX_NW_INTERFACE];
-#define SET_IP_NETWORK_INITED(interface, status) (ip_networking_inited[(interface)&3] = status)
+#define SET_IP_NETWORK_INITED(interface, status) (ip_networking_inited[(interface) & 3] = status)
 
 /* IP UP status */
 bool ip_up[MAX_NW_INTERFACE];
-#define SET_IP_UP(interface, status) (ip_up[(interface)&3] = status)
+#define SET_IP_UP(interface, status) (ip_up[(interface) & 3] = status)
 
 /******************************************************
  *               Static Function Declarations
@@ -171,8 +171,8 @@ void cy_network_process_ethernet_data(whd_interface_t iface, whd_buffer_t buf)
 	}
 	else {
 		/* Call activity handler which is registered with argument as false
-         * indicating there is RX packet
-         */
+		 * indicating there is RX packet
+		 */
 		if (activity_callback) {
 			activity_callback(false);
 		}
@@ -211,8 +211,8 @@ static err_t wifioutput(struct netif *iface, struct pbuf *p)
 	pbuf_remove_header(whd_buf, ETH_PAD_SIZE);
 #endif
 	/* Call activity handler which is registered with argument as true
-     * indicating there is TX packet
-     */
+	 * indicating there is TX packet
+	 */
 	if (activity_callback) {
 		activity_callback(true);
 	}
@@ -259,9 +259,9 @@ static err_t mld_mac_filter(struct netif *iface, const ip6_addr_t *group, enum n
 	const uint8_t *ptr = (const uint8_t *)group->addr;
 
 	/* Convert IPv6 multicast address to MAC address.
-     * The first two octets of the converted MAC address are the fixed values 0x33 and 0x33.
-     * And last four octets are the last four octets of the ipv6 multicast address.
-     */
+	 * The first two octets of the converted MAC address are the fixed values 0x33 and 0x33.
+	 * And last four octets are the last four octets of the ipv6 multicast address.
+	 */
 	macaddr.octet[0] = IPV6_MULTICAST_TO_MAC_PREFIX;
 	macaddr.octet[1] = IPV6_MULTICAST_TO_MAC_PREFIX;
 	macaddr.octet[2] = ptr[12];
@@ -306,8 +306,8 @@ static err_t wifiinit(struct netif *iface)
 	whd_interface_t whd_iface = (whd_interface_t)iface->state;
 
 	/*
-     * Set the MAC address of the interface
-     */
+	 * Set the MAC address of the interface
+	 */
 	res = whd_wifi_get_mac_address(whd_iface, &macaddr);
 
 	if (res != CY_RSLT_SUCCESS) {
@@ -318,8 +318,8 @@ static err_t wifiinit(struct netif *iface)
 	iface->hwaddr_len = sizeof(macaddr);
 
 	/*
-     * Setup the information associated with sending packets
-     */
+	 * Setup the information associated with sending packets
+	 */
 #if LWIP_IPV4
 	iface->output = etharp_output;
 #endif
@@ -333,8 +333,8 @@ static err_t wifiinit(struct netif *iface)
 	iface->flags |= NETIF_FLAG_MLD6;
 #endif
 	/*
-     * Set the interface name for the interface
-     */
+	 * Set the interface name for the interface
+	 */
 	iface->name[0] = 'w';
 	iface->name[1] = 'l';
 
@@ -345,37 +345,37 @@ static err_t wifiinit(struct netif *iface)
 
 #if LWIP_IPV6 == 1
 	/*
-     * Filter output packets for IPV6 through the ethernet output
-     * function for IPV6.
-     */
+	 * Filter output packets for IPV6 through the ethernet output
+	 * function for IPV6.
+	 */
 	iface->output_ip6 = ethip6_output;
 
 	/*
-     * Automatically generate a unicast IP address based on
-     * neighbor discovery.
-     */
+	 * Automatically generate a unicast IP address based on
+	 * neighbor discovery.
+	 */
 	iface->ip6_autoconfig_enabled = 1;
 
 	/*
-     * Create a link local IPV6 address
-     */
+	 * Create a link local IPV6 address
+	 */
 	netif_create_ip6_linklocal_address(iface, 1);
 
 	/*
-     * Tell the radio that we want to listen to solicited-node multicast
-     * packets.  These packets are part of the IPV6 neighbor discovery
-     * process.
-     */
+	 * Tell the radio that we want to listen to solicited-node multicast
+	 * packets.  These packets are part of the IPV6 neighbor discovery
+	 * process.
+	 */
 	macaddr.octet[0] = 0x33;
 	macaddr.octet[1] = 0x33;
 	macaddr.octet[2] = 0xff;
 	whd_wifi_register_multicast_address(iface->state, &macaddr);
 
 	/*
-     * Tell the radio that we want to listen to the multicast address
-     * that targets all IPV6 devices.  These packets are part of the IPV6
-     * neighbor discovery process.
-     */
+	 * Tell the radio that we want to listen to the multicast address
+	 * that targets all IPV6 devices.  These packets are part of the IPV6
+	 * neighbor discovery process.
+	 */
 	memset(&macaddr, 0, sizeof(macaddr));
 	macaddr.octet[0] = 0x33;
 	macaddr.octet[1] = 0x33;
@@ -384,9 +384,9 @@ static err_t wifiinit(struct netif *iface)
 
 #if LWIP_IPV6_MLD
 	/*
-     * Register mld mac filter callback function that will be called by lwIP to add or delete an
-     * entry in the IPv6 multicast filter table of the ethernet MAC.
-     */
+	 * Register mld mac filter callback function that will be called by lwIP to add or delete an
+	 * entry in the IPv6 multicast filter table of the ethernet MAC.
+	 */
 	netif_set_mld_mac_filter(iface, mld_mac_filter);
 #endif
 #endif
@@ -451,10 +451,10 @@ cy_rslt_t cy_lwip_add_interface(cy_lwip_nw_interface_t *iface, ip_static_addr_t 
 	}
 
 	/*
-     * Register a handler for any address changes
-     * Note : The "status" callback will also be called when the interface
-     * goes up or down
-     */
+	 * Register a handler for any address changes
+	 * Note : The "status" callback will also be called when the interface
+	 * goes up or down
+	 */
 	netif_set_status_callback((IP_HANDLE(iface->role)), internal_ip_change_callback);
 	SET_IP_NETWORK_INITED(iface->role, true);
 
@@ -517,21 +517,21 @@ cy_rslt_t cy_lwip_network_up(cy_lwip_nw_interface_t *iface)
 	}
 
 	/*
-     * If LPA is enabled, invoke activity callback to resume the network stack,
-     * before invoking the lwip APIs that requires TCP Core lock.
-     */
+	 * If LPA is enabled, invoke activity callback to resume the network stack,
+	 * before invoking the lwip APIs that requires TCP Core lock.
+	 */
 	if (activity_callback) {
 		activity_callback(true);
 	}
 
 	/*
-    * Bring up the network interface.
-    */
+	 * Bring up the network interface.
+	 */
 	netifapi_netif_set_up((IP_HANDLE(iface->role)));
 
 	/*
-    * Bring up the network link layer
-    */
+	 * Bring up the network link layer
+	 */
 	netifapi_netif_set_link_up((IP_HANDLE(iface->role)));
 
 #if LWIP_IPV6
@@ -557,16 +557,16 @@ cy_rslt_t cy_lwip_network_up(cy_lwip_nw_interface_t *iface)
 			/* TO DO :  Disable power save for the DHCP exchange */
 
 			/*
-             * For DHCP only, we should reset netif IP address
-             * We don't want to re-use previous netif IP address
-             * given from previous DHCP session
-             */
+			 * For DHCP only, we should reset netif IP address
+			 * We don't want to re-use previous netif IP address
+			 * given from previous DHCP session
+			 */
 			ip4_addr_set_zero(&ip_addr);
 
 			/*
-             * If LPA is enabled, invoke activity callback to resume the network stack,
-             * before invoking the lwip APIs that requires TCP Core lock.
-             */
+			 * If LPA is enabled, invoke activity callback to resume the network stack,
+			 * before invoking the lwip APIs that requires TCP Core lock.
+			 */
 			if (activity_callback) {
 				activity_callback(true);
 			}
@@ -574,9 +574,9 @@ cy_rslt_t cy_lwip_network_up(cy_lwip_nw_interface_t *iface)
 			netif_set_ipaddr(IP_HANDLE(iface->role), &ip_addr);
 
 			/*
-             * If LPA is enabled, invoke activity callback to resume the network stack,
-             * before invoking the lwip APIs that requires TCP Core lock.
-             */
+			 * If LPA is enabled, invoke activity callback to resume the network stack,
+			 * before invoking the lwip APIs that requires TCP Core lock.
+			 */
 			if (activity_callback) {
 				activity_callback(true);
 			}
@@ -599,9 +599,9 @@ cy_rslt_t cy_lwip_network_up(cy_lwip_nw_interface_t *iface)
 
 			if (timeout_occurred) {
 				/*
-                 * If LPA is enabled, invoke activity callback to resume the network stack,
-                 * before invoking the lwip APIs that requires TCP Core lock.
-                 */
+				 * If LPA is enabled, invoke activity callback to resume the network stack,
+				 * before invoking the lwip APIs that requires TCP Core lock.
+				 */
 				if (activity_callback) {
 					activity_callback(true);
 				}
@@ -613,9 +613,9 @@ cy_rslt_t cy_lwip_network_up(cy_lwip_nw_interface_t *iface)
 				timeout_occurred = false;
 
 				/*
-                 * If LPA is enabled, invoke activity callback to resume the network stack,
-                 * before invoking the lwip APIs that requires TCP Core lock.
-                 */
+				 * If LPA is enabled, invoke activity callback to resume the network stack,
+				 * before invoking the lwip APIs that requires TCP Core lock.
+				 */
 				if (activity_callback) {
 					activity_callback(true);
 				}
@@ -642,9 +642,9 @@ cy_rslt_t cy_lwip_network_up(cy_lwip_nw_interface_t *iface)
 					wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "Unable to obtain IP address via DHCP and AutoIP\n");
 
 					/*
-                     * If LPA is enabled, invoke activity callback to resume the network stack,
-                     * before invoking the lwip APIs that requires TCP Core lock.
-                     */
+					 * If LPA is enabled, invoke activity callback to resume the network stack,
+					 * before invoking the lwip APIs that requires TCP Core lock.
+					 */
 					if (activity_callback) {
 						activity_callback(true);
 					}
@@ -694,9 +694,9 @@ cy_rslt_t cy_lwip_network_down(cy_lwip_nw_interface_t *iface)
 #if LWIP_AUTOIP
 		if (netif_autoip_data(IP_HANDLE(iface->role))->state == AUTOIP_STATE_BOUND) {
 			/*
-             * If LPA is enabled, invoke activity callback to resume the network stack,
-             * before invoking the lwip APIs that requires TCP Core lock.
-             */
+			 * If LPA is enabled, invoke activity callback to resume the network stack,
+			 * before invoking the lwip APIs that requires TCP Core lock.
+			 */
 			if (activity_callback) {
 				activity_callback(true);
 			}
@@ -707,9 +707,9 @@ cy_rslt_t cy_lwip_network_down(cy_lwip_nw_interface_t *iface)
 #endif
 		{
 			/*
-             * If LPA is enabled, invoke activity callback to resume the network stack,
-             * before invoking the lwip APIs that requires TCP Core lock.
-             */
+			 * If LPA is enabled, invoke activity callback to resume the network stack,
+			 * before invoking the lwip APIs that requires TCP Core lock.
+			 */
 			if (activity_callback) {
 				activity_callback(true);
 			}
@@ -718,9 +718,9 @@ cy_rslt_t cy_lwip_network_down(cy_lwip_nw_interface_t *iface)
 			cy_rtos_delay_milliseconds(DHCP_STOP_DELAY_IN_MS);
 
 			/*
-             * If LPA is enabled, invoke activity callback to resume the network stack,
-             * before invoking the lwip APIs that requires TCP Core lock.
-             */
+			 * If LPA is enabled, invoke activity callback to resume the network stack,
+			 * before invoking the lwip APIs that requires TCP Core lock.
+			 */
 			if (activity_callback) {
 				activity_callback(true);
 			}
@@ -736,29 +736,29 @@ cy_rslt_t cy_lwip_network_down(cy_lwip_nw_interface_t *iface)
 #endif
 
 	/*
-     * If LPA is enabled, invoke activity callback to resume the network stack,
-     * before invoking the lwip APIs that requires TCP Core lock.
-     */
+	 * If LPA is enabled, invoke activity callback to resume the network stack,
+	 * before invoking the lwip APIs that requires TCP Core lock.
+	 */
 	if (activity_callback) {
 		activity_callback(true);
 	}
 
 	/*
-    * Bring down the network link layer
-    */
+	 * Bring down the network link layer
+	 */
 	netifapi_netif_set_link_down(IP_HANDLE(iface->role));
 
 	/*
-    * Bring down the network interface
-    */
+	 * Bring down the network interface
+	 */
 	netifapi_netif_set_down(IP_HANDLE(iface->role));
 
 	/* TO DO : clear all ARP cache */
 
 	/** TO DO:
-     *  Kick the radio chip if it's in power save mode in case the link down event is due to missing beacons.
-     *  Setting the chip to the same power save mode is sufficient.
-     */
+	 *  Kick the radio chip if it's in power save mode in case the link down event is due to missing beacons.
+	 *  Setting the chip to the same power save mode is sufficient.
+	 */
 	SET_IP_UP(iface->role, false);
 	return CY_RSLT_SUCCESS;
 }
@@ -808,9 +808,9 @@ cy_rslt_t cy_lwip_dhcp_renew(cy_lwip_nw_interface_t *iface)
 
 
 	/*
-     * If LPA is enabled, invoke activity callback to resume the network stack,
-     * before invoking the lwip APIs that requires TCP Core lock.
-     */
+	 * If LPA is enabled, invoke activity callback to resume the network stack,
+	 * before invoking the lwip APIs that requires TCP Core lock.
+	 */
 	if (activity_callback) {
 		activity_callback(true);
 	}

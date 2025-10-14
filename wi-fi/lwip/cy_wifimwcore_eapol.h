@@ -29,7 +29,7 @@
  * including Cypress's product in a High Risk Product, the manufacturer
  * of such system or application assumes all risk of such use and in doing
  * so agrees to indemnify Cypress against all liability.
-*/
+ */
 
 #pragma once
 
@@ -40,18 +40,18 @@
 extern "C" {
 #endif
 /**
-* \addtogroup group_lwip_whd_port lwIP and WHD port
-* \{
-*
-* \defgroup group_wifimwcore_eapol_functions EAPOL Functions
-*/
+ * \addtogroup group_lwip_whd_port lwIP and WHD port
+ * \{
+ *
+ * \defgroup group_wifimwcore_eapol_functions EAPOL Functions
+ */
 
 /**
-* \addtogroup group_wifimwcore_eapol_functions
-* \{
-* * Provides functions which application or library can use to register and de-register.
-* * These APIs are generally used by enterprise security library.
-*/
+ * \addtogroup group_wifimwcore_eapol_functions
+ * \{
+ * * Provides functions which application or library can use to register and de-register.
+ * * These APIs are generally used by enterprise security library.
+ */
 
 /**
  * EAPOL packet handler function pointer type; On receiving EAPOL data, WHD will send the data to WiFi Middleware Core.

@@ -31,20 +31,19 @@ extern "C" {
 #endif
 
 /******************************************************
-*             Structures
-******************************************************/
-struct whd_proto
-{
-    void *(*get_ioctl_buffer)(whd_driver_t whd_driver, whd_buffer_t *buffer, uint16_t data_length);
-    void *(*get_iovar_buffer)(whd_driver_t whd_driver, whd_buffer_t *buffer, uint16_t data_length, const char *name);
-    whd_result_t (*set_ioctl)(whd_interface_t ifp, uint32_t command, whd_buffer_t send_buffer_hnd,
-                              whd_buffer_t *response_buffer_hnd);
-    whd_result_t (*get_ioctl)(whd_interface_t ifp, uint32_t command, whd_buffer_t send_buffer_hnd,
-                              whd_buffer_t *response_buffer_hnd);
-    whd_result_t (*set_iovar)(whd_interface_t ifp, whd_buffer_t send_buffer_hnd, whd_buffer_t *response_buffer_hnd);
-    whd_result_t (*get_iovar)(whd_interface_t ifp, whd_buffer_t send_buffer_hnd, whd_buffer_t *response_buffer_hnd);
-    whd_result_t (*tx_queue_data)(whd_interface_t ifp, whd_buffer_t buffer);
-    void *pd;
+ *             Structures
+ ******************************************************/
+struct whd_proto {
+	void *(*get_ioctl_buffer)(whd_driver_t whd_driver, whd_buffer_t *buffer, uint16_t data_length);
+	void *(*get_iovar_buffer)(whd_driver_t whd_driver, whd_buffer_t *buffer, uint16_t data_length, const char *name);
+	whd_result_t (*set_ioctl)(whd_interface_t ifp, uint32_t command, whd_buffer_t send_buffer_hnd,
+			whd_buffer_t *response_buffer_hnd);
+	whd_result_t (*get_ioctl)(whd_interface_t ifp, uint32_t command, whd_buffer_t send_buffer_hnd,
+			whd_buffer_t *response_buffer_hnd);
+	whd_result_t (*set_iovar)(whd_interface_t ifp, whd_buffer_t send_buffer_hnd, whd_buffer_t *response_buffer_hnd);
+	whd_result_t (*get_iovar)(whd_interface_t ifp, whd_buffer_t send_buffer_hnd, whd_buffer_t *response_buffer_hnd);
+	whd_result_t (*tx_queue_data)(whd_interface_t ifp, whd_buffer_t buffer);
+	void *pd;
 };
 
 whd_result_t whd_proto_attach(whd_driver_t whd_driver);
@@ -53,42 +52,42 @@ whd_result_t whd_proto_detach(whd_driver_t whd_driver);
 
 static inline void *whd_proto_get_ioctl_buffer(whd_driver_t whd_driver, whd_buffer_t *buffer, uint16_t data_length)
 {
-    return whd_driver->proto->get_ioctl_buffer(whd_driver, buffer, data_length);
+	return whd_driver->proto->get_ioctl_buffer(whd_driver, buffer, data_length);
 }
 
 static inline void *whd_proto_get_iovar_buffer(whd_driver_t whd_driver, whd_buffer_t *buffer, uint16_t data_length,
-                                               const char *name)
+		const char *name)
 {
-    return whd_driver->proto->get_iovar_buffer(whd_driver, buffer, data_length, name);
+	return whd_driver->proto->get_iovar_buffer(whd_driver, buffer, data_length, name);
 }
 
 static inline whd_result_t whd_proto_set_ioctl(whd_interface_t ifp, uint32_t command, whd_buffer_t send_buffer_hnd,
-                                               whd_buffer_t *response_buffer_hnd)
+		whd_buffer_t *response_buffer_hnd)
 {
-    return ifp->whd_driver->proto->set_ioctl(ifp, command, send_buffer_hnd, response_buffer_hnd);
+	return ifp->whd_driver->proto->set_ioctl(ifp, command, send_buffer_hnd, response_buffer_hnd);
 }
 
 static inline whd_result_t whd_proto_get_ioctl(whd_interface_t ifp, uint32_t command, whd_buffer_t send_buffer_hnd,
-                                               whd_buffer_t *response_buffer_hnd)
+		whd_buffer_t *response_buffer_hnd)
 {
-    return ifp->whd_driver->proto->get_ioctl(ifp, command, send_buffer_hnd, response_buffer_hnd);
+	return ifp->whd_driver->proto->get_ioctl(ifp, command, send_buffer_hnd, response_buffer_hnd);
 }
 
 static inline whd_result_t whd_proto_set_iovar(whd_interface_t ifp, whd_buffer_t send_buffer_hnd,
-                                               whd_buffer_t *response_buffer_hnd)
+		whd_buffer_t *response_buffer_hnd)
 {
-    return ifp->whd_driver->proto->set_iovar(ifp, send_buffer_hnd, response_buffer_hnd);
+	return ifp->whd_driver->proto->set_iovar(ifp, send_buffer_hnd, response_buffer_hnd);
 }
 
 static inline whd_result_t whd_proto_get_iovar(whd_interface_t ifp, whd_buffer_t send_buffer_hnd,
-                                               whd_buffer_t *response_buffer_hnd)
+		whd_buffer_t *response_buffer_hnd)
 {
-    return ifp->whd_driver->proto->get_iovar(ifp, send_buffer_hnd, response_buffer_hnd);
+	return ifp->whd_driver->proto->get_iovar(ifp, send_buffer_hnd, response_buffer_hnd);
 }
 
 static inline whd_result_t whd_proto_tx_queue_data(whd_interface_t ifp, whd_buffer_t buffer)
 {
-    return ifp->whd_driver->proto->tx_queue_data(ifp, buffer);
+	return ifp->whd_driver->proto->tx_queue_data(ifp, buffer);
 }
 
 #ifdef __cplusplus
