@@ -1,5 +1,5 @@
 /*
- * Copyright 2021, Cypress Semiconductor Corporation (an Infineon company)
+ * Copyright 2024, Cypress Semiconductor Corporation (an Infineon company)
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +19,9 @@
 #include "whd_chip_constants.h"
 #include "whd_debug.h"
 #include "whd_events_int.h"
+#ifndef PROTO_MSGBUF
 #include "whd_sdpcm.h"
+#endif /* PROTO_MSGBUF */
 #include "whd_thread_internal.h"
 #include "whd_utils.h"
 #include "whd_wifi_api.h"
@@ -32,12 +34,13 @@
 
 whd_bool_t whd_wifi_p2p_is_go_up(whd_driver_t whd_driver)
 {
-	return whd_driver->internal_info.whd_wifi_p2p_go_is_up;
+    return whd_driver->internal_info.whd_wifi_p2p_go_is_up;
 }
 
 void whd_wifi_p2p_set_go_is_up(whd_driver_t whd_driver, whd_bool_t is_up)
 {
-	if (whd_driver->internal_info.whd_wifi_p2p_go_is_up != is_up) {
-		whd_driver->internal_info.whd_wifi_p2p_go_is_up = is_up;
-	}
+    if (whd_driver->internal_info.whd_wifi_p2p_go_is_up != is_up)
+    {
+        whd_driver->internal_info.whd_wifi_p2p_go_is_up = is_up;
+    }
 }

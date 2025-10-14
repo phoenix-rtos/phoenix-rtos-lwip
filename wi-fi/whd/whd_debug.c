@@ -1,5 +1,5 @@
 /*
- * Copyright 2021, Cypress Semiconductor Corporation (an Infineon company)
+ * Copyright 2024, Cypress Semiconductor Corporation (an Infineon company)
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -36,25 +36,26 @@
 ******************************************************/
 void whd_init_stats(whd_driver_t whd_driver)
 {
-	memset(&whd_driver->whd_stats, 0, sizeof(whd_driver->whd_stats));
+    memset(&whd_driver->whd_stats, 0, sizeof(whd_driver->whd_stats) );
 }
 
-uint32_t whd_print_stats(whd_driver_t whd_driver, whd_bool_t reset_after_print)
+whd_result_t whd_print_stats(whd_driver_t whd_driver, whd_bool_t reset_after_print)
 {
-	CHECK_DRIVER_NULL(whd_driver);
+    CHECK_DRIVER_NULL(whd_driver);
 
-	WPRINT_MACRO(("WHD Stats.. \n"
-				  "tx_total:%" PRIu32 ", rx_total:%" PRIu32 ", tx_no_mem:%" PRIu32 ", rx_no_mem:%" PRIu32 "\n"
-				  "tx_fail:%" PRIu32 ", no_credit:%" PRIu32 ", flow_control:%" PRIu32 "\n",
-		whd_driver->whd_stats.tx_total, whd_driver->whd_stats.rx_total,
-		whd_driver->whd_stats.tx_no_mem, whd_driver->whd_stats.rx_no_mem,
-		whd_driver->whd_stats.tx_fail, whd_driver->whd_stats.no_credit,
-		whd_driver->whd_stats.flow_control));
+    WPRINT_MACRO( ("WHD Stats.. \n"
+                   "tx_total:%" PRIu32 ", rx_total:%" PRIu32 ", tx_no_mem:%" PRIu32 ", rx_no_mem:%" PRIu32 "\n"
+                   "tx_fail:%" PRIu32 ", no_credit:%" PRIu32 ", flow_control:%" PRIu32 "\n",
+                   whd_driver->whd_stats.tx_total, whd_driver->whd_stats.rx_total,
+                   whd_driver->whd_stats.tx_no_mem, whd_driver->whd_stats.rx_no_mem,
+                   whd_driver->whd_stats.tx_fail, whd_driver->whd_stats.no_credit,
+                   whd_driver->whd_stats.flow_control) );
 
-	if (reset_after_print == WHD_TRUE) {
-		memset(&whd_driver->whd_stats, 0, sizeof(whd_driver->whd_stats));
-	}
+    if (reset_after_print == WHD_TRUE)
+    {
+        memset(&whd_driver->whd_stats, 0, sizeof(whd_driver->whd_stats) );
+    }
 
-	CHECK_RETURN(whd_bus_print_stats(whd_driver, reset_after_print));
-	return WHD_SUCCESS;
+    CHECK_RETURN(whd_bus_print_stats(whd_driver, reset_after_print) );
+    return WHD_SUCCESS;
 }
