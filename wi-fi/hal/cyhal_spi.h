@@ -41,6 +41,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <sys/types.h>
 #include "cy_result.h"
 #include "cyhal_hw_types.h"
 #include "cyhal_modules.h"
