@@ -157,7 +157,7 @@ whd_result_t whd_process_clm_data(whd_interface_t ifp)
             ret_clmload_status = whd_proto_get_iovar(ifp, buffer, &response);
             if (ret_clmload_status != WHD_SUCCESS)
             {
-                WPRINT_WHD_DEBUG( ("clmload_status failed with return %lu\n", ret_clmload_status) );
+                WPRINT_WHD_DEBUG( ("clmload_status failed with return %u\n", ret_clmload_status) );
             }
             else
             {
@@ -172,7 +172,7 @@ whd_result_t whd_process_clm_data(whd_interface_t ifp)
     }
     else
     {
-        WPRINT_WHD_ERROR( ("Memory allocation failure, %s failed at %d \n", __func__, __LINE__) );
+        WPRINT_WHD_ERROR( ("Memory allocation failure, %s failed at %d \n", __func__, __LINE__));
         ret = WHD_MALLOC_FAILURE;
     }
 

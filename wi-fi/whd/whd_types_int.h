@@ -27,6 +27,9 @@
 #include <stddef.h>
 #include <inttypes.h>
 
+#include "whd_types.h"
+#include "whd.h"
+
 #ifdef __cplusplus
 extern "C"
 {
