@@ -611,28 +611,26 @@ whd_result_t whd_wifi_read_wlan_log_unsafe(whd_driver_t whd_driver, uint32_t wla
                 /* Save last read position */
                 whd_driver->internal_info.con_lastpos = c->last;
 
-                result = WHD_SUCCESS;
-                goto done;
-            }
-            ch = c->buf[c->last];
-            c->last = (c->last + 1) % c->bufsize;
-            if (ch == '\n')
-            {
-                break;
-            }
-            buffer[n] = ch;
-        }
-        if (n > 0)
-        {
-            if (buffer[n - 1] == '\r')
-                n--;
-            buffer[n] = 0;
-            WPRINT_MACRO( ("CONSOLE: %s\n", buffer) );
-        }
-    }
-    /* Save last read position */
-    whd_driver->internal_info.con_lastpos = c->last;
-    result = WHD_SUCCESS;
+				result = WHD_SUCCESS;
+				goto done;
+			}
+			ch = c->buf[c->last];
+			c->last = (c->last + 1) % c->bufsize;
+			if (ch == '\n') {
+				break;
+			}
+			buffer[n] = ch;
+		}
+		if (n > 0) {
+			if (buffer[n - 1] == '\r')
+				n--;
+			buffer[n] = 0;
+			WPRINT_INFO(("CONSOLE: %s\n", buffer));
+		}
+	}
+	/* Save last read position */
+	whd_driver->internal_info.con_lastpos = c->last;
+	result = WHD_SUCCESS;
 
 done: return result;
 }
@@ -731,36 +729,32 @@ whd_result_t whd_ioctl_print(whd_driver_t whd_driver)
 			if (strlen((char *)data) <= WHD_IOVAR_STRING_SIZE)
 				strcpy(iovar, (char *)data);
 
-            iovar_string_size = strlen( (const char *)data );
-            iovar[iovar_string_size] = '\0';
-            data += (iovar_string_size + 1);
-            whd_driver->whd_ioctl_log[i].data_size -= (iovar_string_size + 1);
-        }
-        if (whd_driver->whd_ioctl_log[i].is_this_event == 1)
-        {
-            whd_event_info_to_string(whd_driver->whd_ioctl_log[i].ioct_log, whd_driver->whd_ioctl_log[i].flag,
-                                     whd_driver->whd_ioctl_log[i].reason, iovar, sizeof(iovar) - 1);
-            WPRINT_MACRO( ("\n<- E:%" PRIu32 "\t\t\tS:%d\t\t\t\tR:%" PRIu32 "\n%s\n",
-                           whd_driver->whd_ioctl_log[i].ioct_log,
-                           whd_driver->whd_ioctl_log[i].flag, whd_driver->whd_ioctl_log[i].reason, iovar) );
-        }
-        else if (whd_driver->whd_ioctl_log[i].ioct_log == WLC_SET_VAR)
-        {
-            WPRINT_MACRO( ("\n-> %s\n", iovar) );
-            whd_hexdump(data, whd_driver->whd_ioctl_log[i].data_size);
-        }
-        else if (whd_driver->whd_ioctl_log[i].ioct_log == WLC_GET_VAR)
-        {
-            WPRINT_MACRO( ("\n<- %s\n", iovar) );
-            whd_hexdump(data, whd_driver->whd_ioctl_log[i].data_size);
-        }
-        else if (whd_driver->whd_ioctl_log[i].ioct_log != 0)
-        {
-            whd_ioctl_info_to_string(whd_driver->whd_ioctl_log[i].ioct_log, iovar, sizeof(iovar) - 1);
-            WPRINT_MACRO( ("\n%s:%" PRIu32 "\n", iovar, whd_driver->whd_ioctl_log[i].ioct_log) );
-            whd_hexdump(data, whd_driver->whd_ioctl_log[i].data_size);
-        }
-    }
+			iovar_string_size = strlen((const char *)data);
+			iovar[iovar_string_size] = '\0';
+			data += (iovar_string_size + 1);
+			whd_driver->whd_ioctl_log[i].data_size -= (iovar_string_size + 1);
+		}
+		if (whd_driver->whd_ioctl_log[i].is_this_event == 1) {
+			whd_event_info_to_string(whd_driver->whd_ioctl_log[i].ioct_log, whd_driver->whd_ioctl_log[i].flag,
+					whd_driver->whd_ioctl_log[i].reason, iovar, sizeof(iovar) - 1);
+			WPRINT_INFO(("\n<- E:%" PRIu32 "\t\t\tS:%d\t\t\t\tR:%" PRIu32 "\n%s\n",
+					whd_driver->whd_ioctl_log[i].ioct_log,
+					whd_driver->whd_ioctl_log[i].flag, whd_driver->whd_ioctl_log[i].reason, iovar));
+		}
+		else if (whd_driver->whd_ioctl_log[i].ioct_log == WLC_SET_VAR) {
+			WPRINT_INFO(("\n-> %s\n", iovar));
+			whd_hexdump(data, whd_driver->whd_ioctl_log[i].data_size);
+		}
+		else if (whd_driver->whd_ioctl_log[i].ioct_log == WLC_GET_VAR) {
+			WPRINT_INFO(("\n<- %s\n", iovar));
+			whd_hexdump(data, whd_driver->whd_ioctl_log[i].data_size);
+		}
+		else if (whd_driver->whd_ioctl_log[i].ioct_log != 0) {
+			whd_ioctl_info_to_string(whd_driver->whd_ioctl_log[i].ioct_log, iovar, sizeof(iovar) - 1);
+			WPRINT_INFO(("\n%s:%" PRIu32 "\n", iovar, whd_driver->whd_ioctl_log[i].ioct_log));
+			whd_hexdump(data, whd_driver->whd_ioctl_log[i].data_size);
+		}
+	}
 
     memset(whd_driver->whd_ioctl_log, 0, sizeof(whd_driver->whd_ioctl_log) );
     whd_driver->whd_ioctl_log_index = 0;
