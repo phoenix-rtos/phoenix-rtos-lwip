@@ -1258,6 +1258,14 @@ typedef struct whd_spi_config
 } whd_spi_config_t;
 
 /**
+ * Structure for USB config parameters which can be set by application during whd power up
+ */
+typedef struct whd_usb_config {
+	/* Bus config */
+	const char *path; /**< Path to USB device */
+} whd_usb_config_t;
+
+/**
  * Structure for M2M config parameters which can be set by application during whd power up
  */
 typedef struct whd_m2m_config
