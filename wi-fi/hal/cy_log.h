@@ -151,6 +151,7 @@ typedef enum {
 	CYLF_GPIO,       /**< GPIO Facility */
 	CYLF_SDIO,       /**< SDIO Facility */
 	CYLF_MIDDLEWARE, /**< Middleware Facility */
+	CYLF_USB,        /**< USB Facility */
 
 	CYLF_MAX /**< Must be last, not an actual index */
 } CY_LOG_FACILITY_T;

@@ -99,6 +99,20 @@ extern "C" {
 
 /** \} group_abstraction_rtos_common */
 
+/**
+ * \ingroup group_abstraction_rtos_queue
+ * \{
+ */
+
+/** The Queue is already full and can't accept any more items at this time */
+#define CY_RTOS_QUEUE_FULL \
+	CY_RSLT_CREATE(CY_RSLT_TYPE_ERROR, CY_RSLT_MODULE_ABSTRACTION_OS, 3)
+/** The Queue is empty and has nothing to remove */
+#define CY_RTOS_QUEUE_EMPTY \
+	CY_RSLT_CREATE(CY_RSLT_TYPE_ERROR, CY_RSLT_MODULE_ABSTRACTION_OS, 4)
+
+/** \} group_abstraction_rtos_queue */
+
 /********************************************* TYPES **********************************************/
 
 /**
@@ -123,13 +137,6 @@ typedef enum cy_thread_state {
  * \ingroup group_abstraction_rtos_threads
  */
 typedef void (*cy_thread_entry_fn_t)(cy_thread_arg_t arg);
-
-typedef struct {
-	handle_t mutex;
-	handle_t cond;
-	volatile unsigned int v;
-	unsigned int m;
-} cy_semaphore_t;
 
 
 /********************************************* Threads ********************************************/
@@ -468,6 +475,103 @@ cy_rslt_t cy_rtos_get_time(cy_time_t *tval);
 cy_rslt_t cy_rtos_delay_milliseconds(cy_time_t num_ms);
 
 /** \} group_abstraction_rtos_time */
+
+
+/********************************************* Queue **********************************************/
+/**
+ * \ingroup group_abstraction_rtos_queue
+ * \{
+ */
+
+/** Create a queue.
+ *
+ * This is a queue of data where entries are placed on the back of the queue
+ * and removed from the front of the queue.
+ *
+ * @param[out] queue    Pointer to the queue handle
+ * @param[in]  length   The maximum length of the queue in items
+ * @param[in]  itemsize The size of each item in the queue.
+ *
+ * @return The status of the init request. [\ref CY_RSLT_SUCCESS, \ref CY_RTOS_NO_MEMORY, \ref
+ *         CY_RTOS_GENERAL_ERROR]
+ */
+cy_rslt_t cy_rtos_queue_init(cy_queue_t *queue, size_t length, size_t itemsize);
+
+/** Put an item in a queue.
+ *
+ * This function puts an item in the queue. The item is copied
+ * into the queue using a memory copy and the data pointed to by item_ptr
+ * is no longer referenced once the call returns.
+ *
+ * @param[in] queue      Pointer to the queue handle
+ * @param[in] item_ptr   Pointer to the item to place in the queue
+ *
+ * @return The status of the put request. [\ref CY_RSLT_SUCCESS, \ref CY_RTOS_NO_MEMORY, \ref
+ *         CY_RTOS_GENERAL_ERROR, \ref CY_RTOS_QUEUE_FULL]
+ */
+cy_rslt_t cy_rtos_queue_put(cy_queue_t *queue, const void *item_ptr);
+
+/** Gets an item in a queue.
+ *
+ * This function gets an item from the queue. The item is copied
+ * out of the queue into the memory provide by item_ptr. This space must be
+ * large enough to hold a queue entry as defined when the queue was initialized.
+ *
+ * @param[in] queue      Pointer to the queue handle
+ * @param[in] item_ptr   Pointer to the memory for the item from the queue
+ *
+ * @return The status of the get request. [\ref CY_RSLT_SUCCESS, \ref CY_RTOS_NO_MEMORY, \ref
+ *         CY_RTOS_GENERAL_ERROR, \ref CY_RTOS_QUEUE_EMPTY]
+ */
+cy_rslt_t cy_rtos_queue_get(cy_queue_t *queue, void *item_ptr);
+
+/** Return the number of items in the queue.
+ *
+ * This function returns the number of items currently in the queue.
+ *
+ * @param[in]  queue       Pointer to the queue handle
+ * @param[out] num_waiting Pointer to the return count
+ *
+ * @return The status of the count request. [\ref CY_RSLT_SUCCESS, \ref CY_RTOS_GENERAL_ERROR]
+ */
+cy_rslt_t cy_rtos_queue_count(cy_queue_t *queue, size_t *num_waiting);
+
+/** Return the amount of empty space in the queue.
+ *
+ * This function returns the amount of empty space in the
+ * queue. For instance, if the queue was created with 10 entries max and there
+ * are currently 2 entries in the queue, this will return 8.
+ *
+ * @param[in]  queue      Pointer to the queue handle
+ * @param[out] num_spaces Pointer to the return count.
+ *
+ * @return The status of the space request. [\ref CY_RSLT_SUCCESS, \ref CY_RTOS_GENERAL_ERROR]
+ */
+cy_rslt_t cy_rtos_queue_space(cy_queue_t *queue, size_t *num_spaces);
+
+/** Reset the queue.
+ *
+ * This function sets the queue to empty.
+ *
+ * @param[in] queue pointer to the queue handle
+ *
+ * @return The status of the reset request. [\ref CY_RSLT_SUCCESS, \ref CY_RTOS_GENERAL_ERROR]
+ */
+cy_rslt_t cy_rtos_queue_reset(cy_queue_t *queue);
+
+/** Deinitialize the queue handle.
+ *
+ * This function de-initializes the queue and returns all
+ * resources used by the queue.
+ *
+ * @param[in] queue Pointer to the queue handle
+ *
+ * @return The status of the deinit request. [\ref CY_RSLT_SUCCESS, \ref CY_RTOS_GENERAL_ERROR]
+ */
+cy_rslt_t cy_rtos_queue_deinit(cy_queue_t *queue);
+
+/** \} group_abstraction_rtos_queue */
+
 
 #ifdef __cplusplus
 }  // extern "C"
