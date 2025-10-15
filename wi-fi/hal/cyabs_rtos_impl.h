@@ -28,6 +28,7 @@
 
 #pragma once
 
+#include <stdatomic.h>
 #include <sys/types.h>
 #include <sys/threads.h>
 
@@ -83,6 +84,19 @@ typedef void *cy_thread_arg_t;
 typedef handle_t cy_mutex_t;
 /** Alias for the RTOS specific time unit (in milliseconds) */
 typedef time_t cy_time_t;
+/** Alias for the RTOS specific semaphore implementation */
+typedef struct {
+	handle_t mutex;
+	handle_t cond;
+	volatile unsigned int v;
+	unsigned int m;
+} cy_semaphore_t;
+/** Alias for the RTOS specific queue implementation */
+typedef struct {
+	atomic_uint head, tail;
+	size_t length, itemsz;
+	void *data;
+} cy_queue_t;
 
 /** \} group_abstraction_rtos_port */
 
