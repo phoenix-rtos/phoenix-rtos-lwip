@@ -8,7 +8,7 @@
 
 NAME := wifi-hal
 
-LOCAL_SRCS := cyhal_gpio.c cyhal_sdio.c cyhal_utils.c cyabs_rtos.c cy_log.c
+LOCAL_SRCS := cyhal_gpio.c cyhal_sdio.c cyhal_usb.c cyhal_utils.c cyabs_rtos.c cy_log.c
 
 LOCAL_CFLAGS += -Idrivers
 

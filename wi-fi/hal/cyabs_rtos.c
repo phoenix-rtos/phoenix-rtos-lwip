@@ -3,8 +3,8 @@
  *
  * LwIP Wi-Fi
  *
- * Copyright 2021 Phoenix Systems
- * Author: Ziemowit Leszczynski
+ * Copyright 2021, 2025 Phoenix Systems
+ * Author: Ziemowit Leszczynski, Julian Uziembło
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
@@ -17,6 +17,9 @@
 #include <time.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <string.h>
+
+#include <lf-fifo.h>
 
 
 cy_rslt_t cy_rtos_create_thread(cy_thread_t *thread, cy_thread_entry_fn_t entry_function,
@@ -263,5 +266,78 @@ cy_rslt_t cy_rtos_delay_milliseconds(cy_time_t num_ms)
 	if (usleep(num_ms * 1000) < 0)
 		return CY_RTOS_GENERAL_ERROR;
 
+	return CY_RSLT_SUCCESS;
+}
+
+
+static inline bool cy_rtos_queue_is_power_of_2(size_t n)
+{
+	return (n != 0) && (n & (n - 1)) == 0;
+}
+
+
+cy_rslt_t cy_rtos_queue_init(cy_queue_t *queue, size_t length, size_t itemsize)
+{
+	size_t size = length * itemsize;
+
+	if (queue == NULL || size < 2 || !cy_rtos_queue_is_power_of_2(size)) {
+		return CY_RTOS_BAD_PARAM;
+	}
+
+	queue->fifo.data = malloc(size);
+	if (queue->fifo.data == NULL) {
+		return CY_RTOS_NO_MEMORY;
+	}
+
+	lf_fifo_init(&queue->fifo, queue->fifo.data, size);
+	queue->itemsz = itemsize;
+
+	return CY_RSLT_SUCCESS;
+}
+
+
+cy_rslt_t cy_rtos_queue_put(cy_queue_t *queue, const void *item_ptr)
+{
+	if (lf_fifo_free(&queue->fifo) < queue->itemsz) {
+		return CY_RTOS_QUEUE_FULL;
+	}
+	return lf_fifo_push_many(&queue->fifo, item_ptr, queue->itemsz) == 0 ? CY_RTOS_QUEUE_FULL : CY_RSLT_SUCCESS;
+}
+
+
+cy_rslt_t cy_rtos_queue_get(cy_queue_t *queue, void *item_ptr)
+{
+	if (lf_fifo_used(&queue->fifo) < queue->itemsz) {
+		return CY_RTOS_QUEUE_EMPTY;
+	}
+	return lf_fifo_pop_many(&queue->fifo, item_ptr, queue->itemsz) == 0 ? CY_RTOS_QUEUE_EMPTY : CY_RSLT_SUCCESS;
+}
+
+
+cy_rslt_t cy_rtos_queue_count(cy_queue_t *queue, size_t *num_waiting)
+{
+	*num_waiting = (lf_fifo_used(&queue->fifo)) / queue->itemsz;
+	return CY_RSLT_SUCCESS;
+}
+
+
+cy_rslt_t cy_rtos_queue_space(cy_queue_t *queue, size_t *num_spaces)
+{
+	*num_spaces = lf_fifo_free(&queue->fifo) / queue->itemsz;
+	return CY_RSLT_SUCCESS;
+}
+
+
+cy_rslt_t cy_rtos_queue_reset(cy_queue_t *queue)
+{
+	lf_fifo_init(&queue->fifo, queue->fifo.data, queue->fifo.size);
+	return CY_RSLT_SUCCESS;
+}
+
+
+cy_rslt_t cy_rtos_queue_deinit(cy_queue_t *queue)
+{
+	free(queue->fifo.data);
+	queue->fifo.data = NULL;
 	return CY_RSLT_SUCCESS;
 }

@@ -28,8 +28,11 @@
 
 #pragma once
 
+#include <stdatomic.h>
 #include <sys/types.h>
 #include <sys/threads.h>
+
+#include <lf-fifo.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -83,6 +86,18 @@ typedef void *cy_thread_arg_t;
 typedef handle_t cy_mutex_t;
 /** Alias for the RTOS specific time unit (in milliseconds) */
 typedef time_t cy_time_t;
+/** Alias for the RTOS specific semaphore implementation */
+typedef struct {
+	handle_t mutex;
+	handle_t cond;
+	volatile unsigned int v;
+	unsigned int m;
+} cy_semaphore_t;
+/** Alias for the RTOS specific queue implementation */
+typedef struct {
+	lf_fifo_t fifo;
+	size_t itemsz;
+} cy_queue_t;
 
 /** \} group_abstraction_rtos_port */
 
