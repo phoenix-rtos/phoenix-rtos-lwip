@@ -43,6 +43,7 @@
 /*
  #include "TODO: Port specific header file"
  */
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -83,6 +84,11 @@ typedef struct
 	/* TODO: replace with port specific items */
 	void *empty;
 } cyhal_m2m_t;
+
+/** USB object */
+typedef struct {
+	void *usb_priv;
+} cyhal_usb_t;
 
 /** \} group_hal_hw_types_data_structures */
 

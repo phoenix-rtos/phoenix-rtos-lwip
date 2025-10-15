@@ -311,7 +311,7 @@ static err_t wifiinit(struct netif *iface)
 	res = whd_wifi_get_mac_address(whd_iface, &macaddr);
 
 	if (res != CY_RSLT_SUCCESS) {
-		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "whd_wifi_get_mac_address call failed, err = %lx\n", res);
+		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "whd_wifi_get_mac_address call failed, err = %" PRIx32 "\n", res);
 		return res;
 	}
 	memcpy(&iface->hwaddr, &macaddr, sizeof(macaddr));
