@@ -390,7 +390,7 @@ extern whd_result_t whd_wifi_join(whd_interface_t ifp, const whd_ssid_t *ssid, w
  *
  *  @param   ifp           Pointer to handle instance of whd interface
  *  @param   ap            A pointer to a whd_scan_result_t structure containing AP details and
- *                         set ap.channel to 0 for unspecificed channel
+ *                         set ap.channel to 0 for unspecified channel
  *  @param   security_key  A byte array containing either the cleartext security key for WPA/WPA2
  *                         secured networks
  *  @param   key_length    The length of the security_key in bytes.
@@ -730,7 +730,7 @@ extern whd_result_t whd_wifi_init_ap(whd_interface_t ifp, whd_ssid_t *ssid, whd_
                                  const uint8_t *security_key, uint8_t key_length, uint16_t chanspec);
 
 /** Start the infrastructure WiFi network (SoftAP)
- *  using the parameter set by whd_wifi_init_ap() and optionaly by whd_wifi_manage_custom_ie()
+ *  using the parameter set by whd_wifi_init_ap() and optionally by whd_wifi_manage_custom_ie()
  *
  *  @return  WHD_SUCCESS   if successfully creates an AP
  *           Error code    if an error occurred
@@ -1086,7 +1086,7 @@ extern whd_result_t whd_wifi_twt_information_frame(whd_interface_t ifp, whd_twt_
  */
 extern whd_result_t whd_wifi_btwt_config(whd_interface_t ifp, whd_btwt_config_params_t *twt_params);
 
-/** Add MBO preffered/non-prefferd channel attributes
+/** Add MBO preferred/non-preferrd channel attributes
  *
  *  @param  ifp            Pointer to handle instance of whd interface
  *  @param  mbo_params     pointer to whd_mbo_add_chan_pref_params_t structure
@@ -1095,7 +1095,7 @@ extern whd_result_t whd_wifi_btwt_config(whd_interface_t ifp, whd_btwt_config_pa
  */
 extern uint32_t whd_wifi_mbo_add_chan_pref(whd_interface_t ifp, whd_mbo_add_chan_pref_params_t *mbo_params);
 
-/** Delete MBO preffered/non-prefferd channel attributes
+/** Delete MBO preferred/non-preferrd channel attributes
  *
  *  @param  ifp            Pointer to handle instance of whd interface
  *  @param  mbo_params     pointer to whd_mbo_del_chan_pref_params_t structure
@@ -1475,8 +1475,8 @@ extern whd_result_t whd_wifi_get_ioctl_buffer(whd_interface_t ifp, uint32_t ioct
  *
  *  @param  ifp           Pointer to handle instance of whd interface
  *  @param  iovar_name    SDPCM_GET - To get the I/O Variable
- *  @param  param         Paramater to be passed for the IOVAR
- *  @param  paramlen      Paramter length
+ *  @param  param         Parameter to be passed for the IOVAR
+ *  @param  paramlen      Parameter length
  *  @param  out_buffer    Pointer to receive the handle for the packet buffer containing the response data value received
  *  @param  out_length    Length of out_buffer
  *
@@ -1552,7 +1552,7 @@ extern whd_result_t whd_network_get_ifidx_from_ifp(whd_interface_t ifp, uint8_t 
 extern whd_result_t whd_network_get_bsscfgidx_from_ifp(whd_interface_t ifp, uint8_t *bsscfgidx);
 
 
-/** Retrives the bss info
+/** Retrieves the bss info
  *
  *  @param  ifp                  Pointer to handle instance of whd interface
  *  @param  bi                   A pointer to the structure wl_bss_info_t
