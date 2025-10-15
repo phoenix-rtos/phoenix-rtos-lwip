@@ -44,10 +44,9 @@ extern "C"
  * Indicates transmit/receive direction that the packet buffer has
  * been used for. This is needed if tx/rx pools are separate.
  */
-typedef enum
-{
-    WHD_NETWORK_TX, /**< Transmit direction */
-    WHD_NETWORK_RX  /**< Recieve direction */
+typedef enum {
+	WHD_NETWORK_TX, /**< Transmit direction */
+	WHD_NETWORK_RX  /**< Receive direction */
 } whd_buffer_dir_t;
 
 /**
