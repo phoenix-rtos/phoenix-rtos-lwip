@@ -305,7 +305,7 @@ uint32_t host_resource_read(whd_driver_t whd_drv, whd_resource_type_t type, uint
 		return WHD_BADARG;
 	}
 
-	if (offset + size >= resource_size) {
+	if (offset + size > resource_size) {
 		size = resource_size - offset;
 	}
 
