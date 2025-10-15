@@ -627,7 +627,7 @@ whd_result_t whd_wifi_read_wlan_log_unsafe(whd_driver_t whd_driver, uint32_t wla
             if (buffer[n - 1] == '\r')
                 n--;
             buffer[n] = 0;
-            WPRINT_MACRO( ("CONSOLE: %s\n", buffer) );
+            WPRINT_INFO( ("CONSOLE: %s\n", buffer) );
         }
     }
     /* Save last read position */
@@ -740,27 +740,27 @@ whd_result_t whd_ioctl_print(whd_driver_t whd_driver)
         {
             whd_event_info_to_string(whd_driver->whd_ioctl_log[i].ioct_log, whd_driver->whd_ioctl_log[i].flag,
                                      whd_driver->whd_ioctl_log[i].reason, iovar, sizeof(iovar) - 1);
-            WPRINT_MACRO( ("\n<- E:%" PRIu32 "\t\t\tS:%d\t\t\t\tR:%" PRIu32 "\n%s\n",
-                           whd_driver->whd_ioctl_log[i].ioct_log,
-                           whd_driver->whd_ioctl_log[i].flag, whd_driver->whd_ioctl_log[i].reason, iovar) );
+            WPRINT_INFO( ("\n<- E:%" PRIu32 "\t\t\tS:%d\t\t\t\tR:%" PRIu32 "\n%s\n",
+                          whd_driver->whd_ioctl_log[i].ioct_log,
+                          whd_driver->whd_ioctl_log[i].flag, whd_driver->whd_ioctl_log[i].reason, iovar) );
         }
         else if (whd_driver->whd_ioctl_log[i].ioct_log == WLC_SET_VAR)
         {
-            WPRINT_MACRO( ("\n-> %s\n", iovar) );
+            WPRINT_INFO( ("\n-> %s\n", iovar) );
             whd_hexdump(data, whd_driver->whd_ioctl_log[i].data_size);
         }
         else if (whd_driver->whd_ioctl_log[i].ioct_log == WLC_GET_VAR)
         {
-            WPRINT_MACRO( ("\n<- %s\n", iovar) );
+            WPRINT_INFO( ("\n<- %s\n", iovar) );
             whd_hexdump(data, whd_driver->whd_ioctl_log[i].data_size);
         }
         else if (whd_driver->whd_ioctl_log[i].ioct_log != 0)
         {
             whd_ioctl_info_to_string(whd_driver->whd_ioctl_log[i].ioct_log, iovar, sizeof(iovar) - 1);
-            WPRINT_MACRO( ("\n%s:%" PRIu32 "\n", iovar, whd_driver->whd_ioctl_log[i].ioct_log) );
+            WPRINT_INFO( ("\n%s:%" PRIu32 "\n", iovar, whd_driver->whd_ioctl_log[i].ioct_log) );
             whd_hexdump(data, whd_driver->whd_ioctl_log[i].data_size);
         }
-    }
+	}
 
     memset(whd_driver->whd_ioctl_log, 0, sizeof(whd_driver->whd_ioctl_log) );
     whd_driver->whd_ioctl_log_index = 0;
