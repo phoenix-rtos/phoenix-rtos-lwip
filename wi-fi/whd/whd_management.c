@@ -327,6 +327,8 @@ whd_result_t whd_wifi_on(whd_driver_t whd_driver, whd_interface_t *ifpp)
 
     whd_init_stats(whd_driver);
 
+    whd_add_primary_interface(whd_driver, ifpp);
+    ifp = *ifpp;
 
     retval = whd_management_wifi_platform_init(whd_driver, whd_driver->country, WHD_FALSE);
     if (retval != WHD_SUCCESS)
@@ -335,14 +337,11 @@ whd_result_t whd_wifi_on(whd_driver_t whd_driver, whd_interface_t *ifpp)
         return retval;
     }
 
-    whd_add_primary_interface(whd_driver, ifpp);
-    ifp = *ifpp;
-
     /* Download blob file if exists */
     retval = whd_process_clm_data(ifp);
     if (retval != WHD_SUCCESS)
     {
-        WPRINT_MACRO( ("****************************************************\n"
+        WPRINT_ERROR( ("****************************************************\n"
                        "** ERROR: WLAN: could not download clm_blob file\n"
                        "** FATAL ERROR: system unusable, CLM blob file not found or corrupted.\n"
                        "****************************************************\n") );
@@ -569,8 +568,12 @@ whd_result_t whd_wifi_off(whd_interface_t ifp)
         return WHD_SUCCESS;
     }
 
-    /* Set wlc down before turning off the device */
-    CHECK_RETURN(whd_wifi_set_ioctl_buffer(ifp, WLC_DOWN, NULL, 0) );
+	/* Set wlc down before turning off the device */
+	/* CHECK_RETURN(...) removed due to a bug:
+	* If `whd_wifi_set_ioctl_buffer` fails, then `whd_thread_quit` is not called,
+	* `whd_driver` is freed while used by `whd_thread_func`, which causes SEGFAULT.
+	*/
+    (void)whd_wifi_set_ioctl_buffer(ifp, WLC_DOWN, NULL, 0);
     whd_driver->internal_info.whd_wlan_status.state = WLAN_DOWN;
 
     /* Disable SDIO/SPI interrupt */

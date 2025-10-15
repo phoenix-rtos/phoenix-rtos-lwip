@@ -1570,6 +1570,10 @@ extern whd_result_t whd_wifi_get_bss_info(whd_interface_t ifp, wl_bss_info_t *bi
  */
 extern whd_result_t whd_print_stats(whd_driver_t whd_drv, whd_bool_t reset_after_print);
 
+extern whd_result_t whd_print_wlan_log(whd_driver_t whd_drv);
+
+extern whd_result_t whd_wifi_print_wlan_log(whd_interface_t ifp);
+
 /** Fetches ulp statistics and fills the buffer with that data and executes deepsleep
  *  indication callback if application registers for it
  *

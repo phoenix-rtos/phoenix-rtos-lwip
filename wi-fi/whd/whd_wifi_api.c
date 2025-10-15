@@ -381,33 +381,33 @@ whd_result_t whd_wifi_set_up(whd_interface_t ifp)
 
     if (whd_wifi_get_mac_address(ifp, &mac) == WHD_SUCCESS)
     {
-        WPRINT_MACRO( ("WLAN MAC Address : %02X:%02X:%02X:%02X:%02X:%02X\n", mac.octet[0], mac.octet[1], mac.octet[2],
-                       mac.octet[3], mac.octet[4], mac.octet[5]) );
+        WPRINT_INFO( ("WLAN MAC Address : %02X:%02X:%02X:%02X:%02X:%02X\n", mac.octet[0], mac.octet[1], mac.octet[2],
+                      mac.octet[3], mac.octet[4], mac.octet[5]) );
     }
 
-    if (whd_wifi_get_wifi_version(ifp, version, sizeof(version) ) == WHD_SUCCESS)
+    if (whd_wifi_get_wifi_version(ifp, version, sizeof(version)) == WHD_SUCCESS)
     {
-        WPRINT_MACRO( ("WLAN Firmware    : %s", version) );
+        WPRINT_INFO( ("WLAN Firmware    : %s", version) );
     }
 
     /* minimize bootloader usage and start time from UART output */
-    if (whd_wifi_get_clm_version(ifp, version, sizeof(version) ) == WHD_SUCCESS)
+    if (whd_wifi_get_clm_version(ifp, version, sizeof(version)) == WHD_SUCCESS)
     {
-        WPRINT_MACRO( ("WLAN CLM         : %s\n", version) );
+        WPRINT_INFO( ("WLAN CLM         : %s\n", version) );
     }
 
-    WPRINT_MACRO( ("WHD VERSION      : " WHD_VERSION) );
-    WPRINT_MACRO( (" : " WHD_BRANCH) );
+    WPRINT_INFO( ("WHD VERSION      : " WHD_VERSION) );
+    WPRINT_INFO( (" : " WHD_BRANCH) );
 #if defined(__ARMCC_VERSION)
-    WPRINT_MACRO( (" : ARM CLANG %u", __ARMCC_VERSION) );
+    WPRINT_INFO( (" : ARM CLANG %u", __ARMCC_VERSION) );
 #elif defined(__ICCARM__)
-    WPRINT_MACRO( (" : IAR %u", __VER__) );
+    WPRINT_INFO( (" : IAR %u", __VER__) );
 #elif defined(__GNUC__)
-    WPRINT_MACRO( (" : GCC %u.%u", __GNUC__, __GNUC_MINOR__) );
+    WPRINT_INFO( (" : GCC %u.%u", __GNUC__, __GNUC_MINOR__) );
 #else
-    WPRINT_MACRO( (" : UNKNOWN CC") );
+    WPRINT_INFO( (" : UNKNOWN CC") );
 #endif
-    WPRINT_MACRO( (" : " WHD_DATE "\n") );
+    WPRINT_INFO( (" : " WHD_DATE "\n") );
 
     /* Update wlan status */
     whd_driver->internal_info.whd_wlan_status.state = WLAN_UP;
@@ -4008,7 +4008,6 @@ whd_result_t whd_wifi_he_omi(whd_interface_t ifp, whd_he_omi_params_t *he_omi_pa
     whd_driver = ifp->whd_driver;
     CHECK_DRIVER_NULL(whd_driver);
 
-    memset( (uint8_t *)&he_omi_iovar, 0x00, sizeof(he_omi_iovar) );
     he_omi.version = WL_HE_OMI_VER;
     he_omi.length = sizeof(wl_he_omi_t) - 2;
     he_omi.rx_nss = he_omi_params->rx_nss;
@@ -4911,17 +4910,17 @@ whd_result_t whd_arp_features_print(uint32_t features, const char *title)
 {
     if (title != NULL)
     {
-        WPRINT_MACRO( ("%s\n", title) );
+        WPRINT_INFO( ("%s\n", title) );
     }
-    WPRINT_MACRO( ("            features     : 0x%x\n", (int)features) );
-    WPRINT_MACRO( ("            agent_enabled: (0x%x) %s\n", (int)(features & ARP_OL_AGENT),
-                   (features & ARP_OL_AGENT) ? "Enabled" : "  disabled") );
-    WPRINT_MACRO( ("            snoop_enabled: (0x%x) %s\n", (int)(features & ARP_OL_SNOOP),
-                   (features & ARP_OL_SNOOP) ? "Enabled" : "  disabled") );
-    WPRINT_MACRO( ("  host_auto_reply_enabled: (0x%x) %s\n", (int)(features & ARP_OL_HOST_AUTO_REPLY),
-                   (features & ARP_OL_HOST_AUTO_REPLY) ? "Enabled" : "  disabled") );
-    WPRINT_MACRO( ("  peer_auto_reply_enabled: (0x%x) %s\n", (int)(features & ARP_OL_PEER_AUTO_REPLY),
-                   (features & ARP_OL_PEER_AUTO_REPLY) ? "Enabled" : "  disabled") );
+    WPRINT_INFO( ("            features     : 0x%x\n", (int)features) );
+    WPRINT_INFO( ("            agent_enabled: (0x%x) %s\n", (int)(features & ARP_OL_AGENT),
+                  (features & ARP_OL_AGENT) ? "Enabled" : "  disabled") );
+    WPRINT_INFO( ("            snoop_enabled: (0x%x) %s\n", (int)(features & ARP_OL_SNOOP),
+                  (features & ARP_OL_SNOOP) ? "Enabled" : "  disabled") );
+    WPRINT_INFO( ("  host_auto_reply_enabled: (0x%x) %s\n", (int)(features & ARP_OL_HOST_AUTO_REPLY),
+                  (features & ARP_OL_HOST_AUTO_REPLY) ? "Enabled" : "  disabled") );
+    WPRINT_INFO( ("  peer_auto_reply_enabled: (0x%x) %s\n", (int)(features & ARP_OL_PEER_AUTO_REPLY),
+                  (features & ARP_OL_PEER_AUTO_REPLY) ? "Enabled" : "  disabled") );
 
     return WHD_SUCCESS;
 }
@@ -5228,38 +5227,37 @@ whd_result_t whd_arp_stats_print(whd_arp_stats_t *arp_stats, const char *title)
 
     if (title != NULL)
     {
-        WPRINT_MACRO( ("%s\n", title) );
+        WPRINT_INFO( ("%s\n", title) );
     }
-    WPRINT_MACRO( ("                  version: 0x%" PRIx32 "\n", arp_stats->version) );
-    WPRINT_MACRO( ("          host_ip_entries: %d\n", (int)arp_stats->stats.host_ip_entries) );
-    WPRINT_MACRO( ("         host_ip_overflow: %d\n", (int)arp_stats->stats.host_ip_overflow) );
-    WPRINT_MACRO( ("        arp_table_entries: %d\n", (int)arp_stats->stats.arp_table_entries) );
-    WPRINT_MACRO( ("       arp_table_overflow: %d\n", (int)arp_stats->stats.arp_table_overflow) );
-    WPRINT_MACRO( ("             host_request: %d\n", (int)arp_stats->stats.host_request) );
-    WPRINT_MACRO( ("               host_reply: %d\n", (int)arp_stats->stats.host_reply) );
-    WPRINT_MACRO( ("             host_service: %d\n", (int)arp_stats->stats.host_service) );
-    WPRINT_MACRO( ("             peer_request: %d\n", (int)arp_stats->stats.peer_request) );
-    WPRINT_MACRO( ("        peer_request_drop: %d\n", (int)arp_stats->stats.peer_request_drop) );
-    WPRINT_MACRO( ("               peer_reply: %d\n", (int)arp_stats->stats.peer_reply) );
-    WPRINT_MACRO( ("          peer_reply_drop: %d\n", (int)arp_stats->stats.peer_reply_drop) );
-    WPRINT_MACRO( ("             peer_service: %d\n", (int)arp_stats->stats.peer_service) );
-    WPRINT_MACRO( ("                  peerage: %d\n", (int)arp_stats->peerage) );
-    WPRINT_MACRO( ("                    arpoe: %d %s\n", (int)arp_stats->arpoe,
-                   (arp_stats->arpoe != 0) ? "Enabled" : "  disabled") );
+    WPRINT_INFO( ("                  version: 0x%" PRIx32 "\n", arp_stats->version) );
+    WPRINT_INFO( ("          host_ip_entries: %d\n", (int)arp_stats->stats.host_ip_entries) );
+    WPRINT_INFO( ("         host_ip_overflow: %d\n", (int)arp_stats->stats.host_ip_overflow) );
+    WPRINT_INFO( ("        arp_table_entries: %d\n", (int)arp_stats->stats.arp_table_entries) );
+    WPRINT_INFO( ("       arp_table_overflow: %d\n", (int)arp_stats->stats.arp_table_overflow) );
+    WPRINT_INFO( ("             host_request: %d\n", (int)arp_stats->stats.host_request) );
+    WPRINT_INFO( ("               host_reply: %d\n", (int)arp_stats->stats.host_reply) );
+    WPRINT_INFO( ("             host_service: %d\n", (int)arp_stats->stats.host_service) );
+    WPRINT_INFO( ("             peer_request: %d\n", (int)arp_stats->stats.peer_request) );
+    WPRINT_INFO( ("        peer_request_drop: %d\n", (int)arp_stats->stats.peer_request_drop) );
+    WPRINT_INFO( ("               peer_reply: %d\n", (int)arp_stats->stats.peer_reply) );
+    WPRINT_INFO( ("          peer_reply_drop: %d\n", (int)arp_stats->stats.peer_reply_drop) );
+    WPRINT_INFO( ("             peer_service: %d\n", (int)arp_stats->stats.peer_service) );
+    WPRINT_INFO( ("                  peerage: %d\n", (int)arp_stats->peerage) );
+    WPRINT_INFO( ("                    arpoe: %d %s\n", (int)arp_stats->arpoe,
+                  (arp_stats->arpoe != 0) ? "Enabled" : "  disabled") );
 
     whd_arp_features_print(arp_stats->features_enabled, NULL);
 
     if (arp_stats->stats.host_ip_entries > 0)
     {
-        WPRINT_MACRO( ("WLAN Device Host IP entries\n") );
-        for (index = 0; index < arp_stats->stats.host_ip_entries; index++)
-        {
+        WPRINT_INFO( ("WLAN Device Host IP entries\n") );
+        for (index = 0; index < arp_stats->stats.host_ip_entries; index++) {
             uint32_t ipv4_addr = arp_stats->host_ip_list[index];
             char ipv4_string[32];
-            memset(ipv4_string, 0x00, sizeof(ipv4_string) );
+            memset(ipv4_string, 0x00, sizeof(ipv4_string));
             whd_ip4_to_string(&ipv4_addr, ipv4_string);
-            WPRINT_MACRO( ("  %d of %d IPV4: 0x%x %s\n", (int)index, (int)arp_stats->stats.host_ip_entries,
-                           (int)arp_stats->host_ip_list[index], ipv4_string) );
+            WPRINT_INFO( ("  %d of %d IPV4: 0x%x %s\n", (int)index, (int)arp_stats->stats.host_ip_entries,
+                          (int)arp_stats->host_ip_list[index], ipv4_string) );
         }
     }
     return WHD_SUCCESS;
@@ -6012,6 +6010,27 @@ whd_wowl_get_secure_session_status(whd_interface_t ifp, secure_sess_info_t *tls_
     memcpy(tls_sess_info, sess_info, sizeof(struct secure_sess_info));
     ret = whd_buffer_release(whd_driver, response, WHD_NETWORK_RX);
     return ret;
+}
+
+whd_result_t whd_print_wlan_log(whd_driver_t whd_drv)
+{
+    char *buf;
+    whd_result_t result;
+
+    buf = whd_mem_malloc(WLAN_LOG_BUF_LEN);
+    if (buf == NULL)
+    {
+        return WHD_MALLOC_FAILURE;
+    }
+
+    result = whd_wifi_read_wlan_log(whd_drv, buf, WLAN_LOG_BUF_LEN);
+    whd_mem_free(buf);
+    return result;
+}
+
+whd_result_t whd_wifi_print_wlan_log(whd_interface_t ifp)
+{
+	return whd_print_wlan_log(ifp->whd_driver);
 }
 
 #ifdef CYCFG_ULP_SUPPORT_ENABLED
