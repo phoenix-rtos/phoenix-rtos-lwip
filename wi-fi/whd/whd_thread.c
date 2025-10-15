@@ -231,9 +231,8 @@ int8_t whd_thread_receive_one_packet(whd_driver_t whd_driver)
 #if (CYBSP_WIFI_INTERFACE_TYPE == CYBSP_USB_INTERFACE)
         uint8_t *data = whd_buffer_get_current_piece_data_pointer(whd_driver, recv_buffer);
 
-        if (data[0] == 0x20)
-        {
-        	/* Check if recive bdc Event or Data pack */
+		if (data[0] == 0x20) {
+			/* Check if receive bdc Event or Data pack */
 			whd_event_t *event = (whd_event_t *)(data + sizeof(bdc_header_t));
 
 			if (ntoh16(event->eth.ethertype) == 0x886C /* <- ETHER_TYPE_BRCM */)
