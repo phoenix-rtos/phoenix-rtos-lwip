@@ -41,11 +41,10 @@ extern "C"
 /**
  * Type of resources
  */
-typedef enum
-{
-    WHD_RESOURCE_WLAN_FIRMWARE, /**< Resource type: WLAN Firmware */
-    WHD_RESOURCE_WLAN_NVRAM,    /**< Resource type: NVRAM file */
-    WHD_RESOURCE_WLAN_CLM,      /**< Resource type: CLM_BLOB file */
+typedef enum {
+	WHD_RESOURCE_WLAN_FIRMWARE, /**< Resource type: WLAN Firmware */
+	WHD_RESOURCE_WLAN_NVRAM,    /**< Resource type: NVRAM file */
+	WHD_RESOURCE_WLAN_CLM,      /**< Resource type: CLM_BLOB file */
 } whd_resource_type_t;
 
 /******************************************************

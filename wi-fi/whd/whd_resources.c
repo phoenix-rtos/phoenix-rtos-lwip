@@ -29,6 +29,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "lwipopts.h"
 
 #ifndef WIFI_FIRMWARE_FILES_DIRECTORY_PATH
 #define WIFI_FIRMWARE_FILES_DIRECTORY_PATH "/firmware"
@@ -46,8 +47,9 @@
 #define NVRAM_FILE_EXTENSION ".nvram_blob"
 #endif
 
-#define AW_NM512_FILENAME     "43439A0"
-#define STERLING_LWB_FILENAME "brcmfmac43430-sdio-prod"
+#define AW_NM512_FILENAME          "43439A0"
+#define STERLING_LWB_FILENAME      "brcmfmac43430-sdio-prod"
+#define STERLING_LWB5PLUS_FILENAME "4373A0"
 
 
 static uint8_t resource_buf[BLOCK_SIZE];
@@ -99,6 +101,26 @@ static const struct chip_lookup {
 				.mem_size = 0,
 			},
 		},
+	},
+	{
+		.chip_id = 0x4373,
+		.rsrc = {
+			[WHD_RESOURCE_WLAN_FIRMWARE] = {
+				.path = WIFI_FIRMWARE_FILES_DIRECTORY_PATH "/" STERLING_LWB5PLUS_FILENAME FIRMWARE_FILE_EXTENSION,
+				.mem_image = NULL,
+				.mem_size = 0,
+			},
+			[WHD_RESOURCE_WLAN_NVRAM] = {
+				.path = WIFI_FIRMWARE_FILES_DIRECTORY_PATH "/" STERLING_LWB5PLUS_FILENAME NVRAM_FILE_EXTENSION,
+				.mem_image = sterling_lwb5plus_wifi_nvram_image,
+				.mem_size = sizeof(sterling_lwb5plus_wifi_nvram_image),
+			},
+			[WHD_RESOURCE_WLAN_CLM] = {
+				.path = WIFI_FIRMWARE_FILES_DIRECTORY_PATH "/" STERLING_LWB5PLUS_FILENAME CLM_FILE_EXTENSION,
+				.mem_image = NULL,
+				.mem_size = 0,
+			},
+		}
 	},
 };
 
@@ -268,9 +290,46 @@ uint32_t host_get_resource_block(whd_driver_t whd_drv, whd_resource_type_t type,
 }
 
 
+uint32_t host_resource_read(whd_driver_t whd_drv, whd_resource_type_t type, uint32_t offset, uint32_t size, uint32_t *size_out, void *buffer)
+{
+	uint32_t result, resource_size;
+	const struct resource *rsrc;
+	bool is_memory;
+
+	result = resource_lookup(whd_drv, type, &rsrc, &is_memory, &resource_size);
+	if (result != WHD_SUCCESS) {
+		return result;
+	}
+
+	if (offset >= resource_size) {
+		return WHD_BADARG;
+	}
+
+	if (offset + size >= resource_size) {
+		size = resource_size - offset;
+	}
+
+	memset(buffer, 0, size);
+
+	if (is_memory) {
+		memcpy(buffer, rsrc->mem_image + offset, size);
+	}
+	else {
+		if (read_file(rsrc->path, offset, size, buffer) < 0) {
+			return WHD_HAL_ERROR;
+		}
+	}
+
+	*size_out = size;
+
+	return WHD_SUCCESS;
+}
+
+
 whd_resource_source_t resource_ops = {
 	.whd_resource_size = host_resource_size,
 	.whd_get_resource_block_size = host_get_resource_block_size,
 	.whd_get_resource_no_of_blocks = host_get_resource_no_of_blocks,
-	.whd_get_resource_block = host_get_resource_block
+	.whd_get_resource_block = host_get_resource_block,
+	.whd_resource_read = host_resource_read,
 };
