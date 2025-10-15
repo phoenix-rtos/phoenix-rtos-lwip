@@ -1446,7 +1446,7 @@ static whd_result_t whd_msgbuf_rxbuf_data_post(struct whd_msgbuf *msgbuf, uint32
 	struct whd_commonring *commonring;
 	void *ret_ptr;
 	whd_buffer_t rx_databuf = NULL;
-	uint16_t alloced;
+	uint16_t allocated;
 	uint32_t pktlen = 0;
 	struct msgbuf_rx_bufpost *rx_bufpost;
 	uint32_t physaddr;
@@ -1456,16 +1456,16 @@ static whd_result_t whd_msgbuf_rxbuf_data_post(struct whd_msgbuf *msgbuf, uint32
 
 	commonring = msgbuf->commonrings[WHD_H2D_MSGRING_RXPOST_SUBMIT];
 
-	ret_ptr = whd_commonring_reserve_for_write_multiple(commonring, count, &alloced);
+	ret_ptr = whd_commonring_reserve_for_write_multiple(commonring, count, &allocated);
 
-	WPRINT_WHD_DEBUG(("%s : Allocated is %d , count is %ld \n", __func__, alloced, count));
+	WPRINT_WHD_DEBUG(("%s : Allocated is %d , count is %ld \n", __func__, allocated, count));
 
 	if (!ret_ptr) {
 		WPRINT_WHD_DEBUG(("Failed to reserve space in commonring\n"));
 		return WHD_SUCCESS;
 	}
 
-	for (i = 0; i < alloced; i++) {
+	for (i = 0; i < allocated; i++) {
 		rx_bufpost = (struct msgbuf_rx_bufpost *)ret_ptr;
 		memset(rx_bufpost, 0, sizeof(*rx_bufpost));
 
@@ -1474,7 +1474,7 @@ static whd_result_t whd_msgbuf_rxbuf_data_post(struct whd_msgbuf *msgbuf, uint32
 
 		if (result != WHD_SUCCESS) {
 			WPRINT_WHD_ERROR(("%s : Allocation Failed \n", __func__));
-			whd_commonring_write_cancel(commonring, alloced - i);
+			whd_commonring_write_cancel(commonring, allocated - i);
 			break;
 		}
 		/* Since the buffer to be given to WLAN DMA, Adding 2 bytes for DMA Alignment */
@@ -1489,7 +1489,7 @@ static whd_result_t whd_msgbuf_rxbuf_data_post(struct whd_msgbuf *msgbuf, uint32
 			if (result != WHD_SUCCESS)
 				WPRINT_WHD_ERROR(("buffer release failed in %s at %d \n", __func__, __LINE__));
 			WPRINT_WHD_ERROR(("No PKTID available !!\n"));
-			whd_commonring_write_cancel(commonring, alloced - i);
+			whd_commonring_write_cancel(commonring, allocated - i);
 			break;
 		}
 

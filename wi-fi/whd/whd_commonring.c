@@ -157,7 +157,7 @@ again:
 
 void *
 whd_commonring_reserve_for_write_multiple(struct whd_commonring *commonring,
-		uint16_t n_items, uint16_t *alloced)
+		uint16_t n_items, uint16_t *allocated)
 {
 	void *ret_ptr;
 	uint16_t available;
@@ -173,10 +173,10 @@ again:
 	if (available > 1) {
 		ret_ptr = (uint8_t *)commonring->buf_addr +
 				(commonring->w_ptr * commonring->item_len);
-		*alloced = MIN(n_items, available - 1);
-		if (*alloced + commonring->w_ptr > commonring->depth)
-			*alloced = commonring->depth - commonring->w_ptr;
-		commonring->w_ptr += *alloced;
+		*allocated = MIN(n_items, available - 1);
+		if (*allocated + commonring->w_ptr > commonring->depth)
+			*allocated = commonring->depth - commonring->w_ptr;
+		commonring->w_ptr += *allocated;
 		if (commonring->w_ptr == commonring->depth)
 			commonring->w_ptr = 0;
 		return ret_ptr;

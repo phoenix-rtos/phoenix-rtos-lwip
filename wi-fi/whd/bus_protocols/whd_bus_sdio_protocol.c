@@ -726,7 +726,7 @@ exit:
  * From internal documentation: hwnbu-twiki/SdioMessageEncapsulation
  * When data is available on the device, the device will issue an interrupt:
  * - the device should signal the interrupt as a hint that one or more data frames may be available on the device for reading
- * - the host may issue reads of the 4 byte length tag at any time -- that is, whether an interupt has been issued or not
+ * - the host may issue reads of the 4 byte length tag at any time -- that is, whether an interrupt has been issued or not
  * - if a frame is available, the tag read should return a nonzero length (>= 4) and the host can then read the remainder of the frame by issuing one or more CMD53 reads
  * - if a frame is not available, the 4byte tag read should return zero
  */
@@ -1721,7 +1721,7 @@ static whd_result_t whd_bus_sdio_blhs(whd_driver_t whd_driver, whd_bus_blhs_stag
 			}
 
 			/* Check for any interrupt pending. Here Interrupt pending will be treated as HS bit
-			 * to know that the backplane is enabled. Interrupt pending register is choosen here
+			 * to know that the backplane is enabled. Interrupt pending register is chosen here
 			 * because the backplane will be disabled and this is the only tested register which
 			 * is accessible while backplane is disabled
 			 */

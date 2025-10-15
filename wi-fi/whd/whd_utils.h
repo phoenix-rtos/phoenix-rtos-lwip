@@ -161,7 +161,7 @@ void whd_ioctl_info_to_string(uint32_t cmd, char *ioctl_str, uint16_t ioctl_str_
  *
  * @param[in] cmd  The event value in numeric form.
  * @param[in] flag  The status value in numeric form.
- * @param[in] reason  The reson value in numeric form.
+ * @param[in] reason  The reason value in numeric form.
  * @param[out] ioctl_str  The string representation of event, status and reason.
  * @param[out] ioctl_str_len  The str_len of ioctl_str.
  *

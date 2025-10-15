@@ -564,7 +564,7 @@ whd_result_t whd_bus_m2m_sharedmem_init(whd_driver_t whd_driver)
 		host_capability = host_capability | WHD_PCIE_SHARED_USE_MAILBOX;
 	}
 
-	/* check firmware support dma indicies */
+	/* check firmware support dma indices */
 	if (internal_info.sh.flags & WHD_PCIE_SHARED_DMA_INDEX) {
 		if (internal_info.sh.flags & WHD_PCIE_SHARED_DMA_2B_IDX)
 			whd_driver->dma_index_sz = sizeof(uint16_t);

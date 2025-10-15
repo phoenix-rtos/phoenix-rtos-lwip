@@ -906,7 +906,7 @@ whd_result_t whd_wifi_set_pmksa(whd_interface_t ifp, const pmkid_t *pmkid)
 
 	if (cnt == MAXPMKID) {
 		CHECK_RETURN(whd_buffer_release(whd_driver, response, WHD_NETWORK_RX));
-		WPRINT_WHD_ERROR(("Too manay PMKSA entrie cached %" PRIu32 "\n", orig_pmkid_list->npmkid));
+		WPRINT_WHD_ERROR(("Too manay PMKSA entries cached %" PRIu32 "\n", orig_pmkid_list->npmkid));
 		return WHD_WLAN_NORESOURCE;
 	}
 
@@ -1506,7 +1506,7 @@ static whd_result_t whd_wifi_prepare_join(whd_interface_t ifp, whd_security_t au
 				CHECK_RETURN(whd_wifi_sae_password(ifp, security_key, key_length));
 			}
 			else {
-				/* Disable Roaming in FW, becuase our wpa3_external_supplicant's limitation.
+				/* Disable Roaming in FW, because our wpa3_external_supplicant's limitation.
 				   If FW report WLC_E_EXT_AUTH_REQ during roaming, Host already called whd_wifi_stop_external_auth_request. */
 				CHECK_RETURN(whd_wifi_set_iovar_value(ifp, IOVAR_STR_ROAM_OFF, 1));
 			}
@@ -4249,7 +4249,7 @@ whd_result_t whd_wifi_get_clm_version(whd_interface_t ifp, char *version, uint8_
 
 		version_length = strlen(version);
 
-		/* -2 becase \0 termination needs a char and strlen doesn't include length of \0 */
+		/* -2 because \0 termination needs a char and strlen doesn't include length of \0 */
 		if (version_length > length - 2)
 			version_length = length - 2;
 		version[version_length + 1] = '\0';
@@ -4702,7 +4702,7 @@ whd_result_t whd_arp_stats_get(whd_interface_t ifp, whd_arp_stats_t *arp_stats)
 		return WHD_BADARG;
 	}
 
-	/* set up the buffer to retreive the data */
+	/* set up the buffer to retrieve the data */
 	memcpy(&arp_stats_test, arp_stats, sizeof(whd_arp_stats_t));
 	memset(arp_stats, 0xFF, sizeof(whd_arp_stats_t));
 
@@ -5038,7 +5038,7 @@ whd_tko_param(whd_interface_t ifp, whd_tko_retry_t *whd_retry, uint8_t set)
 		}
 	}
 	else {
-		/* GET paramters */
+		/* GET parameters */
 		wl_tko_param_t tko_param_real;
 
 		result = whd_proto_get_iovar(ifp, buffer, &response);
