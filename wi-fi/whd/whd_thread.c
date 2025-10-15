@@ -222,28 +222,27 @@ int8_t whd_thread_receive_one_packet(whd_driver_t whd_driver)
         return 0;
     }
 
-    if (recv_buffer != NULL)    /* Could be null if it was only a credit update */
-    {
-
-        WPRINT_WHD_DATA_LOG( ("Wcd:< Rcvd pkt 0x%08lX\n", (unsigned long)recv_buffer) );
-        WHD_STATS_INCREMENT_VARIABLE(whd_driver, rx_total);
+	if (recv_buffer != NULL) /* Could be null if it was only a credit update */
+	{
+		WPRINT_WHD_DATA_LOG(("Wcd:< Rcvd pkt 0x%08lX\n", (unsigned long)recv_buffer));
+		WHD_STATS_INCREMENT_VARIABLE(whd_driver, rx_total);
 
 #if (CYBSP_WIFI_INTERFACE_TYPE == CYBSP_USB_INTERFACE)
         uint8_t *data = whd_buffer_get_current_piece_data_pointer(whd_driver, recv_buffer);
 
-		if (data[0] == 0x20) {
-			/* Check if receive bdc Event or Data pack */
-			whd_event_t *event = (whd_event_t *)(data + sizeof(bdc_header_t));
+        if (data[0] == 0x20) {
+            /* Check if receive bdc Event or Data pack */
+            whd_event_t *event = (whd_event_t *)(data + sizeof(bdc_header_t));
 
-			if (ntoh16(event->eth.ethertype) == 0x886C /* <- ETHER_TYPE_BRCM */)
-			{
-				whd_process_bdc_event(whd_driver, recv_buffer,
-										whd_buffer_get_current_piece_size(whd_driver, recv_buffer));
-			}
-			else
-			{
-				whd_process_bdc(whd_driver, recv_buffer);
-			}
+            if (ntoh16(event->eth.ethertype) == 0x886C /* <- ETHER_TYPE_BRCM */)
+            {
+            whd_process_bdc_event(whd_driver, recv_buffer,
+            whd_buffer_get_current_piece_size(whd_driver, recv_buffer));
+            }
+            else
+            {
+                whd_process_bdc(whd_driver, recv_buffer);
+            }
         }
         else
         {
