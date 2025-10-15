@@ -1,5 +1,5 @@
 /*
- * Copyright 2024, Cypress Semiconductor Corporation (an Infineon company)
+ * Copyright 2023, Cypress Semiconductor Corporation (an Infineon company)
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -44,6 +44,9 @@ typedef enum {
 	WHD_RESOURCE_WLAN_FIRMWARE, /**< Resource type: WLAN Firmware */
 	WHD_RESOURCE_WLAN_NVRAM,    /**< Resource type: NVRAM file */
 	WHD_RESOURCE_WLAN_CLM,      /**< Resource type: CLM_BLOB file */
+#ifdef DOWNLOAD_RAM_BOOTLOADER
+	WHD_RESOURCE_BL_IMAGE, /**< Resource type: Bootloader Image */
+#endif                     /* DOWNLOAD_RAM_BOOTLOADER */
 } whd_resource_type_t;
 
 /******************************************************
