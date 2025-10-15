@@ -21,6 +21,10 @@
 #ifndef INCLUDED_WHD_WLIOCTL_H
 #define INCLUDED_WHD_WLIOCTL_H
 
+#include <stdint.h>
+
+#include "whd_types.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -2085,11 +2089,11 @@ typedef struct
 	uint32_t txdropped; /* tx dropped pkts */
 	uint32_t rxbcast;   /* BroadcastReceivedFrameCount */
 	uint32_t rxdropped; /* rx dropped pkts (derived: sum of others) */
-	/* XXX: Do not remove or rename inthe middle of this struct.
-	 * All counter variables have to be of uint32_t.
-	 * Please follow the instruction in
-	 * http://hwnbu-twiki.sj.broadcom.com/bin/view/Mwgroup/WlCounters#Counter_Edition
-	 */
+						/* XXX: Do not remove or rename inthe middle of this struct.
+						 * All counter variables have to be of uint32_t.
+						 * Please follow the instruction in
+						 * http://hwnbu-twiki.sj.broadcom.com/bin/view/Mwgroup/WlCounters#Counter_Edition
+						 */
 } wl_cnt_ver_30_t;
 typedef struct
 {
@@ -3614,8 +3618,8 @@ typedef struct wl_wowl_pattern {
 	uint32_t id;            /**< id */
 	uint32_t reasonsize;    /**< Size of the wakeup reason code */
 	uint32_t type;          /**< Type of pattern */
-	/* Mask follows the structure above */
-	/* Pattern follows the mask is at 'patternoffset' from the start */
+							/* Mask follows the structure above */
+							/* Pattern follows the mask is at 'patternoffset' from the start */
 } wl_wowl_pattern_t;
 
 typedef struct wl_wowl_pattern_list {

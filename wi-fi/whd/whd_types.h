@@ -838,8 +838,8 @@ typedef struct wl_bss_info_struct {
 	uint16_t ie_offset; /**< offset at which IEs start, from beginning */
 	uint32_t ie_length; /**< byte length of Information Elements */
 	int16_t SNR;        /**< Average SNR(signal to noise ratio) during frame reception */
-	/* Add new fields here */
-	/* variable length Information Elements */
+						/* Add new fields here */
+						/* variable length Information Elements */
 } wl_bss_info_t;
 
 /** Structure for storing 802.11 powersave listen interval values \n

@@ -884,45 +884,45 @@ void whd_print_scan_result(whd_scan_result_t *record)
 	}
 
 	UNUSED_PARAMETER(str);
-	WPRINT_MACRO(("%5s ", str));
-	WPRINT_MACRO(("%02X:%02X:%02X:%02X:%02X:%02X ", record->BSSID.octet[0], record->BSSID.octet[1],
+	WPRINT_INFO(("%5s ", str));
+	WPRINT_INFO(("%02X:%02X:%02X:%02X:%02X:%02X ", record->BSSID.octet[0], record->BSSID.octet[1],
 			record->BSSID.octet[2], record->BSSID.octet[3], record->BSSID.octet[4],
 			record->BSSID.octet[5]));
 
 	if (record->flags & WHD_SCAN_RESULT_FLAG_RSSI_OFF_CHANNEL) {
-		WPRINT_MACRO(("OFF "));
+		WPRINT_INFO(("OFF "));
 	}
 	else {
-		WPRINT_MACRO(("%d ", record->signal_strength));
+		WPRINT_INFO(("%d ", record->signal_strength));
 	}
 
 	if (record->max_data_rate < 100000) {
-		WPRINT_MACRO((" %.1f ", (double)(record->max_data_rate / 1000.0)));
+		WPRINT_INFO((" %.1f ", (double)(record->max_data_rate / 1000.0)));
 	}
 	else {
-		WPRINT_MACRO(("%.1f ", (double)(record->max_data_rate / 1000.0)));
+		WPRINT_INFO(("%.1f ", (double)(record->max_data_rate / 1000.0)));
 	}
-	WPRINT_MACRO((" %3d  ", record->channel));
+	WPRINT_INFO((" %3d  ", record->channel));
 
 	whd_convert_security_type_to_string(record->security, sec_type_string, (sizeof(sec_type_string) - 1));
 
-	WPRINT_MACRO(("%-20s ", sec_type_string));
-	WPRINT_MACRO((" %-32s ", record->SSID.value));
+	WPRINT_INFO(("%-20s ", sec_type_string));
+	WPRINT_INFO((" %-32s ", record->SSID.value));
 
 	if (record->ccode[0] != '\0') {
-		WPRINT_MACRO(("%c%c    ", record->ccode[0], record->ccode[1]));
+		WPRINT_INFO(("%c%c    ", record->ccode[0], record->ccode[1]));
 	}
 	else {
-		WPRINT_MACRO(("      "));
+		WPRINT_INFO(("      "));
 	}
 
 	if (record->flags & WHD_SCAN_RESULT_FLAG_BEACON) {
-		WPRINT_MACRO((" %-15s", " BEACON"));
+		WPRINT_INFO((" %-15s", " BEACON"));
 	}
 	else {
-		WPRINT_MACRO((" %-15s", " PROBE "));
+		WPRINT_INFO((" %-15s", " PROBE "));
 	}
-	WPRINT_MACRO(("\n"));
+	WPRINT_INFO(("\n"));
 }
 
 void whd_hexdump(uint8_t *data, uint32_t data_len)
@@ -934,11 +934,11 @@ void whd_hexdump(uint8_t *data, uint32_t data_len)
 	for (i = 0; i < data_len; i++) {
 		if ((i % 16) == 0) {
 			if (i != 0) {
-				WPRINT_MACRO(("  %s\n", buff));
+				fprintf(stderr, "  %s\n", buff);
 			}
-			WPRINT_MACRO(("%04" PRIx32 " ", i));
+			fprintf(stderr, "%04" PRIx32 " ", i);
 		}
-		WPRINT_MACRO((" %02x", data[i]));
+		fprintf(stderr, " %02x", data[i]);
 
 		if ((data[i] < 0x20) || (data[i] > 0x7e)) {
 			buff[i % 16] = '.';
@@ -949,16 +949,19 @@ void whd_hexdump(uint8_t *data, uint32_t data_len)
 		buff[(i % 16) + 1] = '\0';
 	}
 	while ((i % 16) != 0) {
-		WPRINT_MACRO(("   "));
+		fprintf(stderr, "   ");
 		i++;
 	}
-	WPRINT_MACRO(("  %s\n", buff));
+	fprintf(stderr, "  %s\n", buff);
 }
 
 void whd_ioctl_info_to_string(uint32_t cmd, char *ioctl_str, uint16_t ioctl_str_len)
 {
 	if (cmd == 2) {
 		strncpy(ioctl_str, "WLC_UP", ioctl_str_len);
+	}
+	else if (cmd == 3) {
+		strncpy(ioctl_str, "WLC_DOWN", ioctl_str_len);
 	}
 	else if (cmd == 20) {
 		strncpy(ioctl_str, "WLC_SET_INFRA", ioctl_str_len);
@@ -968,6 +971,9 @@ void whd_ioctl_info_to_string(uint32_t cmd, char *ioctl_str, uint16_t ioctl_str_
 	}
 	else if (cmd == 26) {
 		strncpy(ioctl_str, "WLC_SET_SSID", ioctl_str_len);
+	}
+	else if (cmd == 30) {
+		strncpy(ioctl_str, "WLC_SET_CHANNEL", ioctl_str_len);
 	}
 	else if (cmd == 52) {
 		strncpy(ioctl_str, "WLC_DISASSOC", ioctl_str_len);
@@ -981,11 +987,17 @@ void whd_ioctl_info_to_string(uint32_t cmd, char *ioctl_str, uint16_t ioctl_str_
 	else if (cmd == 59) {
 		strncpy(ioctl_str, "WLC_SET_ROAM_SCAN_PERIOD", ioctl_str_len);
 	}
+	else if (cmd == 86) {
+		strncpy(ioctl_str, "WLC_SET_PM", ioctl_str_len);
+	}
 	else if (cmd == 110) {
 		strncpy(ioctl_str, "WLC_SET_GMODE", ioctl_str_len);
 	}
 	else if (cmd == 116) {
 		strncpy(ioctl_str, "WLC_SET_SCANSUPPRESS", ioctl_str_len);
+	}
+	else if (cmd == 118) {
+		strncpy(ioctl_str, "WLC_SET_AP", ioctl_str_len);
 	}
 	else if (cmd == 134) {
 		strncpy(ioctl_str, "WLC_SET_WSEC", ioctl_str_len);

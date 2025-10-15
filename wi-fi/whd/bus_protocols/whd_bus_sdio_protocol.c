@@ -1229,11 +1229,11 @@ void whd_bus_sdio_init_stats(whd_driver_t whd_driver)
 
 whd_result_t whd_bus_sdio_print_stats(whd_driver_t whd_driver, whd_bool_t reset_after_print)
 {
-	WPRINT_MACRO(("Bus Stats.. \n"
-				  "cmd52:%" PRIu32 ", cmd53_read:%" PRIu32 ", cmd53_write:%" PRIu32 "\n"
-				  "cmd52_fail:%" PRIu32 ", cmd53_read_fail:%" PRIu32 ", cmd53_write_fail:%" PRIu32 "\n"
-				  "oob_intrs:%" PRIu32 ", sdio_intrs:%" PRIu32 ", error_intrs:%" PRIu32 ", read_aborts:%" PRIu32
-				  "\n",
+	WPRINT_INFO(("Bus Stats.. \n"
+				 "cmd52:%" PRIu32 ", cmd53_read:%" PRIu32 ", cmd53_write:%" PRIu32 "\n"
+				 "cmd52_fail:%" PRIu32 ", cmd53_read_fail:%" PRIu32 ", cmd53_write_fail:%" PRIu32 "\n"
+				 "oob_intrs:%" PRIu32 ", sdio_intrs:%" PRIu32 ", error_intrs:%" PRIu32 ", read_aborts:%" PRIu32
+				 "\n",
 			whd_driver->bus_priv->whd_bus_stats.cmd52, whd_driver->bus_priv->whd_bus_stats.cmd53_read,
 			whd_driver->bus_priv->whd_bus_stats.cmd53_write,
 			whd_driver->bus_priv->whd_bus_stats.cmd52_fail,
