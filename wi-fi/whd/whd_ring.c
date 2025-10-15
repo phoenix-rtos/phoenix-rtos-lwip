@@ -597,14 +597,13 @@ whd_result_t whd_bus_m2m_sharedmem_init(whd_driver_t whd_driver)
         host_capability = host_capability | WHD_PCIE_SHARED_USE_MAILBOX;
     }
 
-    /* check firmware support dma indicies */
-    if (internal_info.sh.flags & WHD_PCIE_SHARED_DMA_INDEX)
-    {
-        if (internal_info.sh.flags & WHD_PCIE_SHARED_DMA_2B_IDX)
-            whd_driver->dma_index_sz = sizeof(uint16_t);
-        else
-            whd_driver->dma_index_sz = sizeof(uint32_t);
-    }
+	/* check firmware support dma indices */
+	if (internal_info.sh.flags & WHD_PCIE_SHARED_DMA_INDEX) {
+		if (internal_info.sh.flags & WHD_PCIE_SHARED_DMA_2B_IDX)
+			whd_driver->dma_index_sz = sizeof(uint16_t);
+		else
+			whd_driver->dma_index_sz = sizeof(uint32_t);
+	}
 
     whd_driver->ram_shared->tcm_base_address = shared_addr;
     whd_driver->ram_shared->version_new = internal_info.sh.flags & WLAN_M2M_SHARED_VERSION_MASK;

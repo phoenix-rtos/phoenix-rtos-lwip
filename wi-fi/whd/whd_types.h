@@ -183,7 +183,7 @@ typedef struct secure_sess_info secure_sess_info_t;
 
 /**
  * The maximum size in bytes of a packet used within whd.
- * Pool should be atleast of this size.
+ * Pool should be at least of this size.
  * Usually buffer pools needs implementation specific headers like pbuf header etc, that should be
  * taken into account along with this during buffer pool creation. Also buffer pools needs alignment with
  * cache size of the platform for better performance
