@@ -4532,7 +4532,7 @@ whd_result_t whd_arp_hostip_list_add(whd_interface_t ifp, uint32_t *host_ipv4_li
 
 		for (curr_index = 0; curr_index < filled; curr_index++) {
 			for (new_index = 0; new_index < count; new_index++) {
-				WPRINT_WHD_DEBUG(("%s() curr:%" PRIu32 " of %" PRIu32 " curr:0x%" PRIx32 " new:%" PRIu32" of %" PRIu32 ":0x%" PRIx32 "\n", __func__, curr_index,
+				WPRINT_WHD_DEBUG(("%s() curr:%" PRIu32 " of %" PRIu32 " curr:0x%" PRIx32 " new:%" PRIu32 " of %" PRIu32 ":0x%" PRIx32 "\n", __func__, curr_index,
 						filled, current_ipv4_list[curr_index],
 						new_index, count, host_ipv4_list[new_index]));
 				if (current_ipv4_list[curr_index] == host_ipv4_list[new_index]) {

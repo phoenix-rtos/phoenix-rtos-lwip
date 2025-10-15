@@ -521,9 +521,9 @@ whd_result_t whd_wifi_off(whd_interface_t ifp)
 
 	/* Set wlc down before turning off the device */
 	/* CHECK_RETURN(...) removed due to a bug:
-	* If `whd_wifi_set_ioctl_buffer` fails, then `whd_thread_quit` is not called,
-	* `whd_driver` is freed while used by `whd_thread_func`, what causes SEGFAULT.
-	*/
+	 * If `whd_wifi_set_ioctl_buffer` fails, then `whd_thread_quit` is not called,
+	 * `whd_driver` is freed while used by `whd_thread_func`, what causes SEGFAULT.
+	 */
 	(void)whd_wifi_set_ioctl_buffer(ifp, WLC_DOWN, NULL, 0);
 	whd_driver->internal_info.whd_wlan_status.state = WLAN_DOWN;
 
