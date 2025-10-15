@@ -91,7 +91,7 @@ extern "C" {
 
 /* SDIO Function 1 (Backplane) register addresses */
 /* Addresses 0x00000000 - 0x0000FFFF are directly access the backplane
- * throught the backplane window. Addresses above 0x0000FFFF are
+ * through the backplane window. Addresses above 0x0000FFFF are
  * registers relating to backplane access, and do not require a backpane
  * clock to access them
  */
@@ -158,8 +158,8 @@ extern "C" {
 #define INTR_STATUS_FUNC3          ( (uint32_t)0x08 )     /* interrupt pending for function 3 */
 
 /* SDIOD_CCCR_IOABORT Bits */
-#define IO_ABORT_RESET_ALL         ( (uint32_t)0x08 )     /* I/O card reset */
-#define IO_ABORT_FUNC_MASK         ( (uint32_t)0x07 )     /* abort selction: function x */
+#define IO_ABORT_RESET_ALL ((uint32_t)0x08) /* I/O card reset */
+#define IO_ABORT_FUNC_MASK ((uint32_t)0x07) /* abort selection: function x */
 
 /* SDIOD_CCCR_BICTRL Bits */
 #define BUS_CARD_DETECT_DIS        ( (uint32_t)0x80 )     /* Card Detect disable */

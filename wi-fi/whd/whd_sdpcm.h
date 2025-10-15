@@ -64,12 +64,12 @@ typedef struct whd_sdpcm_info
     uint8_t tx_max;
 
 
-    /* Packet send queue variables */
-    cy_semaphore_t send_queue_mutex;
-    whd_buffer_t send_queue_head[5];
-    whd_buffer_t send_queue_tail[5];
-    uint32_t npkt_in_q[5]; /** 4 AC queues + 1 Contol queue(IOVAR/IOCTLs) */
-    uint32_t totpkt_in_q;
+	/* Packet send queue variables */
+	cy_semaphore_t send_queue_mutex;
+	whd_buffer_t send_queue_head[5];
+	whd_buffer_t send_queue_tail[5];
+	uint32_t npkt_in_q[5]; /** 4 AC queues + 1 Control queue(IOVAR/IOCTLs) */
+	uint32_t totpkt_in_q;
 } whd_sdpcm_info_t;
 
 typedef struct

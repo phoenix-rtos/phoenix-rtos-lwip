@@ -1535,23 +1535,23 @@ whd_result_t whd_msgbuf_tx_queue_data(whd_interface_t ifp, whd_buffer_t buffer)
 
 static whd_result_t whd_msgbuf_rxbuf_data_post(struct whd_msgbuf *msgbuf, uint32_t count)
 {
-    struct whd_driver *drvr = msgbuf->drvr;
-    struct whd_commonring *commonring;
-    void *ret_ptr;
-    whd_buffer_t rx_databuf = NULL;
-    uint16_t alloced;
-    uint32_t pktlen = 0;
-    struct msgbuf_rx_bufpost *rx_bufpost;
-    uint32_t physaddr;
-    uint32_t address;
-    uint32_t pktid;
-    uint8_t i = 0, result = -1;
+	struct whd_driver *drvr = msgbuf->drvr;
+	struct whd_commonring *commonring;
+	void *ret_ptr;
+	whd_buffer_t rx_databuf = NULL;
+	uint16_t allocated;
+	uint32_t pktlen = 0;
+	struct msgbuf_rx_bufpost *rx_bufpost;
+	uint32_t physaddr;
+	uint32_t address;
+	uint32_t pktid;
+	uint8_t i = 0, result = -1;
 
     commonring = msgbuf->commonrings[WHD_H2D_MSGRING_RXPOST_SUBMIT];
 
-    ret_ptr = whd_commonring_reserve_for_write_multiple(commonring, count, &alloced);
+	ret_ptr = whd_commonring_reserve_for_write_multiple(commonring, count, &allocated);
 
-    WPRINT_WHD_DEBUG( ("%s : Allocated is %d , count is %ld \n", __func__, alloced, count) );
+	WPRINT_WHD_DEBUG(("%s : Allocated is %d , count is %ld \n", __func__, allocated, count));
 
     if (!ret_ptr)
     {
@@ -1559,36 +1559,33 @@ static whd_result_t whd_msgbuf_rxbuf_data_post(struct whd_msgbuf *msgbuf, uint32
         return WHD_SUCCESS;
     }
 
-    for (i = 0; i < alloced; i++)
-    {
-        rx_bufpost = (struct msgbuf_rx_bufpost *)ret_ptr;
-        memset(rx_bufpost, 0, sizeof(*rx_bufpost) );
+	for (i = 0; i < allocated; i++) {
+		rx_bufpost = (struct msgbuf_rx_bufpost *)ret_ptr;
+		memset(rx_bufpost, 0, sizeof(*rx_bufpost));
 
         result = whd_host_buffer_get(drvr, &rx_databuf, WHD_NETWORK_RX,
                                      (uint16_t)(WHD_MSGBUF_DATA_MAX_RX_SIZE + sizeof(whd_buffer_header_t)), WHD_RX_BUF_TIMEOUT);
 
-        if (result != WHD_SUCCESS)
-        {
-            WPRINT_WHD_ERROR( ("%s : Allocation Failed \n", __func__) );
-            whd_commonring_write_cancel(commonring, alloced - i);
-            break;
-        }
-        /* Since the buffer to be given to WLAN DMA, Adding 2 bytes for DMA Alignment */
-        CHECK_RETURN(whd_buffer_add_remove_at_front(drvr, &rx_databuf, (int)(sizeof(whd_buffer_header_t) + 2)));
+		if (result != WHD_SUCCESS) {
+			WPRINT_WHD_ERROR(("%s : Allocation Failed \n", __func__));
+			whd_commonring_write_cancel(commonring, allocated - i);
+			break;
+		}
+		/* Since the buffer to be given to WLAN DMA, Adding 2 bytes for DMA Alignment */
+		CHECK_RETURN(whd_buffer_add_remove_at_front(drvr, &rx_databuf, (int)(sizeof(whd_buffer_header_t) + 2)));
 
         pktlen = whd_buffer_get_current_piece_size(drvr, rx_databuf);
 
         WPRINT_WHD_DEBUG( ("RX Buf Data Address is 0x%lx \n", (uint32_t)rx_databuf) );
 
-        if (whd_msgbuf_alloc_pktid(drvr, msgbuf->rx_pktids, rx_databuf, 0, &physaddr, &pktid) )
-        {
-            result = whd_buffer_release(drvr, rx_databuf, WHD_NETWORK_RX);
-            if (result != WHD_SUCCESS)
-                WPRINT_WHD_ERROR( ("buffer release failed in %s at %d \n", __func__, __LINE__) );
-            WPRINT_WHD_ERROR( ("No PKTID available !!\n") );
-            whd_commonring_write_cancel(commonring, alloced - i);
-            break;
-        }
+		if (whd_msgbuf_alloc_pktid(drvr, msgbuf->rx_pktids, rx_databuf, 0, &physaddr, &pktid)) {
+			result = whd_buffer_release(drvr, rx_databuf, WHD_NETWORK_RX);
+			if (result != WHD_SUCCESS)
+				WPRINT_WHD_ERROR(("buffer release failed in %s at %d \n", __func__, __LINE__));
+			WPRINT_WHD_ERROR(("No PKTID available !!\n"));
+			whd_commonring_write_cancel(commonring, allocated - i);
+			break;
+		}
 
         if (msgbuf->rx_metadata_offset)
         {
