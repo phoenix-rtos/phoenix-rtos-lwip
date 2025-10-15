@@ -19,6 +19,7 @@
 #define INCLUDED_WHD_COMMONRING_H
 
 #include "cyabs_rtos.h"
+#include "whd_debug.h"
 
 #ifdef __cplusplus
 extern "C"

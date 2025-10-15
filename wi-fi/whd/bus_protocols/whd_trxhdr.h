@@ -18,6 +18,8 @@
 #ifndef INCLUDED_WHD_TRXHDR_H_
 #define INCLUDED_WHD_TRXHDR_H_
 
+#include <stdint.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
