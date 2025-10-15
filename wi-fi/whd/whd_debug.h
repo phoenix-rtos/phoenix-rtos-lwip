@@ -15,12 +15,14 @@
  * limitations under the License.
  */
 
-#include <stdio.h>
-#include <string.h>
-#include "whd.h"
-
 #ifndef INCLUDED_WHD_DEBUG_H
 #define INCLUDED_WHD_DEBUG_H
+
+#include <stdio.h>
+#include <string.h>
+
+#include "cy_log.h"
+#include "whd.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -31,14 +33,14 @@ extern "C"
 *                      Macros
 ******************************************************/
 #define WPRINT_ENABLE_WHD_ERROR
-/* #define WPRINT_ENABLE_WHD_INFO */
-/* #define WPRINT_ENABLE_WHD_DEBUG */
+#define WPRINT_ENABLE_WHD_INFO
+#define WPRINT_ENABLE_WHD_DEBUG
 
 #define WHD_ENABLE_STATS
 /*#define WHD_LOGGING_BUFFER_ENABLE*/
 
-#if defined (__GNUC__)
-#define WHD_TRIGGER_BREAKPOINT( ) do { __asm__ ("bkpt"); } while (0)
+#if defined(__GNUC__)
+#define WHD_TRIGGER_BREAKPOINT() do { __asm__ volatile("bkpt"); } while (0)
 
 #elif defined (__IAR_SYSTEMS_ICC__)
 #define WHD_TRIGGER_BREAKPOINT( ) do { __asm("bkpt 0"); } while (0)
@@ -48,14 +50,34 @@ extern "C"
 #endif
 
 #ifdef WPRINT_ENABLE_ERROR
-#define WPRINT_ERROR(args)                      do { WPRINT_MACRO(args); } while (0)
-#define whd_assert(error_string, assertion) do { if (!(assertion) ){ WHD_TRIGGER_BREAKPOINT(); } } while (0)
+#define WPRINT_ERROR(args) \
+	do { \
+		WPRINT_ERROR(args); \
+	} while (0)
+#define whd_assert(error_string, assertion) \
+	do { \
+		if (!(assertion)) { \
+			WHD_TRIGGER_BREAKPOINT(); \
+		} \
+	} while (0)
 #define whd_minor_assert(error_string, \
-                         assertion)   do { if (!(assertion) ) WPRINT_MACRO( (error_string) ); } while (0)
+		assertion) \
+	do { \
+		if (!(assertion)) \
+			WPRINT_ERROR((error_string)); \
+	} while (0)
 #else
 #define whd_assert(error_string, \
-                   assertion)         do { if (!(assertion) ){ WPRINT_MACRO( (error_string) ); } } while (0)
-#define whd_minor_assert(error_string, assertion)   do { (void)(assertion); } while (0)
+		assertion) \
+	do { \
+		if (!(assertion)) { \
+			WPRINT_ERROR((error_string)); \
+		} \
+	} while (0)
+#define whd_minor_assert(error_string, assertion) \
+	do { \
+		(void)(assertion); \
+	} while (0)
 #endif
 
 /******************************************************
@@ -71,32 +93,56 @@ extern "C"
 #if defined(WHD_LOGGING_BUFFER_ENABLE)
 #define WPRINT_MACRO(args) do { whd_buffer_printf args; } while (0 == 1)
 #else
-#define WPRINT_MACRO(args) do { printf args;} while (0 == 1)
+#define WLOG_INFO(fmt, ...) \
+	do { \
+		cy_log_msg(CYLF_DEF, CY_LOG_INFO, fmt, ##__VA_ARGS__); \
+	} while (0)
+#define WLOG_DEBUG(fmt, ...) \
+	do { \
+		cy_log_msg(CYLF_DEF, CY_LOG_DEBUG, fmt, ##__VA_ARGS__); \
+	} while (0)
+#define WLOG_ERROR(fmt, ...) \
+	do { \
+		cy_log_msg(CYLF_DEF, CY_LOG_ERR, fmt, ##__VA_ARGS__); \
+	} while (0)
+
+#define WPRINT_INFO(args) \
+	do { \
+		WLOG_INFO args; \
+	} while (0)
+#define WPRINT_DEBUG(args) \
+	do { \
+		WLOG_DEBUG args; \
+	} while (0)
+#define WPRINT_ERROR(args) \
+	do { \
+		WLOG_ERROR args; \
+	} while (0)
 #endif
 #endif
 
 
 /* WICED printing macros for Wiced Wi-Fi Driver*/
 #ifdef WPRINT_ENABLE_WHD_INFO
-#define WPRINT_WHD_INFO(args) WPRINT_MACRO(args)
+#define WPRINT_WHD_INFO(args) WPRINT_INFO(args)
 #else
 #define WPRINT_WHD_INFO(args)
 #endif
 
 #ifdef WPRINT_ENABLE_WHD_DEBUG
-#define WPRINT_WHD_DEBUG(args) WPRINT_MACRO(args)
+#define WPRINT_WHD_DEBUG(args) WPRINT_DEBUG(args)
 #else
 #define WPRINT_WHD_DEBUG(args)
 #endif
 
 #ifdef WPRINT_ENABLE_WHD_ERROR
-#define WPRINT_WHD_ERROR(args) WPRINT_MACRO(args);
+#define WPRINT_WHD_ERROR(args) WPRINT_ERROR(args);
 #else
 #define WPRINT_WHD_ERROR(args)
 #endif
 
 #ifdef WPRINT_ENABLE_WHD_DATA_LOG
-#define WPRINT_WHD_DATA_LOG(args) WPRINT_MACRO(args)
+#define WPRINT_WHD_DATA_LOG(args) WPRINT_INFO(args)
 #else
 #define WPRINT_WHD_DATA_LOG(args)
 #endif

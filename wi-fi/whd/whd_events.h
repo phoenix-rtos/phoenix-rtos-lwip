@@ -178,7 +178,7 @@ typedef struct whd_event
     whd_event_ether_header_t eth;    /**< Variable to store ethernet destination, source and ethertype in event packets */
     whd_event_eth_hdr_t eth_evt_hdr; /**< Variable to store ethernet header fields in event message */
     whd_event_header_t whd_event;    /**< Variable to store rest of the event packet fields after ethernet header */
-    /* data portion follows */
+                                     /* data portion follows */
 } whd_event_t;
 
 #pragma pack()
