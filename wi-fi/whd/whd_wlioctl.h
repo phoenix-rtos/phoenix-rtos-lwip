@@ -21,6 +21,10 @@
 #ifndef INCLUDED_WHD_WLIOCTL_H
 #define INCLUDED_WHD_WLIOCTL_H
 
+#include <stdint.h>
+
+#include "whd_types.h"
+
 #ifdef __cplusplus
 extern "C"
 {
@@ -2099,49 +2103,49 @@ typedef struct
     uint32_t rxmpdu_mu;       /**< Number of MU MPDUs received */
 
     /* detailed control/management frames */
-    uint32_t txbar;         /**< Number of TX BAR */
-    uint32_t rxbar;         /**< Number of RX BAR */
-    uint32_t txpspoll;      /**< Number of TX PS-poll */
-    uint32_t rxpspoll;      /**< Number of RX PS-poll */
-    uint32_t txnull;        /**< Number of TX NULL_DATA */
-    uint32_t rxnull;        /**< Number of RX NULL_DATA */
-    uint32_t txqosnull;     /**< Number of TX NULL_QoSDATA */
-    uint32_t rxqosnull;     /**< Number of RX NULL_QoSDATA */
-    uint32_t txassocreq;    /**< Number of TX ASSOC request */
-    uint32_t rxassocreq;    /**< Number of RX ASSOC request */
-    uint32_t txreassocreq;      /**< Number of TX REASSOC request */
-    uint32_t rxreassocreq;      /**< Number of RX REASSOC request */
-    uint32_t txdisassoc;    /**< Number of TX DISASSOC */
-    uint32_t rxdisassoc;    /**< Number of RX DISASSOC */
-    uint32_t txassocrsp;    /**< Number of TX ASSOC response */
-    uint32_t rxassocrsp;    /**< Number of RX ASSOC response */
-    uint32_t txreassocrsp;      /**< Number of TX REASSOC response */
-    uint32_t rxreassocrsp;      /**< Number of RX REASSOC response */
-    uint32_t txauth;        /**< Number of TX AUTH */
-    uint32_t rxauth;        /**< Number of RX AUTH */
-    uint32_t txdeauth;      /**< Number of TX DEAUTH */
-    uint32_t rxdeauth;      /**< Number of RX DEAUTH */
-    uint32_t txprobereq;    /**< Number of TX probe request */
-    uint32_t rxprobereq;    /**< Number of RX probe request */
-    uint32_t txprobersp;    /**< Number of TX probe response */
-    uint32_t rxprobersp;    /**< Number of RX probe response */
-    uint32_t txaction;      /**< Number of TX action frame */
-    uint32_t rxaction;      /**< Number of RX action frame */
-    uint32_t ampdu_wds;     /**< Number of AMPDU watchdogs */
-    uint32_t txlost;        /**< Number of lost packets reported in txs */
-    uint32_t txdatamcast;       /**< Number of TX multicast data packets */
-    uint32_t txdatabcast;       /**< Number of TX broadcast data packets */
-    uint32_t psmxwds;       /**< Number of PSMx watchdogs */
+    uint32_t txbar;        /**< Number of TX BAR */
+    uint32_t rxbar;        /**< Number of RX BAR */
+    uint32_t txpspoll;     /**< Number of TX PS-poll */
+    uint32_t rxpspoll;     /**< Number of RX PS-poll */
+    uint32_t txnull;       /**< Number of TX NULL_DATA */
+    uint32_t rxnull;       /**< Number of RX NULL_DATA */
+    uint32_t txqosnull;    /**< Number of TX NULL_QoSDATA */
+    uint32_t rxqosnull;    /**< Number of RX NULL_QoSDATA */
+    uint32_t txassocreq;   /**< Number of TX ASSOC request */
+    uint32_t rxassocreq;   /**< Number of RX ASSOC request */
+    uint32_t txreassocreq; /**< Number of TX REASSOC request */
+    uint32_t rxreassocreq; /**< Number of RX REASSOC request */
+    uint32_t txdisassoc;   /**< Number of TX DISASSOC */
+    uint32_t rxdisassoc;   /**< Number of RX DISASSOC */
+    uint32_t txassocrsp;   /**< Number of TX ASSOC response */
+    uint32_t rxassocrsp;   /**< Number of RX ASSOC response */
+    uint32_t txreassocrsp; /**< Number of TX REASSOC response */
+    uint32_t rxreassocrsp; /**< Number of RX REASSOC response */
+    uint32_t txauth;       /**< Number of TX AUTH */
+    uint32_t rxauth;       /**< Number of RX AUTH */
+    uint32_t txdeauth;     /**< Number of TX DEAUTH */
+    uint32_t rxdeauth;     /**< Number of RX DEAUTH */
+    uint32_t txprobereq;   /**< Number of TX probe request */
+    uint32_t rxprobereq;   /**< Number of RX probe request */
+    uint32_t txprobersp;   /**< Number of TX probe response */
+    uint32_t rxprobersp;   /**< Number of RX probe response */
+    uint32_t txaction;     /**< Number of TX action frame */
+    uint32_t rxaction;     /**< Number of RX action frame */
+    uint32_t ampdu_wds;    /**< Number of AMPDU watchdogs */
+    uint32_t txlost;       /**< Number of lost packets reported in txs */
+    uint32_t txdatamcast;  /**< Number of TX multicast data packets */
+    uint32_t txdatabcast;  /**< Number of TX broadcast data packets */
+    uint32_t psmxwds;      /**< Number of PSMx watchdogs */
     uint32_t rxback;
     uint32_t txback;
-    uint32_t p2p_tbtt;  /**< Number of P2P TBTT Events */
-    uint32_t p2p_tbtt_miss;     /**< Number of P2P TBTT Events Miss */
+    uint32_t p2p_tbtt;      /**< Number of P2P TBTT Events */
+    uint32_t p2p_tbtt_miss; /**< Number of P2P TBTT Events Miss */
     uint32_t txqueue_start;
     uint32_t txqueue_end;
-    uint32_t txbcast;         /* Broadcast TransmittedFrameCount */
-    uint32_t txdropped;       /* tx dropped pkts */
-    uint32_t rxbcast;         /* BroadcastReceivedFrameCount */
-    uint32_t rxdropped;       /* rx dropped pkts (derived: sum of others) */
+    uint32_t txbcast;   /* Broadcast TransmittedFrameCount */
+    uint32_t txdropped; /* tx dropped pkts */
+    uint32_t rxbcast;   /* BroadcastReceivedFrameCount */
+    uint32_t rxdropped; /* rx dropped pkts (derived: sum of others) */
     /* XXX: Do not remove or rename inthe middle of this struct.
      * All counter variables have to be of uint32_t.
      * Please follow the instruction in
@@ -3706,13 +3710,13 @@ typedef enum {
 
 typedef struct wl_wowl_pattern
 {
-    uint32_t masksize;        /**< Size of the mask in #of bytes */
-    uint32_t offset;          /**< Pattern byte offset in packet */
-    uint32_t patternoffset;   /**< Offset of start of pattern in the structure */
-    uint32_t patternsize;     /**< Size of the pattern itself in #of bytes */
-    uint32_t id;              /**< id */
-    uint32_t reasonsize;      /**< Size of the wakeup reason code */
-    uint32_t type;            /**< Type of pattern */
+    uint32_t masksize;      /**< Size of the mask in #of bytes */
+    uint32_t offset;        /**< Pattern byte offset in packet */
+    uint32_t patternoffset; /**< Offset of start of pattern in the structure */
+    uint32_t patternsize;   /**< Size of the pattern itself in #of bytes */
+    uint32_t id;            /**< id */
+    uint32_t reasonsize;    /**< Size of the wakeup reason code */
+    uint32_t type;          /**< Type of pattern */
     /* Mask follows the structure above */
     /* Pattern follows the mask is at 'patternoffset' from the start */
 } wl_wowl_pattern_t;
