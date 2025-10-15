@@ -34,7 +34,6 @@
 #include "whd_resource_if.h"
 #include "whd_types_int.h"
 #include "whd_types.h"
-#include "whd_proto.h"
 
 
 #ifdef __cplusplus
@@ -123,38 +122,16 @@ struct bootrom_id_le
 whd_result_t whd_bus_usb_init(whd_driver_t whd_driver);
 whd_result_t whd_bus_usb_deinit(whd_driver_t whd_driver);
 
-uint32_t whd_bus_usb_attach(whd_driver_t whd_driver, /*cyhal_usb_t*/ void* usb_obj);
+uint32_t whd_bus_usb_attach(whd_driver_t whd_driver, whd_usb_config_t *config, cyhal_usb_t *usb_obj);
 void whd_bus_usb_detach(whd_driver_t whd_driver);
 
+whd_result_t whd_bus_usb_dl_cmd(whd_driver_t whd_driver, uint8_t cmd, void *buffer, uint32_t buflen);
 
-/* Function from USB Host implementation */
-void whd_bus_usbh_class_init(whd_driver_t whd_driver, bool wait_usb);
+whd_result_t whd_bus_usb_bulk_send(whd_driver_t whd_driver, void *buffer, int len);
+whd_result_t whd_bus_usb_bulk_receive(whd_driver_t whd_driver, void *buffer, int len);
 
-whd_result_t whd_bus_usb_dl_cmd(whd_driver_t whd_driver, uint8_t cmd, void* buffer,
-                                uint32_t buflen);
-whd_result_t whd_bus_usb_dl_go(whd_driver_t whd_driver);
-
-whd_result_t whd_bus_usb_bulk_send(whd_driver_t whd_driver, void* buffer, int len);
-whd_result_t whd_bus_usb_bulk_receive(whd_driver_t whd_driver, void* buffer, int len);
-whd_result_t whd_bus_usb_bulk_receive_timeout(whd_driver_t whd_driver, void* buffer, int len,
-                                              uint32_t timeout);
-
-uint32_t whd_bus_usb_bulk_get_num_bytes_in_rx_buff(whd_driver_t whd_driver);
-
-whd_result_t whd_bus_usb_readreg(whd_driver_t whd_driver, uint32_t regaddr, uint32_t datalen,
-                                 uint32_t* value);
-whd_result_t whd_bus_usb_writereg(whd_driver_t whd_driver, uint32_t regaddr, uint32_t datalen,
-                                  uint32_t data);
-
-whd_result_t whd_bus_usb_send_ctrl(whd_driver_t whd_driver, void* buffer, uint32_t* len);
-whd_result_t whd_bus_usb_receive_ctrl_buffer(whd_driver_t whd_driver, whd_buffer_t* buffer);
-
-/* rx queue helper function */
-whd_result_t whd_bus_rx_queue_init(void);
-whd_result_t whd_bus_rx_queue_enqueue(whd_buffer_t* data);
-whd_result_t whd_bus_rx_queue_dequeue(whd_buffer_t* data);
-bool whd_bus_rx_queue_is_full(void);
-size_t whd_bus_rx_queue_size(void);
+whd_result_t whd_bus_usb_send_ctrl(whd_driver_t whd_driver, void *buffer, uint32_t *len);
+whd_result_t whd_bus_usb_receive_ctrl_buffer(whd_driver_t whd_driver, whd_buffer_t *buffer);
 #ifdef __cplusplus
 } /*extern "C" */
 #endif
