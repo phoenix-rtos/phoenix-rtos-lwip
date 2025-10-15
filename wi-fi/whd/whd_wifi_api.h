@@ -113,11 +113,12 @@ extern void whd_bus_spi_detach(whd_driver_t whd_driver);
 /** Attach the WLAN Device to a specific USB bus
  *
  *  @param  whd_driver        Pointer to handle instance of the driver
+ *  @param  config            Pointer to USB configuration structure
  *  @param  usb_obj           The USB HOST hardware interface
  *
  *  @return WHD_SUCCESS or Error code
  */
-extern whd_result_t  whd_bus_usb_attach(whd_driver_t whd_driver, void *usb_obj);
+extern whd_result_t whd_bus_usb_attach(whd_driver_t whd_driver, whd_usb_config_t *config, cyhal_usb_t *usb_obj);
 
 /** Detach the WLAN Device to a specific USB bus
  *
