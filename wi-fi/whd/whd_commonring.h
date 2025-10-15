@@ -73,7 +73,7 @@ void whd_commonring_unlock(struct whd_commonring *commonring);
 bool whd_commonring_write_available(struct whd_commonring *commonring);
 void *whd_commonring_reserve_for_write(struct whd_commonring *commonring);
 void *whd_commonring_reserve_for_write_multiple(struct whd_commonring *commonring,
-                                                uint16_t n_items, uint16_t *alloced);
+		uint16_t n_items, uint16_t *allocated);
 int whd_commonring_write_complete(struct whd_commonring *commonring);
 void whd_commonring_write_cancel(struct whd_commonring *commonring,
                                  uint16_t n_items);

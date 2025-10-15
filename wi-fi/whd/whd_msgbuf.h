@@ -127,11 +127,10 @@ typedef struct whd_error_info
 /* Forward declarations */
 struct whd_flowring;
 
-typedef struct whd_msgbuf_info
-{
-    /* Event list variables (Must be at the begining) */
-    event_list_elem_t whd_event_list[WHD_EVENT_HANDLER_LIST_SIZE];
-    cy_semaphore_t event_list_mutex;
+typedef struct whd_msgbuf_info {
+	/* Event list variables (Must be at the beginning) */
+	event_list_elem_t whd_event_list[WHD_EVENT_HANDLER_LIST_SIZE];
+	cy_semaphore_t event_list_mutex;
 
     /* IOCTL variables*/
     cy_semaphore_t ioctl_mutex;

@@ -20,7 +20,7 @@
  * Implements functions called by WHD user APIs, but not directly exposed to user
  *
  * This file provides functions which are not directly exposed to user but, called by end-user functions which allow actions such as
- * seting the MAC address, getting channel info, etc
+ * setting the MAC address, getting channel info, etc
  */
 
 #include "whd_utils.h"

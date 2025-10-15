@@ -212,11 +212,10 @@ whd_result_t whd_deinit(whd_interface_t ifp)
         return WHD_WLAN_NOTDOWN;
     }
 
-    if ( (whd_driver->bus_priv != NULL) || (whd_driver->bus_if != NULL) )
-    {
-        WPRINT_WHD_ERROR( ("Could not deinit whd because bus is attaced\n") );
-        return WHD_WLAN_NOTDOWN;
-    }
+	if ((whd_driver->bus_priv != NULL) || (whd_driver->bus_if != NULL)) {
+		WPRINT_WHD_ERROR(("Could not deinit whd because bus is attached\n"));
+		return WHD_WLAN_NOTDOWN;
+	}
 
     for (i = 0; i < WHD_INTERFACE_MAX; i++)
     {

@@ -2146,7 +2146,7 @@ typedef struct
     uint32_t txdropped; /* tx dropped pkts */
     uint32_t rxbcast;   /* BroadcastReceivedFrameCount */
     uint32_t rxdropped; /* rx dropped pkts (derived: sum of others) */
-    /* XXX: Do not remove or rename inthe middle of this struct.
+    /* XXX: Do not remove or rename in the middle of this struct.
      * All counter variables have to be of uint32_t.
      * Please follow the instruction in
      * http://hwnbu-twiki.sj.broadcom.com/bin/view/Mwgroup/WlCounters#Counter_Edition
@@ -3867,11 +3867,10 @@ typedef struct wl_p2p_disc_st
 } wl_p2p_disc_st_t;
 
 /* scan request */
-typedef struct wl_p2p_scan
-{
-    uint8_t type;     /* 'S' for WLC_SCAN, 'E' for "escan" */
-    uint8_t reserved[3];
-    /* scan or escan parms... */
+typedef struct wl_p2p_scan {
+	uint8_t type; /* 'S' for WLC_SCAN, 'E' for "escan" */
+	uint8_t reserved[3];
+	/* scan or escan params... */
 } wl_p2p_scan_t;
 
 /* escan request */
@@ -3959,18 +3958,18 @@ typedef struct wl_p2p_wfds_hash
 #define WL_RMC_FLAG_MASTER_TX      (8)
 #define WL_RMC_MAX_TABLE_ENTRY     (8)
 
-#define WL_RMC_VER                 (1)
-#define WL_RMC_INDEX_ACK_ALL       (255)
-#define WL_RMC_NUM_OF_MC_STREAMS   (4)
-#define WL_RMC_MAX_TRS_PER_GROUP   (1)
-#define WL_RMC_MAX_TRS_IN_ACKALL   (1)
-#define WL_RMC_ACK_MCAST0          (0x02)
-#define WL_RMC_ACK_MCAST_ALL       (0x01)
-#define WL_RMC_ACTF_TIME_MIN       (300)     /* time in ms */
-#define WL_RMC_ACTF_TIME_MAX       (20000)   /* time in ms */
-#define WL_RMC_MAX_NUM_TRS         (32)      /* maximun transmitters allowed */
-#define WL_RMC_ARTMO_MIN           (350)     /* time in ms */
-#define WL_RMC_ARTMO_MAX           (40000)   /* time in ms */
+#define WL_RMC_VER               (1)
+#define WL_RMC_INDEX_ACK_ALL     (255)
+#define WL_RMC_NUM_OF_MC_STREAMS (4)
+#define WL_RMC_MAX_TRS_PER_GROUP (1)
+#define WL_RMC_MAX_TRS_IN_ACKALL (1)
+#define WL_RMC_ACK_MCAST0        (0x02)
+#define WL_RMC_ACK_MCAST_ALL     (0x01)
+#define WL_RMC_ACTF_TIME_MIN     (300)   /* time in ms */
+#define WL_RMC_ACTF_TIME_MAX     (20000) /* time in ms */
+#define WL_RMC_MAX_NUM_TRS       (32)    /* maximum transmitters allowed */
+#define WL_RMC_ARTMO_MIN         (350)   /* time in ms */
+#define WL_RMC_ARTMO_MAX         (40000) /* time in ms */
 
 enum rmc_opcodes
 {
@@ -4229,7 +4228,7 @@ struct whd_arp_stats_s
 
 #pragma pack()
 
-/* TCP Keepalive offload related defintions should not be added inside
+/* TCP Keepalive offload related definitions should not be added inside
  * pragma pack to avoid functionality breakage.
  */
 /*
@@ -4345,16 +4344,15 @@ struct whd_tko_retry
 };
 
 /** Status values used in conjunction with whd_tko_status_t */
-typedef enum
-{
-    TKO_STATUS_NORMAL                       = 0,    /**< TCP connection normal, no error */
-    TKO_STATUS_NO_RESPONSE                  = 1,    /**< no response to TCP keepalive */
-    TKO_STATUS_NO_TCP_ACK_FLAG              = 2,    /**< TCP ACK flag not set */
-    TKO_STATUS_UNEXPECT_TCP_FLAG            = 3,    /**< unexpect TCP flags set other than ACK */
-    TKO_STATUS_SEQ_NUM_INVALID              = 4,    /**< ACK != sequence number */
-    TKO_STATUS_REMOTE_SEQ_NUM_INVALID       = 5,    /**< SEQ > remote sequence number */
-    TKO_STATUS_TCP_DATA                     = 6,    /**< TCP data available */
-    TKO_STATUS_UNAVAILABLE                  = 255,  /**< not used/configured */
+typedef enum {
+	TKO_STATUS_NORMAL = 0,                 /**< TCP connection normal, no error */
+	TKO_STATUS_NO_RESPONSE = 1,            /**< no response to TCP keepalive */
+	TKO_STATUS_NO_TCP_ACK_FLAG = 2,        /**< TCP ACK flag not set */
+	TKO_STATUS_UNEXPECT_TCP_FLAG = 3,      /**< unexpected TCP flags set other than ACK */
+	TKO_STATUS_SEQ_NUM_INVALID = 4,        /**< ACK != sequence number */
+	TKO_STATUS_REMOTE_SEQ_NUM_INVALID = 5, /**< SEQ > remote sequence number */
+	TKO_STATUS_TCP_DATA = 6,               /**< TCP data available */
+	TKO_STATUS_UNAVAILABLE = 255,          /**< not used/configured */
 } tko_status_t;
 
 /** Status of each TCP connection */
@@ -4364,30 +4362,29 @@ struct whd_tko_status
     uint8_t status[MAX_TKO_CONN];   /**< each TCP status */
 };
 
-/** Struct to query FW for current TKO configuation */
-struct whd_tko_connect
-{
-    uint8_t index;            /**< TCP connection index, 0 to max-1 */
-    uint8_t ip_addr_type;     /**< 0 - IPv4, 1 - IPv6 */
-    uint16_t local_port;      /**< local port */
-    uint16_t remote_port;     /**< remote port */
-    uint32_t local_seq;       /**< local sequence number */
-    uint32_t remote_seq;      /**< remote sequence number */
-    uint16_t request_len;     /**< TCP keepalive request packet length */
-    uint16_t response_len;    /**< TCP keepalive response packet length */
-    uint8_t data[1];          /**< variable length field containing local/remote IPv4/IPv6,
-                               * TCP keepalive request packet, TCP keepalive response packet
-                               *	  For IPv4, length is 4 * 2 + request_length + response_length
-                               *		 offset 0 - local IPv4
-                               *		 offset 4 - remote IPv4
-                               *		 offset 8 - TCP keepalive request packet
-                               *		 offset 8+request_length - TCP keepalive response packet
-                               *	  For IPv6, length is 16 * 2 + request_length + response_length
-                               *		 offset 0 - local IPv6
-                               *		 offset 16 - remote IPv6
-                               *		 offset 32 - TCP keepalive request packet
-                               *		 offset 32+request_length - TCP keepalive response packet
-                               */
+/** Struct to query FW for current TKO configuration */
+struct whd_tko_connect {
+	uint8_t index;         /**< TCP connection index, 0 to max-1 */
+	uint8_t ip_addr_type;  /**< 0 - IPv4, 1 - IPv6 */
+	uint16_t local_port;   /**< local port */
+	uint16_t remote_port;  /**< remote port */
+	uint32_t local_seq;    /**< local sequence number */
+	uint32_t remote_seq;   /**< remote sequence number */
+	uint16_t request_len;  /**< TCP keepalive request packet length */
+	uint16_t response_len; /**< TCP keepalive response packet length */
+	uint8_t data[1];       /**< variable length field containing local/remote IPv4/IPv6,
+							* TCP keepalive request packet, TCP keepalive response packet
+							*	  For IPv4, length is 4 * 2 + request_length + response_length
+							*		 offset 0 - local IPv4
+							*		 offset 4 - remote IPv4
+							*		 offset 8 - TCP keepalive request packet
+							*		 offset 8+request_length - TCP keepalive response packet
+							*	  For IPv6, length is 16 * 2 + request_length + response_length
+							*		 offset 0 - local IPv6
+							*		 offset 16 - remote IPv6
+							*		 offset 32 - TCP keepalive request packet
+							*		 offset 32+request_length - TCP keepalive response packet
+							*/
 };
 
 #define IPV4_ADDR_LEN           4       /* IPV4 address length */
@@ -4404,10 +4401,10 @@ struct ipv6_addr {
 };
 
 typedef struct wl_tko_autoenab {
-    uint16_t version;         /* auto tko command version */
-    uint16_t length;          /* The remaning len after */
-    uint8_t enable;           /* 0: disable, 1: enable */
-    uint8_t pad[3];           /* 4-byte struct alignment */
+	uint16_t version; /* auto tko command version */
+	uint16_t length;  /* The remaining len after */
+	uint8_t enable;   /* 0: disable, 1: enable */
+	uint8_t pad[3];   /* 4-byte struct alignment */
 } wl_tko_autoenab_t;
 
 typedef struct wl_tko_autoconnect {
@@ -4429,22 +4426,21 @@ typedef struct wl_tko_autoconnect {
 } wl_tko_autoconnect_t;
 
 typedef struct wl_tko_filter {
-    uint16_t version;                        /* auto tko command version */
-    uint16_t length;                         /* The remaning len after */
-    uint16_t sport;                          /* 0: wild card, others as filter local port */
-    uint16_t dport;                          /* 0: wild card, others as filter remote port */
-    uint8_t ip_src[IPV6_ADDR_LEN];           /* {0}: wild card, others as filter src ip */
-    uint8_t ip_dst[IPV6_ADDR_LEN];           /* {0}: wild card, others as filter dst ip */
+	uint16_t version;              /* auto tko command version */
+	uint16_t length;               /* The remaining len after */
+	uint16_t sport;                /* 0: wild card, others as filter local port */
+	uint16_t dport;                /* 0: wild card, others as filter remote port */
+	uint8_t ip_src[IPV6_ADDR_LEN]; /* {0}: wild card, others as filter src ip */
+	uint8_t ip_dst[IPV6_ADDR_LEN]; /* {0}: wild card, others as filter dst ip */
 } wl_tko_filter_t;
 
-struct whd_tko_auto_filter
-{
-    uint16_t version;                        /* auto tko command version */
-    uint16_t length;                         /* The remaning len after */
-    uint16_t sport;                          /* 0: wild card, others as filter local port */
-    uint16_t dport;                          /* 0: wild card, others as filter remote port */
-    uint8_t ip_src[IPV6_ADDR_LEN];           /* {0}: wild card, others as filter src ip */
-    uint8_t ip_dst[IPV6_ADDR_LEN];           /* {0}: wild card, others as filter dst ip */
+struct whd_tko_auto_filter {
+	uint16_t version;              /* auto tko command version */
+	uint16_t length;               /* The remaining len after */
+	uint16_t sport;                /* 0: wild card, others as filter local port */
+	uint16_t dport;                /* 0: wild card, others as filter remote port */
+	uint8_t ip_src[IPV6_ADDR_LEN]; /* {0}: wild card, others as filter src ip */
+	uint8_t ip_dst[IPV6_ADDR_LEN]; /* {0}: wild card, others as filter dst ip */
 };
 
 struct whd_tko_autoconnect

@@ -23,13 +23,13 @@ extern "C" {
 #endif
 
 /******************************************************
-*             M2M Constants
-******************************************************/
-//GCI Registers
-#define GCI_INT_MASK_REG            0x4fe40018    /* When the31st bit of this Reg is set, Doorbell Interrupts to the IP(BT/WLAN) are enabled */
-#define GCI_INT_STATUS_REG          0x4fe40014    /* Read Only Reg - 31st bit indicates a DB Interrupt to the BT is pending.If it is set, Indicates a WL2BT Doorbell Interrupt is pending */
-#define GCI_DB_INT_STATUS_REG       0x4fe4063c   /* To check which DB interrupt is triggerd by WLAN */
-#define GCI_DB_INT_MASK_REG         0x4fe40640   /*  This register is writable by BT only and readable by both WLAN and BT. This register resets with BT reset */
+ *             M2M Constants
+ ******************************************************/
+// GCI Registers
+#define GCI_INT_MASK_REG      0x4fe40018 /* When the31st bit of this Reg is set, Doorbell Interrupts to the IP(BT/WLAN) are enabled */
+#define GCI_INT_STATUS_REG    0x4fe40014 /* Read Only Reg - 31st bit indicates a DB Interrupt to the BT is pending.If it is set, Indicates a WL2BT Doorbell Interrupt is pending */
+#define GCI_DB_INT_STATUS_REG 0x4fe4063c /* To check which DB interrupt is triggered by WLAN */
+#define GCI_DB_INT_MASK_REG   0x4fe40640 /*  This register is writable by BT only and readable by both WLAN and BT. This register resets with BT reset */
 
 /* DB Bits for Doorbell Interrupt Mask Register(GCI_DB_INT_MASK_REG) */
 #define GCI_H2D_SET_BIT_DB0         0x0001
