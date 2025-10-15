@@ -448,6 +448,6 @@ static void whd_thread_func(cy_thread_arg_t thread_input)
 
     WPRINT_WHD_DATA_LOG( ("Stopped whd Thread\n") );
 
-    /* Ignore return - not much can be done about failure */
-    (void)cy_rtos_exit_thread();
+	/* Ignore return - not much can be done about failure */
+	cy_rtos_exit_thread();
 }
