@@ -1062,12 +1062,11 @@ whd_result_t whd_wifi_set_pmksa(whd_interface_t ifp, const pmkid_t *pmkid)
         }
     }
 
-    if (cnt == MAXPMKID)
-    {
-        CHECK_RETURN(whd_buffer_release(whd_driver, response, WHD_NETWORK_RX) );
-        WPRINT_WHD_ERROR( ("Too manay PMKSA entrie cached %" PRIu32 "\n", orig_pmkid_list->npmkid) );
-        return WHD_WLAN_NORESOURCE;
-    }
+	if (cnt == MAXPMKID) {
+		CHECK_RETURN(whd_buffer_release(whd_driver, response, WHD_NETWORK_RX));
+		WPRINT_WHD_ERROR(("Too manay PMKSA entries cached %" PRIu32 "\n", orig_pmkid_list->npmkid));
+		return WHD_WLAN_NORESOURCE;
+	}
 
     /* Add Extra Space for New PMKID and write the new multicast list */
     if (cnt == orig_pmkid_list->npmkid)
@@ -1692,26 +1691,23 @@ static whd_result_t whd_wifi_prepare_join(whd_interface_t ifp, whd_security_t au
             CHECK_RETURN(whd_wifi_set_passphrase(ifp, security_key, key_length) );
             break;
 
-        case WHD_SECURITY_WPA3_SAE:
-        case WHD_SECURITY_WPA3_WPA2_PSK:
-            if (auth_type == WHD_SECURITY_WPA3_WPA2_PSK)
-            {
-                CHECK_RETURN(whd_wifi_enable_sup_set_passphrase(ifp, security_key, key_length, auth_type) );
-            }
-            /* Set the EAPOL key packet timeout value, otherwise unsuccessful supplicant events aren't reported. If the IOVAR is unsupported then continue. */
-            CHECK_RETURN_UNSUPPORTED_CONTINUE(whd_wifi_set_supplicant_key_timeout(ifp,
-                                                                                  DEFAULT_EAPOL_KEY_PACKET_TIMEOUT) );
-            if (whd_driver->chip_info.fwcap_flags & (1 << WHD_FWCAP_SAE) )
-            {
-                CHECK_RETURN(whd_wifi_sae_password(ifp, security_key, key_length) );
-            }
-            else
-            {
-                /* Disable Roaming in FW, becuase our wpa3_external_supplicant's limitation.
-                   If FW report WLC_E_EXT_AUTH_REQ during roaming, Host already called whd_wifi_stop_external_auth_request. */
-                CHECK_RETURN(whd_wifi_set_iovar_value(ifp, IOVAR_STR_ROAM_OFF, 1) );
-            }
-            break;
+		case WHD_SECURITY_WPA3_SAE:
+		case WHD_SECURITY_WPA3_WPA2_PSK:
+			if (auth_type == WHD_SECURITY_WPA3_WPA2_PSK) {
+				CHECK_RETURN(whd_wifi_enable_sup_set_passphrase(ifp, security_key, key_length, auth_type));
+			}
+			/* Set the EAPOL key packet timeout value, otherwise unsuccessful supplicant events aren't reported. If the IOVAR is unsupported then continue. */
+			CHECK_RETURN_UNSUPPORTED_CONTINUE(whd_wifi_set_supplicant_key_timeout(ifp,
+					DEFAULT_EAPOL_KEY_PACKET_TIMEOUT));
+			if (whd_driver->chip_info.fwcap_flags & (1 << WHD_FWCAP_SAE)) {
+				CHECK_RETURN(whd_wifi_sae_password(ifp, security_key, key_length));
+			}
+			else {
+				/* Disable Roaming in FW, because our wpa3_external_supplicant's limitation.
+				   If FW report WLC_E_EXT_AUTH_REQ during roaming, Host already called whd_wifi_stop_external_auth_request. */
+				CHECK_RETURN(whd_wifi_set_iovar_value(ifp, IOVAR_STR_ROAM_OFF, 1));
+			}
+			break;
 
         case WHD_SECURITY_WPA_TKIP_ENT:
         case WHD_SECURITY_WPA_AES_ENT:
@@ -4652,10 +4648,10 @@ whd_result_t whd_wifi_get_clm_version(whd_interface_t ifp, char *version, uint8_
 
         version_length = strlen(version);
 
-        /* -2 becase \0 termination needs a char and strlen doesn't include length of \0 */
-        if (version_length > length - 2)
-            version_length = length - 2;
-        version[version_length + 1] = '\0';
+		/* -2 because \0 termination needs a char and strlen doesn't include length of \0 */
+		if (version_length > length - 2)
+			version_length = length - 2;
+		version[version_length + 1] = '\0';
 
         /* Replace all newline/linefeed characters with space character */
         p = version;
@@ -5140,9 +5136,9 @@ whd_result_t whd_arp_stats_get(whd_interface_t ifp, whd_arp_stats_t *arp_stats)
         return WHD_BADARG;
     }
 
-    /* set up the buffer to retreive the data */
-    memcpy(&arp_stats_test, arp_stats, sizeof(whd_arp_stats_t) );
-    memset(arp_stats, 0xFF, sizeof(whd_arp_stats_t) );
+	/* set up the buffer to retrieve the data */
+	memcpy(&arp_stats_test, arp_stats, sizeof(whd_arp_stats_t));
+	memset(arp_stats, 0xFF, sizeof(whd_arp_stats_t));
 
     /* read multiple times to make sure we got valid data */
     do
@@ -5482,16 +5478,14 @@ whd_tko_param(whd_interface_t ifp, whd_tko_retry_t *whd_retry, uint8_t set)
         wl_param_p->retry_interval = whd_retry->tko_retry_interval ==
                                      0 ? TCP_KEEPALIVE_OFFLOAD_RETRY_INTERVAL_SEC : whd_retry->tko_retry_interval;
 
-        result = whd_proto_set_iovar(ifp, buffer, NULL);
-        if (result != WHD_SUCCESS)
-        {
-            WPRINT_WHD_ERROR( ("%s: Cannot set params\n", __func__) );
-        }
-    }
-    else
-    {
-        /* GET paramters */
-        wl_tko_param_t tko_param_real;
+		result = whd_proto_set_iovar(ifp, buffer, NULL);
+		if (result != WHD_SUCCESS) {
+			WPRINT_WHD_ERROR(("%s: Cannot set params\n", __func__));
+		}
+	}
+	else {
+		/* GET parameters */
+		wl_tko_param_t tko_param_real;
 
         result = whd_proto_get_iovar(ifp, buffer, &response);
         if (result == WHD_SUCCESS)
