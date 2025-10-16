@@ -9,6 +9,9 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
+#include "cybsp.h"
+#if (CYBSP_WIFI_INTERFACE_TYPE == CYBSP_USB_INTERFACE)
+
 #include <errno.h>
 #include <fcntl.h>
 #include <stdbool.h>
@@ -16,7 +19,6 @@
 #include <sys/msg.h>
 #include <unistd.h>
 
-#include "cy_result.h"
 #include "usbwlan.h"
 
 #include "cy_log.h"
@@ -274,3 +276,5 @@ cy_rslt_t cyhal_usb_ctrl_receive(const cyhal_usb_t *obj, void *buffer, size_t *b
 
 	return result;
 }
+
+#endif /* (CYBSP_WIFI_INTERFACE_TYPE == CYBSP_USB_INTERFACE) */
