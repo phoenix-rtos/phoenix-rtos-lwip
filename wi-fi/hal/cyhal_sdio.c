@@ -9,6 +9,9 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
+#include "cybsp.h"
+#if (CYBSP_WIFI_INTERFACE_TYPE == CYBSP_SDIO_INTERFACE)
+
 #include "cyhal_sdio.h"
 #include "cyhal_utils.h"
 #include "cyabs_rtos.h"
@@ -817,3 +820,5 @@ void cyhal_sdio_irq_enable(cyhal_sdio_t *obj, cyhal_sdio_irq_event_t event, bool
 		sdio_common.irq_enabled = enable;
 	}
 }
+
+#endif /* (CYBSP_WIFI_INTERFACE_TYPE == CYBSP_SDIO_INTERFACE) */
