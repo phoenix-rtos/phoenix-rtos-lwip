@@ -27,9 +27,9 @@
 #define WIFI_THREAD_PRIO    4
 #define WIFI_THREAD_STACKSZ (4 * _PAGE_SIZE)
 
-#define WIFI_FLAG_STARTED (1 << 0)
-#define WIFI_FLAG_FAILED  (1 << 1)
-#define WIFI_FLAG_FINISH  (1 << 2)
+#define WIFI_FLAG_STARTED (1U << 0)
+#define WIFI_FLAG_FAILED  (1U << 1)
+#define WIFI_FLAG_FINISH  (1U << 2)
 
 #define WIFI_START_RETRIES 5
 
@@ -39,12 +39,12 @@
 #define AP_SECURITY_MODE WHD_SECURITY_WPA2_AES_PSK
 #define AP_CHANNEL       1
 
-#define SNPRINTF_APPEND(fmt, ...) \
+#define SNPRINTF_APPEND(overflow, fmt, ...) \
 	do { \
 		if (!overflow) { \
 			int n = snprintf(buf, size, fmt, ##__VA_ARGS__); \
 			if (n >= size) \
-				overflow = 1; \
+				overflow = true; \
 			else { \
 				size -= n; \
 				buf += n; \
@@ -68,7 +68,7 @@ static struct {
 	cy_lwip_nw_interface_t iface;
 
 	struct {
-		int busy;
+		bool busy;
 		char buf[128];
 		int len;
 	} dev;
@@ -85,6 +85,7 @@ static int wifi_ap_set_idle_timeout(const char *data, size_t len)
 {
 	char buf[16];
 	long int timeout;
+	char *endp;
 
 	if (len > (sizeof(buf) - 1)) {
 		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't set Wi-Fi idle timeout (max length is %u)\n", sizeof(buf) - 1);
@@ -94,14 +95,22 @@ static int wifi_ap_set_idle_timeout(const char *data, size_t len)
 	memcpy(buf, data, len);
 	buf[len] = '\0';
 
-	timeout = strtol(buf, NULL, 0);
-	if (timeout < 0) {
+	errno = 0;
+	timeout = strtol(buf, &endp, 0);
+	if (errno != 0 || endp == buf) {
+		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't set Wi-Fi idle timeout (bad timeout value)\n");
+		return -1;
+	}
+	else if (timeout < 0) {
 		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't set Wi-Fi idle timeout (min value is 0)\n");
 		return -1;
 	}
 	else if (timeout > UINT32_MAX) {
 		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't set Wi-Fi idle timeout (max value is %u)\n", UINT32_MAX);
 		return -1;
+	}
+	else {
+		/* nothing */
 	}
 
 	mutexLock(wifi_common.lock);
@@ -149,7 +158,7 @@ static int wifi_ap_set_key(const char *key, size_t len)
 }
 
 
-static int wifi_ap_is_idle(void)
+static bool wifi_ap_is_idle(void)
 {
 	uint8_t buf[sizeof(uint32_t) + 4 * sizeof(whd_mac_t)];
 	whd_maclist_t *clients = (whd_maclist_t *)buf;
@@ -159,10 +168,11 @@ static int wifi_ap_is_idle(void)
 	clients->count = 4;
 
 	result = whd_wifi_get_associated_client_list(wifi_common.iface.whd_iface, buf, sizeof(buf));
-	if (result == WHD_SUCCESS && clients->count == 0)
-		return 1;
+	if (result == WHD_SUCCESS && clients->count == 0) {
+		return true;
+	}
 
-	return 0;
+	return false;
 }
 
 
@@ -176,8 +186,9 @@ static void wifi_ap_main_loop(void)
 
 		mutexLock(wifi_common.lock);
 
-		if (wifi_common.flags & WIFI_FLAG_FINISH)
+		if ((wifi_common.flags & WIFI_FLAG_FINISH) != 0) {
 			finish = true;
+		}
 
 		if (wifi_common.idle_timeout != 0) {
 			if (wifi_common.idle_current < wifi_common.idle_timeout) {
@@ -193,18 +204,21 @@ static void wifi_ap_main_loop(void)
 		mutexUnlock(wifi_common.lock);
 
 		if (!finish && check_idle) {
-			if (wifi_ap_is_idle())
+			if (wifi_ap_is_idle()) {
 				finish = true;
+			}
 		}
 
-		if (finish)
+		if (finish) {
 			break;
+		}
 
 		mutexLock(wifi_common.lock);
 		condWait(wifi_common.cond, wifi_common.lock, cond_timeout * 1000000ULL);
 
-		if (update_idle)
+		if (update_idle) {
 			wifi_common.idle_current += 1;
+		}
 
 		mutexUnlock(wifi_common.lock);
 	}
@@ -335,7 +349,7 @@ static int wifi_ap_start(void)
 
 	mutexUnlock(wifi_common.lock);
 
-	return (flags & WIFI_FLAG_STARTED ? 0 : -1);
+	return ((flags & WIFI_FLAG_STARTED) != 0) ? 0 : -1;
 }
 
 
@@ -364,26 +378,28 @@ static int wifi_dev_open(int flags)
 {
 	char *buf;
 	size_t size;
-	int overflow = 0;
+	bool overflow = false;
 
-	if (wifi_common.dev.busy)
+	if (wifi_common.dev.busy) {
 		return -EBUSY;
+	}
 
 	buf = wifi_common.dev.buf;
 	size = sizeof(wifi_common.dev.buf);
 
 	mutexLock(wifi_common.lock);
 
-	SNPRINTF_APPEND("running=%u\n", wifi_common.tid != 0);
-	SNPRINTF_APPEND("timeout=%u\n", wifi_common.idle_timeout);
-	SNPRINTF_APPEND("ssid=%.*s\n", wifi_common.ssid.length, wifi_common.ssid.value);
+	SNPRINTF_APPEND(overflow, "running=%u\n", wifi_common.tid != 0);
+	SNPRINTF_APPEND(overflow, "timeout=%u\n", wifi_common.idle_timeout);
+	SNPRINTF_APPEND(overflow, "ssid=%.*s\n", wifi_common.ssid.length, wifi_common.ssid.value);
 
 	mutexUnlock(wifi_common.lock);
 
-	if (overflow)
+	if (overflow) {
 		return -EFBIG;
+	}
 
-	wifi_common.dev.busy = 1;
+	wifi_common.dev.busy = true;
 	wifi_common.dev.len = buf - wifi_common.dev.buf;
 
 	return 0;
@@ -392,9 +408,10 @@ static int wifi_dev_open(int flags)
 
 static int wifi_dev_close(void)
 {
-	if (!wifi_common.dev.busy)
+	if (!wifi_common.dev.busy) {
 		return -EBADF;
-	wifi_common.dev.busy = 0;
+	}
+	wifi_common.dev.busy = false;
 	return 0;
 }
 
@@ -403,8 +420,9 @@ static int wifi_dev_read(char *data, size_t size, off_t offset)
 {
 	int cnt;
 
-	if (offset > wifi_common.dev.len)
+	if (offset > wifi_common.dev.len) {
 		return -ERANGE;
+	}
 
 	cnt = min(size, wifi_common.dev.len - offset);
 	memcpy(data, wifi_common.dev.buf + offset, cnt);
@@ -436,7 +454,7 @@ static int wifi_dev_write(const char *data, size_t size)
 		wifi_ap_stop();
 	}
 	else {
-		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "got unknown Wi-Fi command\n");
+		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "got unknown Wi-Fi command: %.*s\n", (int)size, data);
 		return -EINVAL;
 	}
 
@@ -459,7 +477,7 @@ static void wifi_msg_thread(void *arg)
 
 	result = cy_log_init(CY_LOG_INFO);
 	if (result != CY_RSLT_SUCCESS) {
-		printf("phoenix-rtos-lwip: can't init Wi-Fi logs\n");
+		fprintf(stderr, "phoenix-rtos-lwip: can't init Wi-Fi logs\n");
 		return;
 	}
 
@@ -477,8 +495,9 @@ static void wifi_msg_thread(void *arg)
 		msg_t msg = { 0 };
 		msg_rid_t rid;
 
-		if (msgRecv(port, &msg, &rid) < 0)
+		if (msgRecv(port, &msg, &rid) < 0) {
 			continue;
+		}
 
 		switch (msg.type) {
 			case mtOpen:
@@ -512,17 +531,18 @@ __constructor__(1000) void init_wifi(void)
 	int err;
 
 	err = mutexCreate(&wifi_common.lock);
-	if (err) {
+	if (err < 0) {
 		errout(err, "mutexCreate(lock)");
 	}
 
 	err = condCreate(&wifi_common.cond);
-	if (err) {
+	if (err < 0) {
 		resourceDestroy(wifi_common.lock);
 		errout(err, "condCreate(cond)");
 	}
 
-	if ((err = sys_thread_opt_new("wifi-msg", wifi_msg_thread, NULL, WIFI_THREAD_STACKSZ, WIFI_THREAD_PRIO, NULL))) {
+	err = sys_thread_opt_new("wifi-msg", wifi_msg_thread, NULL, WIFI_THREAD_STACKSZ, WIFI_THREAD_PRIO, NULL);
+	if (err < 0) {
 		resourceDestroy(wifi_common.lock);
 		resourceDestroy(wifi_common.cond);
 		errout(err, "thread(wifi-msg)");
