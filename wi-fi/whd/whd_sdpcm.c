@@ -1,5 +1,5 @@
 /*
- * Copyright 2021, Cypress Semiconductor Corporation (an Infineon company)
+ * Copyright 2024, Cypress Semiconductor Corporation (an Infineon company)
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,6 +22,7 @@
  *  It is required when communicating with Broadcom 802.11 devices.
  *
  */
+#ifndef PROTO_MSGBUF
 #include "whd_sdpcm.h"
 #include "bus_protocols/whd_bus_protocol_interface.h"
 #include "whd_endian.h"
@@ -38,8 +39,8 @@
 #include "whd_endian.h"
 
 /******************************************************
-* @cond       Constants
-******************************************************/
+ * @cond       Constants
+ ******************************************************/
 
 #define ETHER_TYPE_BRCM    (0x886C)       /** Broadcom Ethertype for identifying event packets - Copied from DHD include/proto/ethernet.h */
 #define BRCM_OUI           "\x00\x10\x18" /** Broadcom OUI (Organizationally Unique Identifier): Used in the proprietary(221) IE (Information Element) in all Broadcom devices */
@@ -56,13 +57,18 @@
 #define WLC_EVENT_MSG_UNKBSS   (0x08) /** unknown source bsscfg */
 #define WLC_EVENT_MSG_UNKIF    (0x10) /** unknown source OS i/f */
 
-/******************************************************
-*             Macros
-******************************************************/
+/* WMM constants */
+#define MAX_8021P_PRIO 8
+#define MAX_WMM_AC     4
+#define AC_QUEUE_SIZE  64
 
 /******************************************************
-*             Local Structures
-******************************************************/
+ *             Macros
+ ******************************************************/
+
+/******************************************************
+ *             Local Structures
+ ******************************************************/
 
 #pragma pack(1)
 
@@ -109,7 +115,7 @@ typedef struct
 {
 
 	uint16_t version;                /** Version 1 has fields up to ifname.
-                                               * Version 2 has all fields including ifidx and bss_cfg_idx */
+									  * Version 2 has all fields including ifidx and bss_cfg_idx */
 	uint16_t flags;                  /** see flags */
 	uint32_t event_type;             /** Message */
 	uint32_t status;                 /** Status code */
@@ -135,22 +141,27 @@ typedef struct bcm_event {
 #pragma pack()
 
 /******************************************************
-*             Static Variables
-******************************************************/
-/* Set the pkt threshold for each WMM categories
- * BE:64 BK:128 VI:192 VO:256
+ *             Static Variables
+ ******************************************************/
+/** 802.1p Priority to WMM AC Mapping
+ *
+ *  prio 0, 3: Background(0)
+ *  prio 1, 2: Best Effor(1)
+ *  prio 4, 5: Video(2)
+ *  prio 6, 7: Voice(3)
+ *  prio 8   : Control(4)(ex: IOVAR/IOCTL)
  */
-static const uint32_t prio_to_qthreshold[8] = { 64, 128, 128, 64, 192, 192, 256, 256 };
+static const uint8_t prio_to_ac[9] = { 1, 0, 0, 1, 2, 2, 3, 3, 4 };
 
 /******************************************************
-*             SDPCM Logging
-*
-* Enable this section to allow logging of SDPCM packets
-* into a buffer for later perusal
-*
-* See sdpcm_log  and  next_sdpcm_log_pos
-*
-******************************************************/
+ *             SDPCM Logging
+ *
+ * Enable this section to allow logging of SDPCM packets
+ * into a buffer for later perusal
+ *
+ * See sdpcm_log  and  next_sdpcm_log_pos
+ *
+ ******************************************************/
 /** @cond */
 
 #if 0
@@ -195,16 +206,16 @@ static void add_sdpcm_log_entry(sdpcm_log_direction_t dir, sdpcm_log_type_t type
 /** @endcond */
 
 /******************************************************
-*             Static Function Prototypes
-******************************************************/
+ *             Static Function Prototypes
+ ******************************************************/
 static whd_buffer_t whd_sdpcm_get_next_buffer_in_queue(whd_driver_t whd_driver, whd_buffer_t buffer);
 static void whd_sdpcm_set_next_buffer_in_queue(whd_driver_t whd_driver, whd_buffer_t buffer,
-	whd_buffer_t prev_buffer);
+		whd_buffer_t prev_buffer);
 extern void whd_wifi_log_event(whd_driver_t whd_driver, const whd_event_header_t *event_header,
-	const uint8_t *event_data);
+		const uint8_t *event_data);
 /******************************************************
-*             Function definitions
-******************************************************/
+ *             Function definitions
+ ******************************************************/
 
 /** Initialises the SDPCM protocol handler
  *
@@ -218,6 +229,7 @@ extern void whd_wifi_log_event(whd_driver_t whd_driver, const whd_event_header_t
 whd_result_t whd_sdpcm_init(whd_driver_t whd_driver)
 {
 	whd_sdpcm_info_t *sdpcm_info = &whd_driver->sdpcm_info;
+	int ac;
 
 	/* Create the sdpcm packet queue semaphore */
 	if (cy_rtos_init_semaphore(&sdpcm_info->send_queue_mutex, 1, 0) != WHD_SUCCESS) {
@@ -229,9 +241,12 @@ whd_result_t whd_sdpcm_init(whd_driver_t whd_driver)
 	}
 
 	/* Packet send queue variables */
-	sdpcm_info->send_queue_head = (whd_buffer_t)NULL;
-	sdpcm_info->send_queue_tail = (whd_buffer_t)NULL;
-	sdpcm_info->npkt_in_q = 0;
+	for (ac = 0; ac <= MAX_WMM_AC; ac++) {
+		sdpcm_info->send_queue_head[ac] = (whd_buffer_t)NULL;
+		sdpcm_info->send_queue_tail[ac] = (whd_buffer_t)NULL;
+		sdpcm_info->npkt_in_q[ac] = 0;
+	}
+	sdpcm_info->totpkt_in_q = 0;
 
 	whd_sdpcm_bus_vars_init(whd_driver);
 
@@ -257,19 +272,23 @@ void whd_sdpcm_quit(whd_driver_t whd_driver)
 {
 	whd_sdpcm_info_t *sdpcm_info = &whd_driver->sdpcm_info;
 	whd_result_t result;
+	int ac;
 
 	/* Delete the SDPCM queue mutex */
 	(void)cy_rtos_deinit_semaphore(&sdpcm_info->send_queue_mutex); /* Ignore return - not much can be done about failure */
 
 	/* Free any left over packets in the queue */
-	while (sdpcm_info->send_queue_head != NULL) {
-		whd_buffer_t buf = whd_sdpcm_get_next_buffer_in_queue(whd_driver, sdpcm_info->send_queue_head);
-		result = whd_buffer_release(whd_driver, sdpcm_info->send_queue_head, WHD_NETWORK_TX);
-		if (result != WHD_SUCCESS)
-			WPRINT_WHD_ERROR(("buffer release failed in %s at %d \n", __func__, __LINE__));
-		sdpcm_info->send_queue_head = buf;
+	for (ac = 0; ac <= MAX_WMM_AC; ac++) {
+		while (sdpcm_info->send_queue_head[ac] != NULL) {
+			whd_buffer_t buf = whd_sdpcm_get_next_buffer_in_queue(whd_driver, sdpcm_info->send_queue_head[ac]);
+			result = whd_buffer_release(whd_driver, sdpcm_info->send_queue_head[ac], WHD_NETWORK_TX);
+			if (result != WHD_SUCCESS)
+				WPRINT_WHD_ERROR(("buffer release failed in %s at %d \n", __func__, __LINE__));
+			sdpcm_info->send_queue_head[ac] = buf;
+		}
+		sdpcm_info->npkt_in_q[ac] = 0;
 	}
-	sdpcm_info->npkt_in_q = 0;
+	sdpcm_info->totpkt_in_q = 0;
 }
 
 void whd_sdpcm_update_credit(whd_driver_t whd_driver, uint8_t *data)
@@ -334,8 +353,8 @@ void whd_sdpcm_process_rx_packet(whd_driver_t whd_driver, whd_buffer_t buffer)
 	if ((size < (uint16_t)SDPCM_HEADER_LEN) || (size > whd_buffer_get_current_piece_size(whd_driver, buffer))) {
 		whd_minor_assert("Packet size invalid", 0 == 1);
 		WPRINT_WHD_DEBUG((
-			"Received a packet that is too small to contain anything useful (or) too big. Packet Size = [%d]\n",
-			size));
+				"Received a packet that is too small to contain anything useful (or) too big. Packet Size = [%d]\n",
+				size));
 		result = whd_buffer_release(whd_driver, buffer, WHD_NETWORK_RX);
 		if (result != WHD_SUCCESS)
 			WPRINT_WHD_ERROR(("buffer release failed in %s at %d \n", __func__, __LINE__));
@@ -344,7 +363,7 @@ void whd_sdpcm_process_rx_packet(whd_driver_t whd_driver, whd_buffer_t buffer)
 
 	/* Get address of packet->sdpcm_header.frametag indirectly to avoid IAR's unaligned address warning */
 	whd_sdpcm_update_credit(whd_driver,
-		(uint8_t *)&sdpcm_header.sw_header - sizeof(sdpcm_header.frametag));
+			(uint8_t *)&sdpcm_header.sw_header - sizeof(sdpcm_header.frametag));
 
 	if (size == (uint16_t)SDPCM_HEADER_LEN) {
 		/* This is a flow control update packet with no data - release it. */
@@ -360,11 +379,11 @@ void whd_sdpcm_process_rx_packet(whd_driver_t whd_driver, whd_buffer_t buffer)
 		case CONTROL_HEADER: /* IOCTL/IOVAR reply packet */
 		{
 			add_sdpcm_log_entry(LOG_RX, IOCTL, whd_buffer_get_current_piece_size(whd_driver, buffer),
-				(char *)whd_buffer_get_current_piece_data_pointer(whd_driver, buffer));
+					(char *)whd_buffer_get_current_piece_data_pointer(whd_driver, buffer));
 
 			/* Check that packet size is big enough to contain the CDC header as well as the SDPCM header */
 			if (sdpcm_header.frametag[0] <
-				(sizeof(sdpcm_header.frametag) + sizeof(sdpcm_sw_header_t) + sizeof(cdc_header_t))) {
+					(sizeof(sdpcm_header.frametag) + sizeof(sdpcm_sw_header_t) + sizeof(cdc_header_t))) {
 				/* Received a too-short SDPCM packet! */
 				WPRINT_WHD_DEBUG(("Received a too-short SDPCM packet!\n"));
 				result = whd_buffer_release(whd_driver, buffer, WHD_NETWORK_RX);
@@ -376,8 +395,8 @@ void whd_sdpcm_process_rx_packet(whd_driver_t whd_driver, whd_buffer_t buffer)
 
 			/* Move SDPCM header and Buffer header to pass onto next layer */
 			whd_buffer_add_remove_at_front(whd_driver, &buffer,
-				(int32_t)(sizeof(whd_buffer_header_t) +
-					sdpcm_header.sw_header.header_length));
+					(int32_t)(sizeof(whd_buffer_header_t) +
+							sdpcm_header.sw_header.header_length));
 
 			whd_process_cdc(whd_driver, buffer);
 		}
@@ -387,7 +406,7 @@ void whd_sdpcm_process_rx_packet(whd_driver_t whd_driver, whd_buffer_t buffer)
 		case DATA_HEADER: {
 			/* Check that the packet is big enough to contain SDPCM & BDC headers */
 			if (sdpcm_header.frametag[0] <=
-				(sizeof(sdpcm_header.frametag) + sizeof(sdpcm_sw_header_t) + sizeof(bdc_header_t))) {
+					(sizeof(sdpcm_header.frametag) + sizeof(sdpcm_sw_header_t) + sizeof(bdc_header_t))) {
 				WPRINT_WHD_ERROR(("Packet too small to contain SDPCM + BDC headers\n"));
 				result = whd_buffer_release(whd_driver, buffer, WHD_NETWORK_RX);
 				if (result != WHD_SUCCESS)
@@ -398,8 +417,8 @@ void whd_sdpcm_process_rx_packet(whd_driver_t whd_driver, whd_buffer_t buffer)
 
 			/* Move SDPCM header and Buffer header to pass onto next layer */
 			whd_buffer_add_remove_at_front(whd_driver, &buffer,
-				(int32_t)(sizeof(whd_buffer_header_t) +
-					sdpcm_header.sw_header.header_length));
+					(int32_t)(sizeof(whd_buffer_header_t) +
+							sdpcm_header.sw_header.header_length));
 
 			whd_process_bdc(whd_driver, buffer);
 
@@ -409,8 +428,8 @@ void whd_sdpcm_process_rx_packet(whd_driver_t whd_driver, whd_buffer_t buffer)
 
 			/* Move SDPCM header and Buffer header to pass onto next layer */
 			whd_buffer_add_remove_at_front(whd_driver, &buffer,
-				(int32_t)(sizeof(whd_buffer_header_t) +
-					sdpcm_header.sw_header.header_length));
+					(int32_t)(sizeof(whd_buffer_header_t) +
+							sdpcm_header.sw_header.header_length));
 
 			whd_process_bdc_event(whd_driver, buffer, size);
 		} break;
@@ -426,7 +445,7 @@ void whd_sdpcm_process_rx_packet(whd_driver_t whd_driver, whd_buffer_t buffer)
 
 whd_bool_t whd_sdpcm_has_tx_packet(whd_driver_t whd_driver)
 {
-	if (whd_driver->sdpcm_info.send_queue_head != NULL) {
+	if (whd_driver->sdpcm_info.totpkt_in_q > 0) {
 		return WHD_TRUE;
 	}
 
@@ -439,53 +458,65 @@ whd_result_t whd_sdpcm_get_packet_to_send(whd_driver_t whd_driver, whd_buffer_t 
 	sdpcm_header_t sdpcm_header;
 	whd_sdpcm_info_t *sdpcm_info = &whd_driver->sdpcm_info;
 	whd_result_t result;
+	int ac;
 
-	if (sdpcm_info->send_queue_head != NULL) {
-		/* Check if we're being flow controlled */
-		if (whd_bus_is_flow_controlled(whd_driver) == WHD_TRUE) {
-			WHD_STATS_INCREMENT_VARIABLE(whd_driver, flow_control);
-			return WHD_FLOW_CONTROLLED;
-		}
-
-		/* Check if we have enough bus data credits spare */
-		if (((uint8_t)(sdpcm_info->tx_max - sdpcm_info->tx_seq) == 0) ||
-			(((uint8_t)(sdpcm_info->tx_max - sdpcm_info->tx_seq) & 0x80) != 0)) {
-			WHD_STATS_INCREMENT_VARIABLE(whd_driver, no_credit);
-			return WHD_NO_CREDITS;
-		}
-
-		/* There is a packet waiting to be sent - send it then fix up queue and release packet */
-		if (cy_rtos_get_semaphore(&sdpcm_info->send_queue_mutex, CY_RTOS_NEVER_TIMEOUT, WHD_FALSE) != WHD_SUCCESS) {
-			/* Could not obtain mutex, push back the flow control semaphore */
-			WPRINT_WHD_ERROR(("Error manipulating a semaphore, %s failed at %d \n", __func__, __LINE__));
-			return WHD_SEMAPHORE_ERROR;
-		}
-
-		/* Pop the head off and set the new send_queue head */
-		*buffer = sdpcm_info->send_queue_head;
-		sdpcm_info->send_queue_head = whd_sdpcm_get_next_buffer_in_queue(whd_driver, *buffer);
-		if (sdpcm_info->send_queue_head == NULL) {
-			sdpcm_info->send_queue_tail = NULL;
-		}
-		sdpcm_info->npkt_in_q--;
-		result = cy_rtos_set_semaphore(&sdpcm_info->send_queue_mutex, WHD_FALSE);
-		if (result != WHD_SUCCESS)
-			WPRINT_WHD_ERROR(("Error setting semaphore in %s at %d \n", __func__, __LINE__));
-
-
-		/* Set the sequence number */
-		packet = (bus_common_header_t *)whd_buffer_get_current_piece_data_pointer(whd_driver, *buffer);
-		CHECK_PACKET_NULL(packet, WHD_NO_REGISTER_FUNCTION_POINTER);
-		memcpy(&sdpcm_header, packet->bus_header, BUS_HEADER_LEN);
-		sdpcm_header.sw_header.sequence = sdpcm_info->tx_seq;
-		memcpy(packet->bus_header, &sdpcm_header, BUS_HEADER_LEN);
-		sdpcm_info->tx_seq++;
-
-		return WHD_SUCCESS;
-	}
-	else {
+	if (sdpcm_info->totpkt_in_q <= 0) {
 		return WHD_NO_PACKET_TO_SEND;
 	}
+
+#if (CYBSP_WIFI_INTERFACE_TYPE != CYBSP_USB_INTERFACE)
+	/* Check if we're being flow controlled for Data packet only. */
+	if ((whd_bus_is_flow_controlled(whd_driver) == WHD_TRUE) && (sdpcm_info->npkt_in_q[MAX_WMM_AC] == 0)) {
+		WHD_STATS_INCREMENT_VARIABLE(whd_driver, flow_control);
+		return WHD_FLOW_CONTROLLED;
+	}
+
+	/* Check if we have enough bus data credits spare */
+	if (((uint8_t)(sdpcm_info->tx_max - sdpcm_info->tx_seq) == 0) ||
+			(((uint8_t)(sdpcm_info->tx_max - sdpcm_info->tx_seq) & 0x80) != 0)) {
+		WHD_STATS_INCREMENT_VARIABLE(whd_driver, no_credit);
+		return WHD_NO_CREDITS;
+	}
+#endif /* (CYBSP_WIFI_INTERFACE_TYPE != CYBSP_USB_INTERFACE) */
+
+	/* There is a packet waiting to be sent - send it then fix up queue and release packet */
+	if (cy_rtos_get_semaphore(&sdpcm_info->send_queue_mutex, CY_RTOS_NEVER_TIMEOUT, WHD_FALSE) != WHD_SUCCESS) {
+		/* Could not obtain mutex, push back the flow control semaphore */
+		WPRINT_WHD_ERROR(("Error manipulating a semaphore, %s failed at %d \n", __func__, __LINE__));
+		return WHD_SEMAPHORE_ERROR;
+	}
+
+	for (ac = MAX_WMM_AC; ac >= 0; ac--) {
+		if (sdpcm_info->send_queue_head[ac] != NULL) {
+			break;
+		}
+	}
+	if (ac < 0) {
+		WPRINT_WHD_ERROR(("NO pkt available in queue, %s failed at %d\n", __func__, __LINE__));
+		return WHD_NO_PACKET_TO_SEND;
+	}
+	/* Pop the head off and set the new send_queue head */
+	*buffer = sdpcm_info->send_queue_head[ac];
+	sdpcm_info->send_queue_head[ac] = whd_sdpcm_get_next_buffer_in_queue(whd_driver, *buffer);
+	if (sdpcm_info->send_queue_head[ac] == NULL) {
+		sdpcm_info->send_queue_tail[ac] = NULL;
+	}
+	sdpcm_info->npkt_in_q[ac]--;
+	sdpcm_info->totpkt_in_q--;
+	result = cy_rtos_set_semaphore(&sdpcm_info->send_queue_mutex, WHD_FALSE);
+	if (result != WHD_SUCCESS) {
+		WPRINT_WHD_ERROR(("Error setting semaphore in %s at %d \n", __func__, __LINE__));
+	}
+
+	/* Set the sequence number */
+	packet = (bus_common_header_t *)whd_buffer_get_current_piece_data_pointer(whd_driver, *buffer);
+	CHECK_PACKET_NULL(packet, WHD_NO_REGISTER_FUNCTION_POINTER);
+	memcpy(&sdpcm_header, packet->bus_header, BUS_HEADER_LEN);
+	sdpcm_header.sw_header.sequence = sdpcm_info->tx_seq;
+	memcpy(packet->bus_header, &sdpcm_header, BUS_HEADER_LEN);
+	sdpcm_info->tx_seq++;
+
+	return WHD_SUCCESS;
 }
 
 /** Returns the number of bus credits available
@@ -515,15 +546,24 @@ uint8_t whd_sdpcm_get_available_credits(whd_driver_t whd_driver)
  *  @return WHD result code
  */
 whd_result_t whd_send_to_bus(whd_driver_t whd_driver, whd_buffer_t buffer,
-	sdpcm_header_type_t header_type, uint8_t prio)
+		sdpcm_header_type_t header_type, uint8_t prio)
 {
 	uint16_t size;
 	uint8_t *data = NULL;
 	bus_common_header_t *packet =
-		(bus_common_header_t *)whd_buffer_get_current_piece_data_pointer(whd_driver, buffer);
+			(bus_common_header_t *)whd_buffer_get_current_piece_data_pointer(whd_driver, buffer);
 	sdpcm_header_t sdpcm_header;
 	whd_sdpcm_info_t *sdpcm_info = &whd_driver->sdpcm_info;
 	whd_result_t result;
+	int ac;
+
+#ifdef CYCFG_ULP_SUPPORT_ENABLED
+	if (!(whd_ensure_wlan_bus_not_in_deep_sleep(whd_driver))) {
+		WPRINT_WHD_DEBUG(("Could not send pkt - F2 is not ready\n"));
+		return WHD_BUS_FAIL;
+	}
+#endif
+
 	CHECK_PACKET_NULL(packet, WHD_NO_REGISTER_FUNCTION_POINTER);
 	size = whd_buffer_get_current_piece_size(whd_driver, buffer);
 
@@ -533,7 +573,7 @@ whd_result_t whd_send_to_bus(whd_driver_t whd_driver, whd_buffer_t buffer,
 	memset((uint8_t *)&sdpcm_header, 0, sizeof(sdpcm_header_t));
 	sdpcm_header.sw_header.channel_and_flags = (uint8_t)header_type;
 	sdpcm_header.sw_header.header_length =
-		(header_type == DATA_HEADER) ? sizeof(sdpcm_header_t) + 2 : sizeof(sdpcm_header_t);
+			(header_type == DATA_HEADER) ? sizeof(sdpcm_header_t) + 2 : sizeof(sdpcm_header_t);
 	sdpcm_header.sw_header.sequence = 0; /* Note: The real sequence will be written later */
 	sdpcm_header.frametag[0] = size;
 	sdpcm_header.frametag[1] = (uint16_t)~size;
@@ -541,9 +581,10 @@ whd_result_t whd_send_to_bus(whd_driver_t whd_driver, whd_buffer_t buffer,
 	memcpy(packet->bus_header, &sdpcm_header, BUS_HEADER_LEN);
 	data = whd_buffer_get_current_piece_data_pointer(whd_driver, buffer);
 	CHECK_PACKET_NULL(data, WHD_NO_REGISTER_FUNCTION_POINTER);
-	add_sdpcm_log_entry(LOG_TX, (header_type == DATA_HEADER) ? DATA : (header_type == CONTROL_HEADER) ? IOCTL : EVENT,
-		whd_buffer_get_current_piece_size(whd_driver, buffer),
-		(char *)data);
+	add_sdpcm_log_entry(LOG_TX, (header_type == DATA_HEADER) ? DATA : (header_type == CONTROL_HEADER) ? IOCTL :
+																										EVENT,
+			whd_buffer_get_current_piece_size(whd_driver, buffer),
+			(char *)data);
 
 	/* Add the length of the SDPCM header and pass "down" */
 	if (cy_rtos_get_semaphore(&sdpcm_info->send_queue_mutex, CY_RTOS_NEVER_TIMEOUT, WHD_FALSE) != WHD_SUCCESS) {
@@ -555,12 +596,13 @@ whd_result_t whd_send_to_bus(whd_driver_t whd_driver, whd_buffer_t buffer,
 		return WHD_SEMAPHORE_ERROR;
 	}
 
-	/* The input priority should not higher than 7 */
-	if (prio > 7) {
-		prio = 7;
+	/* The input priority should not higher than MAX_8021P_PRIO(7) */
+	if (prio > MAX_8021P_PRIO) {
+		prio = MAX_8021P_PRIO;
 	}
+	ac = prio_to_ac[prio];
 
-	if ((header_type == DATA_HEADER) && (sdpcm_info->npkt_in_q > prio_to_qthreshold[prio])) {
+	if ((header_type == DATA_HEADER) && (sdpcm_info->npkt_in_q[ac] > AC_QUEUE_SIZE)) {
 		result = whd_buffer_release(whd_driver, buffer, WHD_NETWORK_TX);
 		if (result != WHD_SUCCESS) {
 			WPRINT_WHD_ERROR(("buffer release failed in %s at %d \n", __func__, __LINE__));
@@ -574,14 +616,15 @@ whd_result_t whd_send_to_bus(whd_driver_t whd_driver, whd_buffer_t buffer,
 	}
 
 	whd_sdpcm_set_next_buffer_in_queue(whd_driver, NULL, buffer);
-	if (sdpcm_info->send_queue_tail != NULL) {
-		whd_sdpcm_set_next_buffer_in_queue(whd_driver, buffer, sdpcm_info->send_queue_tail);
+	if (sdpcm_info->send_queue_tail[ac] != NULL) {
+		whd_sdpcm_set_next_buffer_in_queue(whd_driver, buffer, sdpcm_info->send_queue_tail[ac]);
 	}
-	sdpcm_info->send_queue_tail = buffer;
-	if (sdpcm_info->send_queue_head == NULL) {
-		sdpcm_info->send_queue_head = buffer;
+	sdpcm_info->send_queue_tail[ac] = buffer;
+	if (sdpcm_info->send_queue_head[ac] == NULL) {
+		sdpcm_info->send_queue_head[ac] = buffer;
 	}
-	sdpcm_info->npkt_in_q++;
+	sdpcm_info->npkt_in_q[ac]++;
+	sdpcm_info->totpkt_in_q++;
 	result = cy_rtos_set_semaphore(&sdpcm_info->send_queue_mutex, WHD_FALSE);
 	if (result != WHD_SUCCESS)
 		WPRINT_WHD_ERROR(("Error setting semaphore in %s at %d \n", __func__, __LINE__));
@@ -592,8 +635,8 @@ whd_result_t whd_send_to_bus(whd_driver_t whd_driver, whd_buffer_t buffer,
 }
 
 /******************************************************
-*             Static Functions
-******************************************************/
+ *             Static Functions
+ ******************************************************/
 
 static whd_buffer_t whd_sdpcm_get_next_buffer_in_queue(whd_driver_t whd_driver, whd_buffer_t buffer)
 {
@@ -613,6 +656,8 @@ static whd_buffer_t whd_sdpcm_get_next_buffer_in_queue(whd_driver_t whd_driver, 
 static void whd_sdpcm_set_next_buffer_in_queue(whd_driver_t whd_driver, whd_buffer_t buffer, whd_buffer_t prev_buffer)
 {
 	whd_buffer_header_t *packet =
-		(whd_buffer_header_t *)whd_buffer_get_current_piece_data_pointer(whd_driver, prev_buffer);
+			(whd_buffer_header_t *)whd_buffer_get_current_piece_data_pointer(whd_driver, prev_buffer);
 	packet->queue_next = buffer;
 }
+
+#endif /* PROTO_MSGBUF */

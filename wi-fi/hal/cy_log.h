@@ -122,7 +122,7 @@ extern "C" {
  ******************************************************/
 
 /******************************************************************************/
-/** \addtogroup group_logging_enums 
+/** \addtogroup group_logging_enums
  * Documentation of the enums provided by logging utility.
  */
 /** \{ */
@@ -151,6 +151,7 @@ typedef enum {
 	CYLF_GPIO,       /**< GPIO Facility */
 	CYLF_SDIO,       /**< SDIO Facility */
 	CYLF_MIDDLEWARE, /**< Middleware Facility */
+	CYLF_USB,        /**< USB Facility */
 
 	CYLF_MAX /**< Must be last, not an actual index */
 } CY_LOG_FACILITY_T;
@@ -162,7 +163,7 @@ typedef enum {
  *
  *  @addtogroup group_logging_func
  *
- * A logging subsystem provides a set of helper functions to manage logging in the application. 
+ * A logging subsystem provides a set of helper functions to manage logging in the application.
  *
  *  @{
  */

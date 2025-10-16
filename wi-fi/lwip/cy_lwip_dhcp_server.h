@@ -29,7 +29,7 @@
  * including Cypress's product in a High Risk Product, the manufacturer
  * of such system or application assumes all risk of such use and in doing
  * so agrees to indemnify Cypress against all liability.
-*/
+ */
 
 /** @file
  *  Interface header for a simple DHCP server
@@ -51,7 +51,7 @@ extern "C" {
  ******************************************************/
 
 #define ALWAYS_INLINE_PRE
-//#define ALWAYS_INLINE    __attribute__((always_inline))
+// #define ALWAYS_INLINE    __attribute__((always_inline))
 /* Fixme: ALWAYS_INLINE should be set based on compiler GCC or IAR. but for
  * now it is forced inline is removed. Need to identify how to detect compiler flag here
  */
@@ -165,4 +165,4 @@ cy_rslt_t cy_lwip_dhcp_server_stop(cy_lwip_dhcp_server_t *server);
 } /* extern "C" */
 #endif
 
-#endif  //LWIP_IPV4
+#endif  // LWIP_IPV4

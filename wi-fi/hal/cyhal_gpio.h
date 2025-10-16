@@ -1,29 +1,29 @@
-/***************************************************************************/ /**
-* \file cyhal_gpio.h
-*
-* \brief
-* Provides a high level interface for interacting with the Cypress GPIO.
-* This interface abstracts out the chip specific details. If any chip specific
-* functionality is necessary, or performance is critical the low level functions
-* can be used directly.
-*
-********************************************************************************
-* \copyright
-* Copyright 2018-2019 Cypress Semiconductor Corporation
-* SPDX-License-Identifier: Apache-2.0
-*
-* Licensed under the Apache License, Version 2.0 (the "License");
-* you may not use this file except in compliance with the License.
-* You may obtain a copy of the License at
-*
-*     http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*******************************************************************************/
+/********************************************************************************
+ * \file cyhal_gpio.h
+ *
+ * \brief
+ * Provides a high level interface for interacting with the Cypress GPIO.
+ * This interface abstracts out the chip specific details. If any chip specific
+ * functionality is necessary, or performance is critical the low level functions
+ * can be used directly.
+ *
+ ********************************************************************************
+ * \copyright
+ * Copyright 2018-2019 Cypress Semiconductor Corporation
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *******************************************************************************/
 
 /**
  * \addtogroup group_hal_gpio GPIO (General Purpose Input Output)
@@ -71,8 +71,8 @@ extern "C" {
  */
 
 /*******************************************************************************
-*       Defines
-*******************************************************************************/
+ *       Defines
+ *******************************************************************************/
 
 /**
  * \addtogroup group_hal_gpio_macros
@@ -91,8 +91,8 @@ extern "C" {
  */
 
 /*******************************************************************************
-*       Enumerations
-*******************************************************************************/
+ *       Enumerations
+ *******************************************************************************/
 
 /** Pin IRQ events */
 typedef enum {
@@ -141,8 +141,8 @@ typedef void (*cyhal_gpio_irq_handler_t)(void *handler_arg, cyhal_gpio_irq_event
  */
 
 /*******************************************************************************
-*       Functions
-*******************************************************************************/
+ *       Functions
+ *******************************************************************************/
 
 /** Initialize the GPIO pin
  *
@@ -154,7 +154,7 @@ typedef void (*cyhal_gpio_irq_handler_t)(void *handler_arg, cyhal_gpio_irq_event
  * @return The status of the init request
  */
 cy_rslt_t cyhal_gpio_init(cyhal_gpio_t pin, cyhal_gpio_direction_t direction, cyhal_gpio_drive_mode_t drvMode,
-	bool initVal);
+		bool initVal);
 
 /** Uninitialize the gpio peripheral and the cyhal_gpio_t object
  *
@@ -207,7 +207,7 @@ void cyhal_gpio_toggle(cyhal_gpio_t pin);
  * @param[in] handler_arg   Generic argument that will be provided to the handler when called, can be NULL
  */
 void cyhal_gpio_register_irq(cyhal_gpio_t pin, uint8_t intrPriority, cyhal_gpio_irq_handler_t handler,
-	void *handler_arg);
+		void *handler_arg);
 
 /** Enable or Disable the GPIO IRQ
  *

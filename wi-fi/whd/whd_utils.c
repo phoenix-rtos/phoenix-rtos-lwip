@@ -1,5 +1,5 @@
 /*
- * Copyright 2021, Cypress Semiconductor Corporation (an Infineon company)
+ * Copyright 2024, Cypress Semiconductor Corporation (an Infineon company)
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,6 +20,7 @@
  *
  * Utilities to help do specialized (not general purpose) WHD specific things
  */
+#include <stdlib.h>
 #include "whd_debug.h"
 #include "whd_utils.h"
 #include "whd_chip_constants.h"
@@ -27,18 +28,58 @@
 #include "whd_int.h"
 #include "whd_wlioctl.h"
 
-#define UNSIGNED_CHAR_TO_CHAR(uch) ((uch)&0x7f)
+#define UNSIGNED_CHAR_TO_CHAR(uch) ((uch) & 0x7f)
 
 #define RSPEC_KBPS_MASK     (0x7f)
-#define RSPEC_500KBPS(rate) ((rate)&RSPEC_KBPS_MASK)
+#define RSPEC_500KBPS(rate) ((rate) & RSPEC_KBPS_MASK)
 #define RSPEC_TO_KBPS(rate) (RSPEC_500KBPS((rate)) * (unsigned int)500)
 
 #define OTP_WORD_SIZE 16                 /* Word size in bits */
 #define WPA_OUI_TYPE1 "\x00\x50\xF2\x01" /** WPA OUI */
 
+#ifdef PROTO_MSGBUF
+typedef struct dma_pool {
+	int offset;
+	int poolsize;
+	uint8_t big_buffer[0];
+} dma_pool;
+
+dma_pool *pool_mem;
+
+uint32_t whd_dmapool_init(uint32_t memory_size)
+{
+	WPRINT_WHD_DEBUG(("WHD allocating %lu bytes for DMA pool\n", memory_size));
+	pool_mem = (dma_pool *)whd_hw_allocatePermanentApi(memory_size);
+
+	if (pool_mem == NULL)
+		return -1;
+
+	pool_mem->offset = 0;
+	pool_mem->poolsize = memory_size - (sizeof(dma_pool));
+
+	if (!whd_hw_openDeviceAccessApi(WHD_HW_DEVICE_WLAN, pool_mem->big_buffer, pool_mem->poolsize, 0))
+		return -1;
+
+	return 0;
+}
+
+void *whd_dmapool_alloc(int size)
+{
+	uint8_t *allocbuf;
+
+	if ((pool_mem->offset + size) >= pool_mem->poolsize)
+		return NULL;
+
+	allocbuf = pool_mem->big_buffer + pool_mem->offset;
+	pool_mem->offset += size;
+
+	return allocbuf;
+}
+#endif
+
 /******************************************************
-*             Static Variables
-******************************************************/
+ *             Static Variables
+ ******************************************************/
 whd_tlv8_data_t *whd_tlv_find_tlv8(const uint8_t *message, uint32_t message_length, uint8_t type);
 
 whd_tlv8_data_t *whd_tlv_find_tlv8(const uint8_t *message, uint32_t message_length, uint8_t type)
@@ -65,7 +106,7 @@ whd_tlv8_data_t *whd_tlv_find_tlv8(const uint8_t *message, uint32_t message_leng
 }
 
 whd_tlv8_header_t *whd_parse_tlvs(const whd_tlv8_header_t *tlv_buf, uint32_t buflen,
-	dot11_ie_id_t key)
+		dot11_ie_id_t key)
 {
 	return (whd_tlv8_header_t *)whd_tlv_find_tlv8((const uint8_t *)tlv_buf, buflen, key);
 }
@@ -78,7 +119,7 @@ whd_bool_t whd_is_wpa_ie(vendor_specific_ie_header_t *wpaie, whd_tlv8_header_t *
 
 	/* If the contents match the WPA_OUI and type=1 */
 	if ((ie->tlv_header.length >= (uint8_t)VENDOR_SPECIFIC_IE_MINIMUM_LENGTH) &&
-		(memcmp(ie->oui, WPA_OUI_TYPE1, sizeof(ie->oui)) == 0)) {
+			(memcmp(ie->oui, WPA_OUI_TYPE1, sizeof(ie->oui)) == 0)) {
 		/* Found the WPA IE */
 		return WHD_TRUE;
 	}
@@ -96,7 +137,7 @@ whd_bool_t whd_is_wpa_ie(vendor_specific_ie_header_t *wpaie, whd_tlv8_header_t *
 		*tlvs = new_tlvs;
 
 		/* tlvs now points to the beginning of next IE pointer, and *ie points to one or more TLV further
-         * down from the *prev_tlvs. So the tlvs_len need to be adjusted by prev_tlvs instead of *ie */
+		 * down from the *prev_tlvs. So the tlvs_len need to be adjusted by prev_tlvs instead of *ie */
 		*tlvs_len -= (uint32_t)(((uint8_t *)*tlvs) - ((uint8_t *)prev_tlvs));
 	}
 
@@ -801,7 +842,7 @@ void whd_convert_security_type_to_string(whd_security_t security, char *out_str,
 		strncat(out_str, " Unknown", out_str_len);
 	}
 	if (!(security & ENTERPRISE_ENABLED) && (security != WHD_SECURITY_OPEN) &&
-		(security != WHD_SECURITY_UNKNOWN)) {
+			(security != WHD_SECURITY_UNKNOWN)) {
 		strncat(out_str, " PSK", out_str_len);
 	}
 }
@@ -843,45 +884,45 @@ void whd_print_scan_result(whd_scan_result_t *record)
 	}
 
 	UNUSED_PARAMETER(str);
-	WPRINT_MACRO(("%5s ", str));
-	WPRINT_MACRO(("%02X:%02X:%02X:%02X:%02X:%02X ", record->BSSID.octet[0], record->BSSID.octet[1],
-		record->BSSID.octet[2], record->BSSID.octet[3], record->BSSID.octet[4],
-		record->BSSID.octet[5]));
+	WPRINT_INFO(("%5s ", str));
+	WPRINT_INFO(("%02X:%02X:%02X:%02X:%02X:%02X ", record->BSSID.octet[0], record->BSSID.octet[1],
+			record->BSSID.octet[2], record->BSSID.octet[3], record->BSSID.octet[4],
+			record->BSSID.octet[5]));
 
 	if (record->flags & WHD_SCAN_RESULT_FLAG_RSSI_OFF_CHANNEL) {
-		WPRINT_MACRO(("OFF "));
+		WPRINT_INFO(("OFF "));
 	}
 	else {
-		WPRINT_MACRO(("%d ", record->signal_strength));
+		WPRINT_INFO(("%d ", record->signal_strength));
 	}
 
 	if (record->max_data_rate < 100000) {
-		WPRINT_MACRO((" %.1f ", (double)(record->max_data_rate / 1000.0)));
+		WPRINT_INFO((" %.1f ", (double)(record->max_data_rate / 1000.0)));
 	}
 	else {
-		WPRINT_MACRO(("%.1f ", (double)(record->max_data_rate / 1000.0)));
+		WPRINT_INFO(("%.1f ", (double)(record->max_data_rate / 1000.0)));
 	}
-	WPRINT_MACRO((" %3d  ", record->channel));
+	WPRINT_INFO((" %3d  ", record->channel));
 
 	whd_convert_security_type_to_string(record->security, sec_type_string, (sizeof(sec_type_string) - 1));
 
-	WPRINT_MACRO(("%-20s ", sec_type_string));
-	WPRINT_MACRO((" %-32s ", record->SSID.value));
+	WPRINT_INFO(("%-20s ", sec_type_string));
+	WPRINT_INFO((" %-32s ", record->SSID.value));
 
 	if (record->ccode[0] != '\0') {
-		WPRINT_MACRO(("%c%c    ", record->ccode[0], record->ccode[1]));
+		WPRINT_INFO(("%c%c    ", record->ccode[0], record->ccode[1]));
 	}
 	else {
-		WPRINT_MACRO(("      "));
+		WPRINT_INFO(("      "));
 	}
 
 	if (record->flags & WHD_SCAN_RESULT_FLAG_BEACON) {
-		WPRINT_MACRO((" %-15s", " BEACON"));
+		WPRINT_INFO((" %-15s", " BEACON"));
 	}
 	else {
-		WPRINT_MACRO((" %-15s", " PROBE "));
+		WPRINT_INFO((" %-15s", " PROBE "));
 	}
-	WPRINT_MACRO(("\n"));
+	WPRINT_INFO(("\n"));
 }
 
 void whd_hexdump(uint8_t *data, uint32_t data_len)
@@ -893,11 +934,11 @@ void whd_hexdump(uint8_t *data, uint32_t data_len)
 	for (i = 0; i < data_len; i++) {
 		if ((i % 16) == 0) {
 			if (i != 0) {
-				WPRINT_MACRO(("  %s\n", buff));
+				fprintf(stderr, "  %s\n", buff);
 			}
-			WPRINT_MACRO(("%04" PRIx32 " ", i));
+			fprintf(stderr, "%04" PRIx32 " ", i);
 		}
-		WPRINT_MACRO((" %02x", data[i]));
+		fprintf(stderr, " %02x", data[i]);
 
 		if ((data[i] < 0x20) || (data[i] > 0x7e)) {
 			buff[i % 16] = '.';
@@ -908,10 +949,10 @@ void whd_hexdump(uint8_t *data, uint32_t data_len)
 		buff[(i % 16) + 1] = '\0';
 	}
 	while ((i % 16) != 0) {
-		WPRINT_MACRO(("   "));
+		fprintf(stderr, "   ");
 		i++;
 	}
-	WPRINT_MACRO(("  %s\n", buff));
+	fprintf(stderr, "  %s\n", buff);
 }
 
 void whd_ioctl_info_to_string(uint32_t cmd, char *ioctl_str, uint16_t ioctl_str_len)
@@ -1021,35 +1062,35 @@ bool whd_str_to_ip(const char *ip4addr, size_t len, void *dest)
 
 	uint8_t stringLength = 0, byteCount = 0;
 
-	//Iterate over each component of the IP. The exit condition is in the middle of the loop
+	// Iterate over each component of the IP. The exit condition is in the middle of the loop
 	while (true) {
 
-		//No valid character (IPv4 addresses don't have implicit 0, that is x.y..z being read as x.y.0.z)
+		// No valid character (IPv4 addresses don't have implicit 0, that is x.y..z being read as x.y.0.z)
 		if ((stringLength == len) || (ip4addr[stringLength] < '0') || (ip4addr[stringLength] > '9')) {
 			return false;
 		}
 
-		//For each component, we convert it to the raw value
+		// For each component, we convert it to the raw value
 		uint16_t byte = 0;
 		while (stringLength < len && ip4addr[stringLength] >= '0' && ip4addr[stringLength] <= '9') {
 			byte *= 10;
 			byte += ip4addr[stringLength++] - '0';
 
-			//We go over the maximum value for an IPv4 component
+			// We go over the maximum value for an IPv4 component
 			if (byte > 0xff) {
 				return false;
 			}
 		}
 
-		//Append the component
+		// Append the component
 		addr[byteCount++] = (uint8_t)byte;
 
-		//If we're at the end, we leave the loop. It's the only way to reach the `true` output
+		// If we're at the end, we leave the loop. It's the only way to reach the `true` output
 		if (byteCount == 4) {
 			break;
 		}
 
-		//If the next character is invalid, we return false
+		// If the next character is invalid, we return false
 		if ((stringLength == len) || (ip4addr[stringLength++] != '.')) {
 			return false;
 		}
@@ -1062,17 +1103,17 @@ static void whd_ipv4_itoa(char *string, uint8_t byte)
 {
 	char *baseString = string;
 
-	//Write the digits to the buffer from the least significant to the most
-	//  This is the incorrect order but we will swap later
+	// Write the digits to the buffer from the least significant to the most
+	//   This is the incorrect order but we will swap later
 	do {
 		*string++ = '0' + byte % 10;
 		byte /= 10;
 	} while (byte);
 
-	//We put the final \0, then go back one step on the last digit for the swap
+	// We put the final \0, then go back one step on the last digit for the swap
 	*string-- = '\0';
 
-	//We now swap the digits
+	// We now swap the digits
 	while (baseString < string) {
 		uint8_t tmp = *string;
 		*string-- = *baseString;
@@ -1086,15 +1127,15 @@ uint8_t whd_ip4_to_string(const void *ip4addr, char *p)
 	const uint8_t *byteArray = ip4addr;
 
 	for (uint8_t component = 0; component < 4; ++component) {
-		//Convert the byte to string
+		// Convert the byte to string
 		whd_ipv4_itoa(&p[outputPos], byteArray[component]);
 
-		//Move outputPos to the end of the string
+		// Move outputPos to the end of the string
 		while (p[outputPos] != '\0') {
 			outputPos += 1;
 		}
 
-		//Append a dot if this is not the last digit
+		// Append a dot if this is not the last digit
 		if (component < 3) {
 			p[outputPos++] = '.';
 		}
@@ -1102,3 +1143,22 @@ uint8_t whd_ip4_to_string(const void *ip4addr, char *p)
 	// Return length of generated string, excluding the terminating null character
 	return outputPos;
 }
+
+#ifndef WHD_USE_CUSTOM_MALLOC_IMPL
+
+inline void *whd_mem_malloc(size_t size)
+{
+	return malloc(size);
+}
+
+inline void *whd_mem_calloc(size_t nitems, size_t size)
+{
+	return calloc(nitems, size);
+}
+
+inline void whd_mem_free(void *ptr)
+{
+	free(ptr);
+}
+
+#endif /* ifndef WHD_USE_CUSTOM_MALLOC_IMPL */

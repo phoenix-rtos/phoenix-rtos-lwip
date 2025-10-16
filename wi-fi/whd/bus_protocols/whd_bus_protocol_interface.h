@@ -1,5 +1,5 @@
 /*
- * Copyright 2021, Cypress Semiconductor Corporation (an Infineon company)
+ * Copyright 2024, Cypress Semiconductor Corporation (an Infineon company)
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,6 +21,7 @@
 #include "whd_network_types.h"
 #include "whd_types_int.h"
 #include "whd_resource_api.h"
+#include "whd_bus_common.h"
 
 #ifndef INCLUDED_WHD_BUS_PROTOCOL_INTERFACE_H_
 #define INCLUDED_WHD_BUS_PROTOCOL_INTERFACE_H_
@@ -30,8 +31,8 @@ extern "C" {
 #endif
 
 /******************************************************
-*             Constants
-******************************************************/
+ *             Constants
+ ******************************************************/
 
 typedef enum {
 	BUS_FUNCTION = 0,
@@ -43,19 +44,19 @@ typedef enum {
 #define WHD_BUS_FAIL      (0xFFFFFFFF)
 
 /******************************************************
-*             Macros
-******************************************************/
+ *             Macros
+ ******************************************************/
 #define PLATFORM_WLAN_ALLOW_BUS_TO_SLEEP_DELAY_MS 10
 
 #define DELAYED_BUS_RELEASE_SCHEDULE(whd_driver, schedule) \
 	do { \
 		whd_delayed_bus_release_schedule_update(whd_driver, \
-			schedule); \
+				schedule); \
 	} while (0)
 
 /******************************************************
-*             Structures
-******************************************************/
+ *             Structures
+ ******************************************************/
 
 #pragma pack(1)
 
@@ -70,22 +71,22 @@ typedef struct
 typedef void (*whd_bus_irq_callback_t)(void *handler_arg, uint32_t event);
 
 /******************************************************
-*             Function declarations
-******************************************************/
+ *             Function declarations
+ ******************************************************/
 
 /* Share bus to BT */
 extern whd_result_t whd_bus_write_reg_value(whd_driver_t whd_driver, uint32_t address,
-	uint8_t value_length, uint32_t value);
+		uint8_t value_length, uint32_t value);
 extern whd_result_t whd_bus_read_reg_value(whd_driver_t whd_driver, uint32_t address,
-	uint8_t value_length, uint8_t *value);
+		uint8_t value_length, uint8_t *value);
 extern whd_result_t whd_bus_mem_bytes(whd_driver_t whd_driver, uint8_t direct,
-	uint32_t address, uint32_t size, uint8_t *data);
+		uint32_t address, uint32_t size, uint8_t *data);
 extern whd_driver_t whd_bt_get_whd_driver(void);
 extern whd_result_t whd_bus_share_bt_init(whd_driver_t whd_driver);
 extern whd_result_t whd_bus_bt_attach(whd_driver_t whd_driver, void *btdata,
-	void (*bt_int_fun)(void *data));
+		void (*bt_int_fun)(void *data));
 extern void whd_bus_bt_detach(whd_driver_t whd_driver);
-extern uint32_t whd_get_bt_info(whd_driver_t whd_drv, whd_bt_info_t bt_info);
+extern whd_result_t whd_get_bt_info(whd_driver_t whd_drv, whd_bt_info_t bt_info);
 /* Initialisation functions */
 extern whd_result_t whd_bus_init(whd_driver_t whd_driver);
 extern whd_result_t whd_bus_deinit(whd_driver_t whd_driver);
@@ -93,19 +94,19 @@ extern whd_result_t whd_bus_deinit(whd_driver_t whd_driver);
 /* Device register access functions */
 extern whd_result_t whd_bus_set_backplane_window(whd_driver_t whd_driver, uint32_t addr);
 extern whd_result_t whd_bus_write_backplane_value(whd_driver_t whd_driver, uint32_t address, uint8_t register_length,
-	uint32_t value);
+		uint32_t value);
 extern whd_result_t whd_bus_read_backplane_value(whd_driver_t whd_driver, uint32_t address, uint8_t register_length,
-	uint8_t *value);
+		uint8_t *value);
 extern whd_result_t whd_bus_write_register_value(whd_driver_t whd_driver, whd_bus_function_t function, uint32_t address,
-	uint8_t value_length, uint32_t value);
+		uint8_t value_length, uint32_t value);
 extern whd_result_t whd_bus_read_register_value(whd_driver_t whd_driver, whd_bus_function_t function, uint32_t address,
-	uint8_t value_length, uint8_t *value);
+		uint8_t value_length, uint8_t *value);
 
 /* Device data transfer functions */
 extern whd_result_t whd_bus_send_buffer(whd_driver_t whd_driver, whd_buffer_t buffer);
 extern whd_result_t whd_bus_transfer_bytes(whd_driver_t whd_driver, whd_bus_transfer_direction_t direction,
-	whd_bus_function_t function, uint32_t address, uint16_t size,
-	whd_transfer_bytes_packet_t *data);
+		whd_bus_function_t function, uint32_t address, uint16_t size,
+		whd_transfer_bytes_packet_t *data);
 
 /* Frame transfer function */
 extern whd_result_t whd_bus_read_frame(whd_driver_t whd_driver, whd_buffer_t *buffer);
@@ -133,10 +134,13 @@ extern whd_result_t whd_bus_reinit_stats(whd_driver_t whd_driver, whd_bool_t wak
 extern whd_result_t whd_bus_irq_enable(whd_driver_t whd_driver, whd_bool_t enable);
 extern whd_result_t whd_bus_irq_register(whd_driver_t whd_driver);
 extern whd_result_t whd_bus_download_resource(whd_driver_t whd_driver, whd_resource_type_t resource,
-	whd_bool_t direct_resource, uint32_t address, uint32_t image_size);
+		whd_bool_t direct_resource, uint32_t address, uint32_t image_size);
+#ifdef BLHS_SUPPORT
+extern whd_result_t whd_bus_common_blhs(whd_driver_t whd_driver, whd_bus_blhs_stage_t stage);
+#endif
 /******************************************************
-*             Global variables
-******************************************************/
+ *             Global variables
+ ******************************************************/
 
 #ifdef __cplusplus
 } /* extern "C" */

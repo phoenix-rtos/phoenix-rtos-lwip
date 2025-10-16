@@ -1,5 +1,5 @@
 /*
- * Copyright 2021, Cypress Semiconductor Corporation (an Infineon company)
+ * Copyright 2023, Cypress Semiconductor Corporation (an Infineon company)
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -32,6 +32,11 @@ extern "C" {
 #endif
 
 #define BLOCK_SIZE 1024 /**< Size of the block */
+
+#ifndef NVM_IMAGE_SIZE_ALIGNMENT
+#define NVM_IMAGE_SIZE_ALIGNMENT 4 /**< The alignment size of NVRAM image */
+#endif
+
 /**
  * Type of resources
  */
@@ -39,11 +44,14 @@ typedef enum {
 	WHD_RESOURCE_WLAN_FIRMWARE, /**< Resource type: WLAN Firmware */
 	WHD_RESOURCE_WLAN_NVRAM,    /**< Resource type: NVRAM file */
 	WHD_RESOURCE_WLAN_CLM,      /**< Resource type: CLM_BLOB file */
+#ifdef DOWNLOAD_RAM_BOOTLOADER
+	WHD_RESOURCE_BL_IMAGE, /**< Resource type: Bootloader Image */
+#endif                     /* DOWNLOAD_RAM_BOOTLOADER */
 } whd_resource_type_t;
 
 /******************************************************
-*                 Global Variables
-******************************************************/
+ *                 Global Variables
+ ******************************************************/
 
 /** @addtogroup res WHD Resource API
  *  @brief Functions that enable WHD to download WLAN firmware, NVRAM and CLM BLOB on a particular hardware platform.
@@ -68,67 +76,67 @@ typedef enum {
  */
 struct whd_resource_source {
 	/** Gets the size of the resource for respective resource type
-     *
-     *
-     *  @param whd_drv     Pointer to handle instance of the driver
-     *  @param resource    Type of resource - WHD_RESOURCE_WLAN_FIRMWARE, WHD_RESOURCE_WLAN_NVRAM, WHD_RESOURCE_WLAN_CLM
-     *  @param size_out    Size of the resource
-     *
-     *  @return            WHD_SUCCESS or error code
-     *
-     */
+	 *
+	 *
+	 *  @param whd_drv     Pointer to handle instance of the driver
+	 *  @param resource    Type of resource - WHD_RESOURCE_WLAN_FIRMWARE, WHD_RESOURCE_WLAN_NVRAM, WHD_RESOURCE_WLAN_CLM
+	 *  @param size_out    Size of the resource
+	 *
+	 *  @return            WHD_SUCCESS or error code
+	 *
+	 */
 	uint32_t (*whd_resource_size)(whd_driver_t whd_drv, whd_resource_type_t resource, uint32_t *size_out);
 
 	/** Gets the resource block for specified resource type
-     *
-     *  @param whd_drv     Pointer to handle instance of the driver
-     *  @param type        Type of resource - WHD_RESOURCE_WLAN_FIRMWARE, WHD_RESOURCE_WLAN_NVRAM, WHD_RESOURCE_WLAN_CLM
-     *  @param blockno     The number of block
-     *  @param data        Pointer to a block of data
-     *  @param size_out    Size of the resource
-     *
-     *  @return            WHD_SUCCESS or error code
-     *
-     */
+	 *
+	 *  @param whd_drv     Pointer to handle instance of the driver
+	 *  @param type        Type of resource - WHD_RESOURCE_WLAN_FIRMWARE, WHD_RESOURCE_WLAN_NVRAM, WHD_RESOURCE_WLAN_CLM
+	 *  @param blockno     The number of block
+	 *  @param data        Pointer to a block of data
+	 *  @param size_out    Size of the resource
+	 *
+	 *  @return            WHD_SUCCESS or error code
+	 *
+	 */
 	uint32_t (*whd_get_resource_block)(whd_driver_t whd_drv, whd_resource_type_t type,
-		uint32_t blockno, const uint8_t **data, uint32_t *size_out);
+			uint32_t blockno, const uint8_t **data, uint32_t *size_out);
 
 	/** Gets block count for the specified resource_type
-     *
-     *  @param whd_drv      Pointer to handle instance of the driver
-     *  @param type         Type of resource - WHD_RESOURCE_WLAN_FIRMWARE, WHD_RESOURCE_WLAN_NVRAM, WHD_RESOURCE_WLAN_CLM
-     *  @param block_count  Pointer to store block count for the resource
-     *
-     *  @return             WHD_SUCCESS or error code
-     *
-     */
+	 *
+	 *  @param whd_drv      Pointer to handle instance of the driver
+	 *  @param type         Type of resource - WHD_RESOURCE_WLAN_FIRMWARE, WHD_RESOURCE_WLAN_NVRAM, WHD_RESOURCE_WLAN_CLM
+	 *  @param block_count  Pointer to store block count for the resource
+	 *
+	 *  @return             WHD_SUCCESS or error code
+	 *
+	 */
 	uint32_t (*whd_get_resource_no_of_blocks)(whd_driver_t whd_drv, whd_resource_type_t type, uint32_t *block_count);
 
 	/** Gets block size for the specified resource_type
-     *
-     *  @param whd_drv      Pointer to handle instance of the driver
-     *  @param type         Type of resources - WHD_RESOURCE_WLAN_FIRMWARE, WHD_RESOURCE_WLAN_NVRAM, WHD_RESOURCE_WLAN_CLM
-     *  @param size_out     Pointer to store size of the block
-     *
-     *  @return             WHD_SUCCESS or error code
-     *
-     */
+	 *
+	 *  @param whd_drv      Pointer to handle instance of the driver
+	 *  @param type         Type of resources - WHD_RESOURCE_WLAN_FIRMWARE, WHD_RESOURCE_WLAN_NVRAM, WHD_RESOURCE_WLAN_CLM
+	 *  @param size_out     Pointer to store size of the block
+	 *
+	 *  @return             WHD_SUCCESS or error code
+	 *
+	 */
 	uint32_t (*whd_get_resource_block_size)(whd_driver_t whd_drv, whd_resource_type_t type, uint32_t *size_out);
 
 	/** Gets the resource for specified resource type
-     *
-     *  @param whd_drv     Pointer to handle instance of the driver
-     *  @param type        Type of resource - WHD_RESOURCE_WLAN_FIRMWARE, WHD_RESOURCE_WLAN_NVRAM, WHD_RESOURCE_WLAN_CLM
-     *  @param offset      offset address to store buffer
-     *  @param size        Pointer to a size of buffer
-     *  @param size_out    Pointer to store size of buffer
-     *  @param buffer      Pointer to a buffer
-     *
-     *  @return            WHD_SUCCESS or error code
-     *
-     */
+	 *
+	 *  @param whd_drv     Pointer to handle instance of the driver
+	 *  @param type        Type of resource - WHD_RESOURCE_WLAN_FIRMWARE, WHD_RESOURCE_WLAN_NVRAM, WHD_RESOURCE_WLAN_CLM
+	 *  @param offset      offset address to store buffer
+	 *  @param size        Pointer to a size of buffer
+	 *  @param size_out    Pointer to store size of buffer
+	 *  @param buffer      Pointer to a buffer
+	 *
+	 *  @return            WHD_SUCCESS or error code
+	 *
+	 */
 	uint32_t (*whd_resource_read)(whd_driver_t whd_drv, whd_resource_type_t type,
-		uint32_t offset, uint32_t size, uint32_t *size_out, void *buffer);
+			uint32_t offset, uint32_t size, uint32_t *size_out, void *buffer);
 };
 
 /** @} */

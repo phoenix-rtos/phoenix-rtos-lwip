@@ -1,4 +1,4 @@
-/***********************************************************************************************/ /**
+/****************************************************************************************************
  * \file cybsp_wifi.c
  *
  * \brief
@@ -34,6 +34,10 @@
 #include "cycfg.h"
 #endif
 
+#include "whd_wifi_api.h"
+
+#include "lwipopts.h"
+
 #if defined(__cplusplus)
 extern "C" {
 #endif
@@ -58,12 +62,14 @@ extern "C" {
 #define WIFI_MODE_SPI
 #elif (CYHAL_DRIVER_AVAILABLE_DMA && (CYBSP_WIFI_INTERFACE_TYPE == CYBSP_M2M_INTERFACE))
 #define WIFI_MODE_M2M
+#elif (CYHAL_DRIVER_AVAILABLE_USB_DEV && (CYBSP_WIFI_INTERFACE_TYPE == CYBSP_USB_INTERFACE))
+#define WIFI_MODE_USB
 #else
 // For old versions of HAL/BSP fallback to the default interface
 #define WIFI_MODE_SDIO
 #endif
 
-#if !defined(WIFI_MODE_M2M)
+#if !(defined(WIFI_MODE_M2M) || defined(WIFI_MODE_USB))
 
 #define SDIO_ENUMERATION_TRIES     (500)
 #define SDIO_RETRY_DELAY_MS        (1)
@@ -164,7 +170,13 @@ typedef cyhal_transfer_t cyhal_sdio_transfer_type_t;
 #define CYHAL_SDIO_XFER_TYPE_WRITE CYHAL_WRITE
 #endif
 
-#endif  // if !defined(WIFI_MODE_M2M)
+#elif defined(WIFI_MODE_USB)
+
+#ifndef WIFI_DEVICE_PATH
+#define WIFI_DEVICE_PATH "/dev/wlan0"
+#endif
+
+#endif /* !(defined(WIFI_MODE_M2M) || defined(WIFI_MODE_USB)) */
 
 static whd_driver_t whd_drv;
 
@@ -190,7 +202,7 @@ static whd_netif_funcs_t netif_if_default = {
 	.whd_network_process_ethernet_data = cy_network_process_ethernet_data,
 };
 
-#if !defined(WIFI_MODE_M2M)
+#if !(defined(WIFI_MODE_M2M) || defined(WIFI_MODE_USB))
 static const whd_oob_config_t OOB_CONFIG = {
 	.host_oob_pin = CY_WIFI_HOST_WAKE_GPIO,
 	.dev_gpio_sel = DEFAULT_OOB_PIN,
@@ -213,7 +225,7 @@ static void _cybsp_wifi_reset_wifi_chip(void)
 }
 
 
-#endif  // if !defined(WIFI_MODE_M2M)
+#endif /* !(defined(WIFI_MODE_M2M) || defined(WIFI_MODE_USB)) */
 
 
 #if defined(WIFI_MODE_SDIO)
@@ -221,9 +233,9 @@ static void _cybsp_wifi_reset_wifi_chip(void)
 // _cybsp_wifi_sdio_try_send_cmd
 //--------------------------------------------------------------------------------------------------
 static cy_rslt_t _cybsp_wifi_sdio_try_send_cmd(cyhal_sdio_t *sdio_object,
-	cyhal_sdio_transfer_type_t direction,
-	cyhal_sdio_command_t command, uint32_t argument,
-	uint32_t *response)
+		cyhal_sdio_transfer_type_t direction,
+		cyhal_sdio_command_t command, uint32_t argument,
+		uint32_t *response)
 {
 	uint8_t loop_count = 0;
 	cy_rslt_t result = CYBSP_RSLT_WIFI_SDIO_ENUM_TIMEOUT;
@@ -243,13 +255,13 @@ static cy_rslt_t _cybsp_wifi_sdio_try_send_cmd(cyhal_sdio_t *sdio_object,
 // _cybsp_wifi_create_cmd_52_arg
 //--------------------------------------------------------------------------------------------------
 static uint32_t _cybsp_wifi_create_cmd_52_arg(uint8_t rw, uint8_t func, uint8_t raw, uint32_t addr,
-	uint8_t data)
+		uint8_t data)
 {
-	return (((rw & 0x01) << 31)   /* set R/W flag */
-		| ((func & 0x07) << 28)   /* set the function number */
-		| ((raw & 0x01) << 27)    /* set the RAW flag */
-		| ((addr & 0x1FFFF) << 9) /* set the address */
-		| data);                  /* set the data */
+	return (((rw & 0x01) << 31)       /* set R/W flag */
+			| ((func & 0x07) << 28)   /* set the function number */
+			| ((raw & 0x01) << 27)    /* set the RAW flag */
+			| ((addr & 0x1FFFF) << 9) /* set the address */
+			| data);                  /* set the data */
 }
 
 
@@ -277,15 +289,15 @@ static cy_rslt_t _cybsp_wifi_sdio_card_init(cyhal_sdio_t *sdio_object)
 	do {
 		// Send CMD0 to set it to idle state
 		result = _cybsp_wifi_sdio_try_send_cmd(sdio_object, CYHAL_SDIO_XFER_TYPE_WRITE,
-			CYHAL_SDIO_CMD_GO_IDLE_STATE,
-			no_argument, &response /*ignored*/);
+				CYHAL_SDIO_CMD_GO_IDLE_STATE,
+				no_argument, &response /*ignored*/);
 
 		// CMD5.
 		if (result == CY_RSLT_SUCCESS) {
 			result = _cybsp_wifi_sdio_try_send_cmd(sdio_object, CYHAL_SDIO_XFER_TYPE_READ,
-				CYHAL_SDIO_CMD_IO_SEND_OP_COND,
-				no_argument,
-				&response /*ignored on UDB-based SDIO*/);
+					CYHAL_SDIO_CMD_IO_SEND_OP_COND,
+					no_argument,
+					&response /*ignored on UDB-based SDIO*/);
 		}
 
 #if 0
@@ -355,8 +367,8 @@ static cy_rslt_t _cybsp_wifi_sdio_card_init(cyhal_sdio_t *sdio_object)
 		if (CY_RSLT_SUCCESS == result) {
 			// Send CMD3 to get RCA.
 			result = _cybsp_wifi_sdio_try_send_cmd(sdio_object, CYHAL_SDIO_XFER_TYPE_READ,
-				CYHAL_SDIO_CMD_SEND_RELATIVE_ADDR,
-				no_argument, &rel_addr);
+					CYHAL_SDIO_CMD_SEND_RELATIVE_ADDR,
+					no_argument, &rel_addr);
 		}
 
 		if (result != CY_RSLT_SUCCESS) {
@@ -368,9 +380,9 @@ static cy_rslt_t _cybsp_wifi_sdio_card_init(cyhal_sdio_t *sdio_object)
 	if (result == CY_RSLT_SUCCESS) {
 		// Send CMD7 with the returned RCA to select the card
 		result = _cybsp_wifi_sdio_try_send_cmd(sdio_object, CYHAL_SDIO_XFER_TYPE_WRITE,
-			CYHAL_SDIO_CMD_SELECT_CARD,
-			rel_addr,
-			&response /*ignored*/);
+				CYHAL_SDIO_CMD_SELECT_CARD,
+				rel_addr,
+				&response /*ignored*/);
 	}
 
 	uint32_t sdio_frequency = SDIO_FREQ_25MHZ;
@@ -380,21 +392,21 @@ static cy_rslt_t _cybsp_wifi_sdio_card_init(cyhal_sdio_t *sdio_object)
 #if !defined(CYHAL_UDB_SDIO)
 	if (result == CY_RSLT_SUCCESS) {
 		uint32_t tmp_arg = _cybsp_wifi_create_cmd_52_arg(SDIO_CMD52_ARG_RW_READ, SDIO_FUNC_NUM_0,
-			SDIO_CMD52_ARG_RAW_NOT_SET,
-			SDIO_CMD52_CCCR_SPEED_SLCT_ADDR, 0x00);
+				SDIO_CMD52_ARG_RAW_NOT_SET,
+				SDIO_CMD52_CCCR_SPEED_SLCT_ADDR, 0x00);
 		result = _cybsp_wifi_sdio_try_send_cmd(sdio_object, CYHAL_SDIO_XFER_TYPE_WRITE,
-			CYHAL_SDIO_CMD_IO_RW_DIRECT,
-			tmp_arg, &response);
+				CYHAL_SDIO_CMD_IO_RW_DIRECT,
+				tmp_arg, &response);
 
 		if (result == CY_RSLT_SUCCESS) {
 			if (SDIO_CMD52_CCCR_SPEED_SELECT_RESP_HS_SUPPORTED == response) {
 				tmp_arg = _cybsp_wifi_create_cmd_52_arg(SDIO_CMD52_ARG_RW_WRITE, SDIO_FUNC_NUM_0,
-					SDIO_CMD52_ARG_RAW_NOT_SET,
-					SDIO_CMD52_CCCR_SPEED_SLCT_ADDR,
-					SDIO_CMD52_CCCR_SPEED_SLCT_HS);
+						SDIO_CMD52_ARG_RAW_NOT_SET,
+						SDIO_CMD52_CCCR_SPEED_SLCT_ADDR,
+						SDIO_CMD52_CCCR_SPEED_SLCT_HS);
 				result = _cybsp_wifi_sdio_try_send_cmd(sdio_object, CYHAL_SDIO_XFER_TYPE_WRITE,
-					CYHAL_SDIO_CMD_IO_RW_DIRECT,
-					tmp_arg, &response);
+						CYHAL_SDIO_CMD_IO_RW_DIRECT,
+						tmp_arg, &response);
 
 				if (result == CY_RSLT_SUCCESS) {
 					if (SDIO_CMD52_CCCR_SPEED_SELECT_RESP_HS_SELECTED == response) {
@@ -455,9 +467,9 @@ static cy_rslt_t _cybsp_wifi_spi_init_bus(void)
 {
 	cyhal_spi_t spi_obj;
 	cy_rslt_t rslt = cyhal_spi_init(&spi_obj,
-		CYBSP_WIFI_SPI_MOSI, CYBSP_WIFI_SPI_MISO, CYBSP_WIFI_SPI_SCLK,
-		CYBSP_WIFI_SPI_SSEL,
-		NULL, 32, CYHAL_SPI_MODE_00_MSB, false);
+			CYBSP_WIFI_SPI_MOSI, CYBSP_WIFI_SPI_MISO, CYBSP_WIFI_SPI_SCLK,
+			CYBSP_WIFI_SPI_SSEL,
+			NULL, 32, CYHAL_SPI_MODE_00_MSB, false);
 	cyhal_spi_set_frequency(&spi_obj, 50000000);  // 50 MHz operation
 	if (CY_RSLT_SUCCESS == rslt) {
 		whd_spi_config_t whd_spi_config = {
@@ -491,8 +503,22 @@ static cy_rslt_t _cybsp_wifi_m2m_init_bus(void)
 	return rslt;
 }
 
+#elif defined(WIFI_MODE_USB)
 
-#endif  // defined(WIFI_MODE_M2M)
+static cyhal_usb_t usb_obj;
+
+//--------------------------------------------------------------------------------------------------
+// _cybsp_wifi_usb_init_bus
+//--------------------------------------------------------------------------------------------------
+cy_rslt_t _cybsp_wifi_usb_init_bus(void)
+{
+	whd_usb_config_t whd_usb_config = {
+		.path = WIFI_DEVICE_PATH,
+	};
+	return whd_bus_usb_attach(whd_drv, &whd_usb_config, &usb_obj);
+}
+
+#endif
 
 
 //--------------------------------------------------------------------------------------------------
@@ -500,7 +526,7 @@ static cy_rslt_t _cybsp_wifi_m2m_init_bus(void)
 //--------------------------------------------------------------------------------------------------
 static inline cy_rslt_t _cybsp_wifi_bus_init(void)
 {
-#if !defined(WIFI_MODE_M2M)
+#if !(defined(WIFI_MODE_M2M) || defined(WIFI_MODE_USB))
 	_cybsp_wifi_reset_wifi_chip();
 #endif
 #if defined(WIFI_MODE_SDIO)
@@ -509,6 +535,8 @@ static inline cy_rslt_t _cybsp_wifi_bus_init(void)
 	return _cybsp_wifi_spi_init_bus();
 #elif defined(WIFI_MODE_M2M)
 	return _cybsp_wifi_m2m_init_bus();
+#elif defined(WIFI_MODE_USB)
+	return _cybsp_wifi_usb_init_bus();
 #endif
 }
 
@@ -530,6 +558,8 @@ static inline void _cybsp_wifi_bus_detach(void)
 	whd_bus_spi_detach(whd_drv);
 #elif defined(WIFI_MODE_M2M)
 	whd_bus_m2m_detach(whd_drv);
+#elif defined(WIFI_MODE_USB)
+	whd_bus_usb_detach(whd_drv);
 #endif
 }
 
@@ -538,16 +568,16 @@ static inline void _cybsp_wifi_bus_detach(void)
 // cybsp_wifi_init_primary_extended
 //--------------------------------------------------------------------------------------------------
 cy_rslt_t cybsp_wifi_init_primary_extended(whd_interface_t *interface,
-	whd_init_config_t *init_config,
-	whd_resource_source_t *resource_if,
-	whd_buffer_funcs_t *buffer_if,
-	whd_netif_funcs_t *netif_if)
+		whd_init_config_t *init_config,
+		whd_resource_source_t *resource_if,
+		whd_buffer_funcs_t *buffer_if,
+		whd_netif_funcs_t *netif_if)
 {
-#if defined(WIFI_MODE_M2M)
+#if defined(WIFI_MODE_M2M) || defined(WIFI_MODE_USB)
 	cy_rslt_t result = CY_RSLT_SUCCESS;
 #else
 	cy_rslt_t result = cyhal_gpio_init(CYBSP_WIFI_WL_REG_ON, CYHAL_GPIO_DIR_OUTPUT,
-		CYHAL_GPIO_DRIVE_PULLUP, false);
+			CYHAL_GPIO_DRIVE_PULLUP, false);
 #endif
 
 	if (result == CY_RSLT_SUCCESS) {
@@ -582,7 +612,7 @@ cy_rslt_t cybsp_wifi_init_primary_extended(whd_interface_t *interface,
 			}
 		}
 
-#if !defined(WIFI_MODE_M2M)
+#if !(defined(WIFI_MODE_M2M) || defined(WIFI_MODE_USB))
 		if (result != CY_RSLT_SUCCESS) {
 			cyhal_gpio_free(CYBSP_WIFI_WL_REG_ON);
 		}
@@ -611,7 +641,7 @@ cy_rslt_t cybsp_wifi_deinit(whd_interface_t interface)
 
 	if (result == CY_RSLT_SUCCESS) {
 		_cybsp_wifi_bus_detach();
-#if !defined(WIFI_MODE_M2M)
+#if !(defined(WIFI_MODE_M2M) || defined(WIFI_MODE_USB))
 		cyhal_gpio_free(CYBSP_WIFI_WL_REG_ON);
 #endif
 		// While deinit() takes an interface, it only uses it to get the underlying whd driver to

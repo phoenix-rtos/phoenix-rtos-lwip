@@ -1,5 +1,5 @@
 /*
- * Copyright 2021, Cypress Semiconductor Corporation (an Infineon company)
+ * Copyright 2024, Cypress Semiconductor Corporation (an Infineon company)
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -32,8 +32,8 @@ extern "C" {
 #endif
 
 /******************************************************
-* @cond       Typedefs
-******************************************************/
+ * @cond       Typedefs
+ ******************************************************/
 
 /**
  * Enumerated list of event types
@@ -186,7 +186,10 @@ typedef enum {
 	WLC_E_RRM = 141,                   /* RRM Event */
 	WLC_E_ULP = 146,                   /* ULP entry event */
 	WLC_E_TKO = 151,                   /* TCP Keep Alive Offload Event */
-	WLC_E_LAST = 152,                  /* highest val + 1 for range checking */
+	WLC_E_EXT_AUTH_REQ = 187,          /* authentication request received */
+	WLC_E_EXT_AUTH_FRAME_RX = 188,     /* authentication request received */
+	WLC_E_MGMT_FRAME_TXSTATUS = 189,   /* mgmt frame Tx complete */
+	WLC_E_LAST = 190,                  /* highest val + 1 for range checking */
 } whd_event_num_t;
 
 /**
@@ -392,6 +395,12 @@ typedef enum {
 
 } whd_nan_events_t;
 
+/* Reason codes for LINK */
+#define WLC_E_LINK_BCN_LOSS   1 /** Link down because of beacon loss */
+#define WLC_E_LINK_DISASSOC   2 /** Link down because of disassoc */
+#define WLC_E_LINK_ASSOC_REC  3 /** Link down because assoc recreate failed */
+#define WLC_E_LINK_BSSCFG_DIS 4 /** Link down due to bsscfg down */
+
 /**
  * Event handler prototype definition
  *
@@ -400,7 +409,7 @@ typedef enum {
  * @param[out] handler_user_data  : semaphore data
  */
 typedef void *(*whd_event_handler_t)(whd_interface_t ifp, const whd_event_header_t *event_header,
-	const uint8_t *event_data, void *handler_user_data);
+		const uint8_t *event_data, void *handler_user_data);
 /** @endcond */
 
 /**
@@ -411,39 +420,39 @@ typedef void *(*whd_event_handler_t)(whd_interface_t ifp, const whd_event_header
  * @param[out] handler_user_data  : semaphore data
  */
 typedef void *(*whd_error_handler_t)(whd_driver_t whd_driver, const uint8_t *error_type,
-	const uint8_t *event_data, void *handler_user_data);
+		const uint8_t *event_data, void *handler_user_data);
 /** @endcond */
 extern whd_result_t whd_management_set_event_handler_locally(whd_interface_t ifp,
-	const whd_event_num_t *event_nums,
-	whd_event_handler_t handler_func,
-	void *handler_user_data, uint16_t *event_index);
+		const whd_event_num_t *event_nums,
+		whd_event_handler_t handler_func,
+		void *handler_user_data, uint16_t *event_index);
 
 extern whd_result_t whd_management_set_event_handler(whd_interface_t ifp, const whd_event_num_t *event_nums,
-	whd_event_handler_t handler_func,
-	void *handler_user_data, uint16_t *event_index);
+		whd_event_handler_t handler_func,
+		void *handler_user_data, uint16_t *event_index);
 
-extern uint32_t whd_wifi_set_event_handler(whd_interface_t ifp, const uint32_t *event_type,
-	whd_event_handler_t handler_func,
-	void *handler_user_data, uint16_t *event_index);
+extern whd_result_t whd_wifi_set_event_handler(whd_interface_t ifp, const uint32_t *event_type,
+		whd_event_handler_t handler_func,
+		void *handler_user_data, uint16_t *event_index);
 
-extern uint32_t whd_wifi_deregister_event_handler(whd_interface_t ifp, uint16_t event_index);
+extern whd_result_t whd_wifi_deregister_event_handler(whd_interface_t ifp, uint16_t event_index);
 
 extern whd_result_t whd_set_error_handler_locally(whd_driver_t whd_driver, const uint8_t *error_nums,
-	whd_error_handler_t handler_func,
-	void *handler_user_data, uint16_t *error_index);
+		whd_error_handler_t handler_func,
+		void *handler_user_data, uint16_t *error_index);
 
 extern whd_result_t whd_wifi_set_error_handler(whd_interface_t ifp, const uint8_t *error_type,
-	whd_error_handler_t handler_func,
-	void *handler_user_data, uint16_t *error_index);
+		whd_error_handler_t handler_func,
+		void *handler_user_data, uint16_t *error_index);
 
-extern uint32_t whd_wifi_deregister_error_handler(whd_interface_t ifp, uint16_t error_index);
+extern whd_result_t whd_wifi_deregister_error_handler(whd_interface_t ifp, uint16_t error_index);
 
 /** @cond */
 
-//extern void* whd_rrm_report_handler( const whd_event_header_t* event_header, const uint8_t* event_data, void* handler_user_data );
+// extern void* whd_rrm_report_handler( const whd_event_header_t* event_header, const uint8_t* event_data, void* handler_user_data );
 
 extern void *whd_nan_scan_handler(const whd_event_header_t *event_header, const uint8_t *event_data,
-	void *handler_user_data);
+		void *handler_user_data);
 
 #define WHD_MSG_IFNAME_MAX 16
 
@@ -457,6 +466,7 @@ typedef enum {
 	WHD_JOIN_EVENT_ENTRY,
 	WHD_AP_EVENT_ENTRY,
 	WHD_P2P_EVENT_ENTRY,
+	WHD_AUTH_EVENT_ENTRY,
 	WHD_EVENT_ENTRY_MAX
 } whd_event_entry_t;
 
@@ -498,6 +508,21 @@ typedef struct whd_event {
 } whd_event_t;
 
 #pragma pack()
+
+/** Event list element structure
+ *
+ * events : A pointer to a whd_event_num_t array that is terminated with a WLC_E_NONE event
+ * handler: A pointer to the whd_event_handler_t function that will receive the event
+ * handler_user_data : User provided data that will be passed to the handler when a matching event occurs
+ */
+typedef struct
+{
+	whd_bool_t event_set;
+	whd_event_num_t events[WHD_MAX_EVENT_SUBSCRIPTION];
+	whd_event_handler_t handler;
+	void *handler_user_data;
+	uint8_t ifidx;
+} event_list_elem_t;
 
 /** @endcond */
 

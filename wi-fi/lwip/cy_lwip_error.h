@@ -29,7 +29,7 @@
  * including Cypress's product in a High Risk Product, the manufacturer
  * of such system or application assumes all risk of such use and in doing
  * so agrees to indemnify Cypress against all liability.
-*/
+ */
 
 #ifndef LIBS_WIFI_MW_CORE_LWIP_WHD_PORT_CY_LWIP_ERROR_H_
 #define LIBS_WIFI_MW_CORE_LWIP_WHD_PORT_CY_LWIP_ERROR_H_
@@ -53,11 +53,11 @@ extern "C" {
  * \par Result Format
  *
    \verbatim
-              Module base                   Type    Library specific error code
-      +-----------------------------------+------+------------------------------+
-      |CY_RSLT_MODULE_LWIP_WHD_PORT_BASE  | 0x2  |           Error Code         |
-      +-----------------------------------+------+------------------------------+
-                14-bits                    2-bits            16-bits
+			  Module base                   Type    Library specific error code
+	  +-----------------------------------+------+------------------------------+
+	  |CY_RSLT_MODULE_LWIP_WHD_PORT_BASE  | 0x2  |           Error Code         |
+	  +-----------------------------------+------+------------------------------+
+				14-bits                    2-bits            16-bits
 
    Refer to the macro section of this document for library specific error codes.
    \endverbatim

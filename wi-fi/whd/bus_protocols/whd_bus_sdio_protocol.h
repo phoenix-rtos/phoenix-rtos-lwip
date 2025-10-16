@@ -1,5 +1,5 @@
 /*
- * Copyright 2021, Cypress Semiconductor Corporation (an Infineon company)
+ * Copyright 2024, Cypress Semiconductor Corporation (an Infineon company)
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,8 +26,8 @@ extern "C" {
 #endif
 
 /******************************************************
-*                      Macros
-******************************************************/
+ *                      Macros
+ ******************************************************/
 #define BIT_MASK(x) ((1 << x) - 1)
 
 #define WHD_BUS_HEADER_SIZE (0)
@@ -48,8 +48,8 @@ extern "C" {
 	} while (0)
 
 /******************************************************
-*             Structures
-******************************************************/
+ *             Structures
+ ******************************************************/
 #pragma pack(1)
 typedef struct
 {
@@ -165,8 +165,8 @@ typedef struct
 #pragma pack()
 
 /******************************************************
-*             Function declarations
-******************************************************/
+ *             Function declarations
+ ******************************************************/
 /* Initialisation functions */
 extern whd_result_t whd_bus_sdio_init(whd_driver_t whd_driver);
 extern whd_result_t whd_bus_sdio_resume_after_deep_sleep(whd_driver_t whd_driver);
@@ -174,22 +174,22 @@ extern whd_result_t whd_bus_sdio_deinit(whd_driver_t whd_driver);
 
 /* Device register access functions */
 extern whd_result_t whd_bus_sdio_write_backplane_value(whd_driver_t whd_driver, uint32_t address,
-	uint8_t register_length, uint32_t value);
+		uint8_t register_length, uint32_t value);
 extern whd_result_t whd_bus_sdio_read_backplane_value(whd_driver_t whd_driver, uint32_t address,
-	uint8_t register_length, uint8_t *value);
+		uint8_t register_length, uint8_t *value);
 extern whd_result_t whd_bus_sdio_write_register_value(whd_driver_t whd_driver, whd_bus_function_t function,
-	uint32_t address, uint8_t value_length, uint32_t value);
+		uint32_t address, uint8_t value_length, uint32_t value);
 extern whd_result_t whd_bus_sdio_read_register_value(whd_driver_t whd_driver, whd_bus_function_t function,
-	uint32_t address, uint8_t value_length, uint8_t *value);
+		uint32_t address, uint8_t value_length, uint8_t *value);
 
 /* Device data transfer functions */
 extern whd_result_t whd_bus_sdio_send_buffer(whd_driver_t whd_driver, whd_buffer_t buffer);
 extern whd_result_t whd_bus_sdio_transfer_bytes(whd_driver_t whd_driver, whd_bus_transfer_direction_t direction,
-	whd_bus_function_t function, uint32_t address, uint16_t size,
-	whd_transfer_bytes_packet_t *data);
+		whd_bus_function_t function, uint32_t address, uint16_t size,
+		whd_transfer_bytes_packet_t *data);
 extern whd_result_t whd_bus_sdio_transfer_backplane_bytes(whd_driver_t whd_driver,
-	whd_bus_transfer_direction_t direction, uint32_t address,
-	uint32_t size, uint8_t *data);
+		whd_bus_transfer_direction_t direction, uint32_t address,
+		uint32_t size, uint8_t *data);
 
 /* Frame transfer function */
 extern whd_result_t whd_bus_sdio_read_frame(whd_driver_t whd_driver, whd_buffer_t *buffer);
@@ -199,6 +199,8 @@ extern uint32_t whd_bus_sdio_packet_available_to_read(whd_driver_t whd_driver);
 extern whd_result_t whd_bus_sdio_ack_interrupt(whd_driver_t whd_driver, uint32_t intstatus);
 
 extern whd_result_t whd_bus_sdio_set_backplane_window(whd_driver_t whd_driver, uint32_t addr, uint32_t *curbase);
+
+extern whd_result_t whd_wlan_reset_sdio(whd_driver_t whd_driver);
 
 extern void whd_delayed_bus_release_schedule_update(whd_driver_t whd_driver, whd_bool_t is_scheduled);
 #define DELAYED_BUS_RELEASE_SCHEDULE(whd_driver, schedule) \
@@ -218,12 +220,12 @@ extern whd_result_t whd_bus_sdio_reinit_stats(whd_driver_t whd_driver, whd_bool_
 uint8_t whd_bus_sdio_backplane_read_padd_size(whd_driver_t whd_driver);
 
 extern whd_result_t whd_bus_sdio_wait_for_wlan_event(whd_driver_t whd_driver,
-	cy_semaphore_t *transceive_semaphore);
+		cy_semaphore_t *transceive_semaphore);
 extern whd_bool_t whd_bus_sdio_use_status_report_scheme(whd_driver_t whd_driver);
 extern uint32_t whd_bus_sdio_get_max_transfer_size(whd_driver_t whd_driver);
 /******************************************************
-*             Global variables
-******************************************************/
+ *             Global variables
+ ******************************************************/
 
 #ifdef __cplusplus
 } /*extern "C" */

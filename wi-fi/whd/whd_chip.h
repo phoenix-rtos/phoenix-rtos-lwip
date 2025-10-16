@@ -1,5 +1,5 @@
 /*
- * Copyright 2021, Cypress Semiconductor Corporation (an Infineon company)
+ * Copyright 2024, Cypress Semiconductor Corporation (an Infineon company)
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -29,15 +29,15 @@ extern "C" {
 #endif
 
 /******************************************************
-*             Constants
-******************************************************/
+ *             Constants
+ ******************************************************/
 #define WHD_WLAN_WAKE_TIMEOUT           (10000)
 #define WHD_SHARED_MEMORY_POLLING_DELAY (10)
 #define SICF_CPUHALT                    (0x0020)
 
 /******************************************************
-*                 Enumerations
-******************************************************/
+ *                 Enumerations
+ ******************************************************/
 /**
  * Enumerated list of aggregate codes and edit WHD_COUNTRY_AGGREGATE_CUSTOMER for supporting new aggregate
  * as per customer like XZ/278
@@ -108,14 +108,20 @@ typedef enum {
 } whd_80211_cipher_t;
 
 /******************************************************
-*               Structures
-******************************************************/
+ *               Structures
+ ******************************************************/
 
 typedef struct whd_chip_info {
 	uint16_t chip_id;
+	uint8_t chipid_in_sdiocore; /* To check ChipId is present in SdioCore */
 	whd_bool_t save_restore_enable;
-
+	uint32_t fwcap_flags;
 } whd_chip_info_t;
+
+typedef struct whd_fwcap {
+	whd_fwcap_id_t feature;
+	const char *const fwcap_name;
+} whd_fwcap_t;
 
 typedef struct
 {
@@ -199,6 +205,16 @@ typedef struct
 	uint32_t akm_suite_list[1];
 } akm_suite_portion_t;
 
+/* RSNX IE */
+typedef struct
+{
+	whd_tlv8_header_t tlv_header; /* id, length */
+	uint8_t data[1];
+} rsnx_ie_t;
+
+#define DOT11_RSNX_CAP_LEN 1 /* Extended RSN Capabilities length in octets (1 octet) */
+#define DOT11_RSNX_SAE_H2E 5 /* Extended RSN Capabilities */
+
 typedef struct
 {
 	whd_tlv8_header_t tlv_header; /* id, length */
@@ -244,25 +260,25 @@ typedef struct
 typedef struct
 {
 	/* Virtual UART
-     *   When there is no UART (e.g. Quickturn), the host should write a complete
-     *   input line directly into cbuf and then write the length into vcons_in.
-     *   This may also be used when there is a real UART (at risk of conflicting with
-     *   the real UART).  vcons_out is currently unused.
-     */
+	 *   When there is no UART (e.g. Quickturn), the host should write a complete
+	 *   input line directly into cbuf and then write the length into vcons_in.
+	 *   This may also be used when there is a real UART (at risk of conflicting with
+	 *   the real UART).  vcons_out is currently unused.
+	 */
 	volatile uint vcons_in;
 	volatile uint vcons_out;
 
 	/* Output (logging) buffer
-     *   Console output is written to a ring buffer log_buf at index log_idx.
-     *   The host may read the output when it sees log_idx advance.
-     *   Output will be lost if the output wraps around faster than the host polls.
-     */
+	 *   Console output is written to a ring buffer log_buf at index log_idx.
+	 *   The host may read the output when it sees log_idx advance.
+	 *   Output will be lost if the output wraps around faster than the host polls.
+	 */
 	hnd_log_t log;
 
 	/* Console input line buffer
-     *   Characters are read one at a time into cbuf until <CR> is received, then
-     *   the buffer is processed as a command line.  Also used for virtual UART.
-     */
+	 *   Characters are read one at a time into cbuf until <CR> is received, then
+	 *   the buffer is processed as a command line.  Also used for virtual UART.
+	 */
 	uint cbuf_idx;
 	char cbuf[CBUF_LEN];
 } hnd_cons_t;
@@ -286,6 +302,15 @@ typedef struct
 	uint console_addr;
 	uint msgtrace_addr;
 	uint fwid;
+	uint total_lfrag_pktcount;
+	uint reserved;
+	uint reserved1;
+	uint h2d_mb_addr;
+	uint d2h_mb_addr;
+	uint ring_info_ptr;
+	uint scratch_mem_size;
+	uint scratch_mem_ptr_low;
+	uint scratch_mem_ptr_high;
 } wlan_shared_t;
 
 /* Buffer size to be allocated to read wlan log */
@@ -305,8 +330,8 @@ typedef struct
 	uint32_t reason;
 } whd_ioctl_log_t;
 
-void whd_ioctl_log_add(whd_driver_t whd_driver, uint32_t cmd, whd_buffer_t buffer);
-void whd_ioctl_log_add_event(whd_driver_t whd_driver, uint32_t cmd, uint16_t flag, uint32_t data);
+whd_result_t whd_ioctl_log_add(whd_driver_t whd_driver, uint32_t cmd, whd_buffer_t buffer);
+whd_result_t whd_ioctl_log_add_event(whd_driver_t whd_driver, uint32_t cmd, uint16_t flag, uint32_t data);
 
 whd_result_t whd_ioctl_print(whd_driver_t whd_driver);
 
@@ -321,14 +346,14 @@ typedef struct whd_internal_info {
 	whd_scan_result_callback_t scan_result_callback;
 	whd_scan_result_t *whd_scan_result_ptr;
 	/* The semaphore used to wait for completion of a join;
-     * whd_wifi_join_halt uses this to release waiting threads (if any) */
+	 * whd_wifi_join_halt uses this to release waiting threads (if any) */
 	cy_semaphore_t *active_join_semaphore;
 	whd_bool_t active_join_mutex_initted;
 	cy_semaphore_t active_join_mutex;
 	uint con_lastpos;
 	whd_bool_t whd_wifi_p2p_go_is_up;
 	uint32_t whd_join_status[3];
-
+	whd_auth_result_callback_t auth_result_callback;
 } whd_internal_info_t;
 
 #pragma pack(1)
@@ -342,16 +367,22 @@ typedef struct
 
 #pragma pack()
 
-void whd_internal_info_init(whd_driver_t whd_driver);
+whd_result_t whd_internal_info_init(whd_driver_t whd_driver);
+whd_result_t whd_internal_info_deinit(whd_driver_t whd_driver);
 
 /******************************************************
-*               Function Declarations
-******************************************************/
+ *               Function Declarations
+ ******************************************************/
 
 extern void whd_wifi_chip_info_init(whd_driver_t whd_driver);
+#ifndef CYCFG_ULP_SUPPORT_ENABLED
 extern whd_result_t whd_wlan_bus_complete_ds_wake(whd_driver_t whd_driver, whd_bool_t wake_from_firmware,
-	uint32_t wake_event_indication_addr, uint32_t wake_indication_addr,
-	uint32_t sdio_control_addr);
+		uint32_t wake_event_indication_addr, uint32_t wake_indication_addr,
+		uint32_t sdio_control_addr);
+#else
+whd_result_t whd_wlan_bus_complete_ds_wake(whd_driver_t whd_driver, whd_bool_t wake_from_ucode);
+whd_result_t whd_ensure_wlan_bus_not_in_deep_sleep(whd_driver_t whd_driver);
+#endif
 extern whd_result_t whd_wifi_set_custom_country_code(whd_interface_t ifp, const whd_country_info_t *country_code);
 
 /* Device core control functions */
@@ -370,8 +401,8 @@ extern whd_result_t whd_chip_specific_socsram_init(whd_driver_t whd_driver);
 extern whd_result_t whd_wifi_read_wlan_log(whd_driver_t whd_driver, char *buffer, uint32_t buffer_size);
 extern whd_result_t whd_wifi_print_whd_log(whd_driver_t whd_driver);
 extern whd_result_t whd_wifi_read_wlan_log_unsafe(whd_driver_t whd_driver, uint32_t wlan_shared_address, char *buffer,
-	uint32_t buffer_size);
-
+		uint32_t buffer_size);
+extern whd_result_t whd_wifi_read_fw_capabilities(whd_interface_t ifp);
 extern void whd_wifi_peek(whd_driver_t whd_driver, uint32_t address, uint8_t register_length, uint8_t *value);
 extern void whd_wifi_poke(whd_driver_t whd_driver, uint32_t address, uint8_t register_length, uint32_t value);
 extern uint32_t whd_wifi_get_btc_params(whd_driver_t whd_driver, uint32_t address, whd_interface_t interface);

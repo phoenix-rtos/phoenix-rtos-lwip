@@ -1,5 +1,5 @@
 /*
- * Copyright 2021, Cypress Semiconductor Corporation (an Infineon company)
+ * Copyright 2024, Cypress Semiconductor Corporation (an Infineon company)
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,8 +23,8 @@ extern "C" {
 #endif
 
 /******************************************************
-*             Architecture Constants
-******************************************************/
+ *             Architecture Constants
+ ******************************************************/
 
 /* D11 registers and SHM */
 #define D11_BASE_ADDR     0x18001000
@@ -35,7 +35,7 @@ extern "C" {
 #define D11IHR_ADDR(offset) (D11_AXI_BASE_ADDR + 0x400 + (2 * offset))
 #define D11SHM_ADDR(offset) (D11_SHM_BASE_ADDR + offset)
 
-#define M_DS1_CTRL_STATUS (0xe0b * 2)
+// #define M_DS1_CTRL_STATUS               (0xe0b * 2)
 
 /* RMC operational modes */
 enum ds1_ctrl_status {
@@ -45,7 +45,11 @@ enum ds1_ctrl_status {
 	DS1_EXIT = 3      /* DS1_EXIT.*/
 };
 
-#define M_DS1_CTRL_SDIO (0xe0c * 2)
+// #define M_DS1_CTRL_SDIO                 (0xe0c * 2)
+#define M_DS1_CTRL_STATUS (0x1c4c)
+#define M_DS1_CTRL_SDIO   (0x1c4e)
+#define M_WAKEEVENT_IND   (0xd6)
+#define M_ULP_WAKE_IND    (0x1580)
 
 #define C_DS1_CTRL_SDIO_DS1_SLEEP    (1 << 0)
 #define C_DS1_CTRL_SDIO_MAC_ON       (1 << 1)
@@ -97,6 +101,7 @@ enum ds1_ctrl_status {
 
 /* PMU core registers */
 #define RETENTION_CTL(wd)   ((uint32_t)(GET_C_VAR(wd, PMU_BASE_ADDRESS) + 0x670))
+#define PMU_WATCHDOG(wd)    ((uint32_t)(GET_C_VAR(wd, PMU_BASE_ADDRESS) + 0x634))
 #define RCTL_MACPHY_DISABLE ((uint32_t)(1 << 26))
 #define RCTL_LOGIC_DISABLE  ((uint32_t)(1 << 27))
 

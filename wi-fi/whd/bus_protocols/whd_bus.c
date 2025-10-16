@@ -1,5 +1,5 @@
 /*
- * Copyright 2021, Cypress Semiconductor Corporation (an Infineon company)
+ * Copyright 2024, Cypress Semiconductor Corporation (an Infineon company)
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +19,7 @@
  *
  */
 
-#include <stdlib.h>
+#include "whd_utils.h"
 #include "whd_bus.h"
 #include "whd_int.h"
 
@@ -27,14 +27,14 @@
 whd_driver_t g_bt_whd_driver;
 
 whd_result_t whd_bus_write_reg_value(whd_driver_t whd_driver, uint32_t address,
-	uint8_t value_length, uint32_t value)
+		uint8_t value_length, uint32_t value)
 {
 	CHECK_RETURN(whd_ensure_wlan_bus_is_up(whd_driver));
 	return whd_bus_write_backplane_value(whd_driver, address, value_length, value);
 }
 
 whd_result_t whd_bus_read_reg_value(whd_driver_t whd_driver, uint32_t address,
-	uint8_t value_length, uint8_t *value)
+		uint8_t value_length, uint8_t *value)
 {
 	CHECK_RETURN(whd_ensure_wlan_bus_is_up(whd_driver));
 	return whd_bus_read_backplane_value(whd_driver, address, value_length, value);
@@ -57,14 +57,14 @@ whd_driver_t whd_bt_get_whd_driver(void)
 }
 
 whd_result_t whd_bus_bt_attach(whd_driver_t whd_driver, void *btdata,
-	void (*bt_int_fun)(void *data))
+		void (*bt_int_fun)(void *data))
 {
 	whd_bt_dev_t btdev;
 	if (whd_driver->bt_dev) {
 		return WHD_SUCCESS;
 	}
 	/* Allocate bt dev */
-	btdev = (whd_bt_dev_t)malloc(sizeof(struct whd_bt_dev));
+	btdev = (whd_bt_dev_t)whd_mem_malloc(sizeof(struct whd_bt_dev));
 	if (btdev == NULL) {
 		WPRINT_WHD_ERROR(("Memory allocation failed for whd_bt_dev_t in %s\n", __FUNCTION__));
 		return WHD_BUFFER_UNAVAILABLE_PERMANENT;
@@ -90,7 +90,7 @@ void whd_bus_bt_detach(whd_driver_t whd_driver)
 			btdev->bt_int_cb = NULL;
 		if (whd_driver->bt_dev) {
 			whd_driver->bt_dev = NULL;
-			free(btdev);
+			whd_mem_free(btdev);
 		}
 	}
 }
@@ -126,32 +126,32 @@ whd_result_t whd_bus_read_frame(whd_driver_t whd_driver, whd_buffer_t *buffer)
 }
 
 whd_result_t whd_bus_write_backplane_value(whd_driver_t whd_driver, uint32_t address, uint8_t register_length,
-	uint32_t value)
+		uint32_t value)
 {
 	return whd_driver->bus_if->whd_bus_write_backplane_value_fptr(whd_driver, address, register_length, value);
 }
 
 whd_result_t whd_bus_read_backplane_value(whd_driver_t whd_driver, uint32_t address, uint8_t register_length,
-	uint8_t *value)
+		uint8_t *value)
 {
 	return whd_driver->bus_if->whd_bus_read_backplane_value_fptr(whd_driver, address, register_length, value);
 }
 
 whd_result_t whd_bus_read_register_value(whd_driver_t whd_driver, whd_bus_function_t function, uint32_t address,
-	uint8_t value_length, uint8_t *value)
+		uint8_t value_length, uint8_t *value)
 {
 	return whd_driver->bus_if->whd_bus_read_register_value_fptr(whd_driver, function, address, value_length, value);
 }
 
 whd_result_t whd_bus_write_register_value(whd_driver_t whd_driver, whd_bus_function_t function, uint32_t address,
-	uint8_t value_length, uint32_t value)
+		uint8_t value_length, uint32_t value)
 {
 	return whd_driver->bus_if->whd_bus_write_register_value_fptr(whd_driver, function, address, value_length, value);
 }
 
 whd_result_t whd_bus_transfer_bytes(whd_driver_t whd_driver, whd_bus_transfer_direction_t direction,
-	whd_bus_function_t function, uint32_t address, uint16_t size,
-	whd_transfer_bytes_packet_t *data)
+		whd_bus_function_t function, uint32_t address, uint16_t size,
+		whd_transfer_bytes_packet_t *data)
 {
 	return whd_driver->bus_if->whd_bus_transfer_bytes_fptr(whd_driver, direction, function, address, size, data);
 }
@@ -217,7 +217,16 @@ whd_result_t whd_bus_irq_enable(whd_driver_t whd_driver, whd_bool_t enable)
 }
 
 whd_result_t whd_bus_download_resource(whd_driver_t whd_driver, whd_resource_type_t resource,
-	whd_bool_t direct_resource, uint32_t address, uint32_t image_size)
+		whd_bool_t direct_resource, uint32_t address, uint32_t image_size)
 {
-	return whd_driver->bus_if->whd_bus_download_resource_fptr(whd_driver, resource, direct_resource, address, image_size);
+	return whd_driver->bus_if->whd_bus_download_resource_fptr(whd_driver, resource, direct_resource, address,
+			image_size);
 }
+
+#ifdef BLHS_SUPPORT
+whd_result_t whd_bus_common_blhs(whd_driver_t whd_driver, whd_bus_blhs_stage_t stage)
+{
+	return whd_driver->bus_if->whd_bus_blhs_fptr(whd_driver, stage);
+}
+
+#endif

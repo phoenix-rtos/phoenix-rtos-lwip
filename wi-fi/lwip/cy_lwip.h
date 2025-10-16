@@ -29,17 +29,17 @@
  * including Cypress's product in a High Risk Product, the manufacturer
  * of such system or application assumes all risk of such use and in doing
  * so agrees to indemnify Cypress against all liability.
-*/
+ */
 
 /**
-* \addtogroup group_lwip_whd_port lwIP and WHD port
-* \{
-* Functions for dealing with linking the lwIP TCP/IP stack with Wi-Fi Host Driver
-*
-* \defgroup group_lwip_whd_enums Enumerated Types
-* \defgroup group_lwip_whd_port_functions Port Functions
-* \defgroup group_lwip_whd_port_structures Port Structures
-*/
+ * \addtogroup group_lwip_whd_port lwIP and WHD port
+ * \{
+ * Functions for dealing with linking the lwIP TCP/IP stack with Wi-Fi Host Driver
+ *
+ * \defgroup group_lwip_whd_enums Enumerated Types
+ * \defgroup group_lwip_whd_port_functions Port Functions
+ * \defgroup group_lwip_whd_port_structures Port Structures
+ */
 #pragma once
 
 #include <stdbool.h>
@@ -75,9 +75,9 @@ typedef enum {
 /** \} group_lwip_whd_enums */
 
 /**
-* \addtogroup group_lwip_whd_port_structures
-* \{
-*/
+ * \addtogroup group_lwip_whd_port_structures
+ * \{
+ */
 /**
  * Structure used to pass LwIP network interface to \ref cy_lwip_add_interface
  */
@@ -99,9 +99,9 @@ typedef struct ip_static {
 /** \} group_lwip_whd_port_structures */
 
 /**
-* \addtogroup group_lwip_whd_port_functions
-* \{
-*/
+ * \addtogroup group_lwip_whd_port_functions
+ * \{
+ */
 
 
 /**
@@ -177,7 +177,7 @@ cy_rslt_t cy_lwip_dhcp_renew(cy_lwip_nw_interface_t *iface);
  *
  * @param[in] iface WiFi interface.
  * @param[in] buf Packet received from the radio driver.
- * 
+ *
  */
 extern void cy_network_process_ethernet_data(whd_interface_t iface, whd_buffer_t buf);
 
@@ -200,7 +200,7 @@ typedef void (*cy_lwip_ip_change_callback_t)(void *data);
  * Passing "NULL" as cb will deregister the activity callback
  *
  * @param[in] cb Network activity callback function
- * 
+ *
  */
 void cy_network_activity_register_cb(cy_network_activity_event_callback_t cb);
 

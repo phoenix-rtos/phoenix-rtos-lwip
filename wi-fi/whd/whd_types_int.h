@@ -1,5 +1,5 @@
 /*
- * Copyright 2021, Cypress Semiconductor Corporation (an Infineon company)
+ * Copyright 2024, Cypress Semiconductor Corporation (an Infineon company)
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,13 +27,16 @@
 #include <stddef.h>
 #include <inttypes.h>
 
+#include "whd_types.h"
+#include "whd.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /******************************************************
-*                      Macros
-******************************************************/
+ *                      Macros
+ ******************************************************/
 /**
  * The size of an Ethernet header
  */
@@ -61,31 +64,32 @@ extern "C" {
 #define WL_BSS_FLAGS_NF_INVALID      0x80 /* BSS contains invalid noise floor */
 
 #define HT_CAPABILITIES_IE_LENGTH (26)
-#define DOT11_OUI_LEN             (3) /** Length in bytes of 802.11 OUI*/
+#define DOT11_OUI_LEN             (3)  /** Length in bytes of 802.11 OUI*/
+#define DOT11_MGMT_HDR_LEN        (24) /* dot11 management header len */
 
 #define WHD_ETHER_ADDR_STR_LEN (18)
 #define WHD_ETHER_ADDR_LEN     (6)
 
 #define CHECK_IOCTL_BUFFER(buff) \
 	if (buff == \
-		NULL) { \
+			NULL) { \
 		WPRINT_WHD_ERROR(("Buffer alloc failed in function %s at line %d \n", \
-			__func__, __LINE__)); \
+				__func__, __LINE__)); \
 		return WHD_BUFFER_ALLOC_FAIL; \
 	}
 #define CHECK_PACKET_NULL(buff, err) \
 	if (buff == \
-		NULL) { \
+			NULL) { \
 		WPRINT_WHD_ERROR(("No register function pointer in %s at line %d \n", \
-			__func__, __LINE__)); \
+				__func__, __LINE__)); \
 		return err; \
 	}
 #define CHECK_PACKET_WITH_NULL_RETURN(buff) \
 	if (buff == \
-		NULL) { \
+			NULL) { \
 		WPRINT_WHD_ERROR(( \
-			"No register function pointer in %s at line %d \n", \
-			__func__, __LINE__)); \
+				"No register function pointer in %s at line %d \n", \
+				__func__, __LINE__)); \
 		return; \
 	}
 
@@ -94,8 +98,8 @@ extern "C" {
 		whd_result_t check_res = (expr); \
 		if (check_res != WHD_SUCCESS) { \
 			WPRINT_WHD_ERROR(("Function %s failed at line %d checkres = %u \n", \
-				__func__, __LINE__, \
-				(unsigned int)check_res)); \
+					__func__, __LINE__, \
+					(unsigned int)check_res)); \
 			return check_res; \
 		} \
 	}
@@ -130,19 +134,19 @@ extern "C" {
 
 #define CHECK_IFP_NULL(ifp) \
 	if (ifp == \
-		NULL) { \
+			NULL) { \
 		WPRINT_WHD_ERROR(( \
-			"Interface is not up/NULL and failed in function %s at line %d \n", \
-			__func__, __LINE__)); \
+				"Interface is not up/NULL and failed in function %s at line %d \n", \
+				__func__, __LINE__)); \
 		return WHD_UNKNOWN_INTERFACE; \
 	}
 
 #define CHECK_DRIVER_NULL(driver) \
 	if (driver == \
-		NULL) { \
+			NULL) { \
 		WPRINT_WHD_ERROR(( \
-			"WHD driver is not up/NULL and failed in function %s at line %d \n", \
-			__func__, __LINE__)); \
+				"WHD driver is not up/NULL and failed in function %s at line %d \n", \
+				__func__, __LINE__)); \
 		return WHD_DOES_NOT_EXIST; \
 	}
 
@@ -154,7 +158,7 @@ extern "C" {
 #endif
 
 #ifndef DIV_ROUND_UP
-#define DIV_ROUND_UP(m, n) (((m) + (n)-1) / (n))
+#define DIV_ROUND_UP(m, n) (((m) + (n) - 1) / (n))
 #endif
 
 #define WHD_WRITE_16(pointer, value) (*((uint16_t *)pointer) = value)
@@ -166,21 +170,21 @@ extern "C" {
  *  Macro for checking for NULL MAC addresses
  */
 #define NULL_MAC(a) (((((unsigned char *)a)[0]) == 0) && \
-	((((unsigned char *)a)[1]) == 0) && \
-	((((unsigned char *)a)[2]) == 0) && \
-	((((unsigned char *)a)[3]) == 0) && \
-	((((unsigned char *)a)[4]) == 0) && \
-	((((unsigned char *)a)[5]) == 0))
+		((((unsigned char *)a)[1]) == 0) && \
+		((((unsigned char *)a)[2]) == 0) && \
+		((((unsigned char *)a)[3]) == 0) && \
+		((((unsigned char *)a)[4]) == 0) && \
+		((((unsigned char *)a)[5]) == 0))
 
 /**
  *	Macro for checking for Broadcast address
  */
 #define BROADCAST_ID(a) (((((unsigned char *)a)[0]) == 255) && \
-	((((unsigned char *)a)[1]) == 255) && \
-	((((unsigned char *)a)[2]) == 255) && \
-	((((unsigned char *)a)[3]) == 255) && \
-	((((unsigned char *)a)[4]) == 255) && \
-	((((unsigned char *)a)[5]) == 255))
+		((((unsigned char *)a)[1]) == 255) && \
+		((((unsigned char *)a)[2]) == 255) && \
+		((((unsigned char *)a)[3]) == 255) && \
+		((((unsigned char *)a)[4]) == 255) && \
+		((((unsigned char *)a)[5]) == 255))
 
 /* Suppress unused variable warning occurring due to an assert which is disabled in release mode */
 #define REFERENCE_DEBUG_ONLY_VARIABLE(x) ((void)(x))
@@ -200,22 +204,32 @@ extern "C" {
 #endif
 
 /******************************************************
-*                 Type Definitions
-******************************************************/
+ *                 Type Definitions
+ ******************************************************/
 
 /******************************************************
-*                    Constants
-******************************************************/
+ *                    Constants
+ ******************************************************/
 
 /******************************************************
-*             Structures and Enumerations
-******************************************************/
+ *             Structures and Enumerations
+ ******************************************************/
 #pragma pack(1)
+
+#ifndef PROTO_MSGBUF
 typedef struct
 {
 	whd_buffer_queue_ptr_t queue_next;
 	char bus_header[MAX_BUS_HEADER_SIZE];
 } whd_buffer_header_t;
+#else
+typedef struct
+{
+	whd_buffer_queue_ptr_t queue_next;
+	char pad[2];
+} whd_buffer_header_t;
+#endif /* PROTO_MSGBUF */
+
 #pragma pack()
 
 /* 802.11 Information Element Identification Numbers (as per section 8.4.2.1 of 802.11-2012) */
@@ -348,13 +362,36 @@ typedef enum {
 	DOT11_IE_ID_MCCAOP_ADVERTISMENT_OVERVIEW = 174,
 	/* 175-220 Reserved */
 	DOT11_IE_ID_VENDOR_SPECIFIC = 221,
-	/* 222-255 Reserved */
+	/* 222-223 Reserved */
+	DOT11_IE_ID_RSNX = 244,
+	/* 225-255 Reserved */
 } dot11_ie_id_t;
 
-uint32_t whd_wifi_get_iovar_value(whd_interface_t ifp, const char *iovar, uint32_t *value);
-uint32_t whd_wifi_set_iovar_buffers(whd_interface_t ifp, const char *iovar, const void **in_buffers,
-	const uint16_t *lengths, const uint8_t num_buffers);
-uint32_t whd_wifi_set_iovar_value(whd_interface_t ifp, const char *iovar, uint32_t value);
+/* 802.11 Status Code */
+typedef enum {
+	DOT11_SC_SUCCESS = 0,
+	DOT11_SC_FAILURE = 1,
+	DOT11_SC_TDLS_WAKEUP_SCH_ALT = 2,
+	DOT11_SC_TDLS_WAKEUP_SCH_REJ = 3,
+	/* 4 Reserved */
+	DOT11_SC_TDLS_SEC_DISABLED = 5,
+	DOT11_SC_LIFETIME_REJ = 6,
+	DOT11_SC_NOT_SAME_BSS = 7,
+	/* 8-9 Reserved */
+	DOT11_SC_CAP_MISMATCH = 10,
+	DOT11_SC_REASSOC_FAIL = 11,
+	DOT11_SC_ASSOC_FAIL = 12,
+	DOT11_SC_AUTH_MISMATCH = 13,
+	DOT11_SC_AUTH_SEQ = 14,
+	DOT11_SC_AUTH_CHALLENGE_FAIL = 15,
+	DOT11_SC_AUTH_TIMEOUT = 16,
+	/* 17-255 Reserved */
+} dot11_sc_t;
+
+whd_result_t whd_wifi_get_iovar_value(whd_interface_t ifp, const char *iovar, uint32_t *value);
+whd_result_t whd_wifi_set_iovar_buffers(whd_interface_t ifp, const char *iovar, const void **in_buffers,
+		const uint16_t *lengths, const uint8_t num_buffers);
+whd_result_t whd_wifi_set_iovar_value(whd_interface_t ifp, const char *iovar, uint32_t value);
 
 /** Sends an IOVAR command
  *
@@ -363,7 +400,7 @@ uint32_t whd_wifi_set_iovar_value(whd_interface_t ifp, const char *iovar, uint32
  *
  *  @return WHD_SUCCESS or Error code
  */
-extern uint32_t whd_wifi_set_iovar_void(whd_interface_t ifp, const char *iovar);
+extern whd_result_t whd_wifi_set_iovar_void(whd_interface_t ifp, const char *iovar);
 
 /** Sends an IOVAR command
  *
@@ -374,7 +411,7 @@ extern uint32_t whd_wifi_set_iovar_void(whd_interface_t ifp, const char *iovar);
  *
  *  @return WHD_SUCCESS or Error code
  */
-extern uint32_t whd_wifi_set_iovar_buffer(whd_interface_t ifp, const char *iovar, void *buffer, uint16_t buffer_length);
+extern whd_result_t whd_wifi_set_iovar_buffer(whd_interface_t ifp, const char *iovar, void *buffer, uint16_t buffer_length);
 
 /** Sends an IOVAR command
  *
@@ -386,8 +423,8 @@ extern uint32_t whd_wifi_set_iovar_buffer(whd_interface_t ifp, const char *iovar
  *
  *  @return WHD_SUCCESS or Error code
  */
-extern uint32_t whd_wifi_set_iovar_buffers(whd_interface_t ifp, const char *iovar, const void **in_buffers,
-	const uint16_t *in_buffer_lengths, const uint8_t num_buffers);
+extern whd_result_t whd_wifi_set_iovar_buffers(whd_interface_t ifp, const char *iovar, const void **in_buffers,
+		const uint16_t *in_buffer_lengths, const uint8_t num_buffers);
 
 /** Sends an IOVAR command
  *
@@ -398,8 +435,8 @@ extern uint32_t whd_wifi_set_iovar_buffers(whd_interface_t ifp, const char *iova
  *
  *  @return WHD_SUCCESS or Error code
  */
-extern uint32_t whd_wifi_get_iovar_buffer(whd_interface_t ifp, const char *iovar_name, uint8_t *out_buffer,
-	uint16_t out_length);
+extern whd_result_t whd_wifi_get_iovar_buffer(whd_interface_t ifp, const char *iovar_name, uint8_t *out_buffer,
+		uint16_t out_length);
 
 /** Sends an IOVAR command
  *
@@ -410,7 +447,7 @@ extern uint32_t whd_wifi_get_iovar_buffer(whd_interface_t ifp, const char *iovar
  *
  *  @return WHD_SUCCESS or Error code
  */
-extern uint32_t whd_wifi_set_iovar_buffer(whd_interface_t ifp, const char *iovar, void *buffer, uint16_t buffer_length);
+extern whd_result_t whd_wifi_set_iovar_buffer(whd_interface_t ifp, const char *iovar, void *buffer, uint16_t buffer_length);
 
 /** Sends an IOVAR command
  *
@@ -422,10 +459,10 @@ extern uint32_t whd_wifi_set_iovar_buffer(whd_interface_t ifp, const char *iovar
  *
  *  @return WHD_SUCCESS or Error code
  */
-extern uint32_t whd_wifi_set_iovar_buffers(whd_interface_t ifp, const char *iovar, const void **in_buffers,
-	const uint16_t *in_buffer_lengths, const uint8_t num_buffers);
+extern whd_result_t whd_wifi_set_iovar_buffers(whd_interface_t ifp, const char *iovar, const void **in_buffers,
+		const uint16_t *in_buffer_lengths, const uint8_t num_buffers);
 
-extern uint32_t whd_wifi_set_mac_address(whd_interface_t ifp, whd_mac_t mac);
+extern whd_result_t whd_wifi_set_mac_address(whd_interface_t ifp, whd_mac_t mac);
 
 #ifdef __cplusplus
 } /* extern "C" */

@@ -9,6 +9,9 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
+#include "cybsp.h"
+#if !((CYBSP_WIFI_INTERFACE_TYPE == CYBSP_M2M_INTERFACE) || (CYBSP_WIFI_INTERFACE_TYPE == CYBSP_USB_INTERFACE))
+
 #include "cyhal_gpio.h"
 #include "cyhal_utils.h"
 #include "cyabs_rtos.h"
@@ -78,7 +81,7 @@ static int gpio_set_val(unsigned int gpio, unsigned int pin, unsigned int val)
 
 /* NOTE: pin, direction, drvMode, initVal are ignored - pin configuration is hardcoded */
 cy_rslt_t cyhal_gpio_init(cyhal_gpio_t pin, cyhal_gpio_direction_t direction, cyhal_gpio_drive_mode_t drvMode,
-	bool initVal)
+		bool initVal)
 {
 	cy_log_msg(CYLF_GPIO, CY_LOG_DEBUG, "cyhal_gpio_init\n");
 
@@ -156,7 +159,7 @@ void cyhal_gpio_write(cyhal_gpio_t pin, bool value)
 
 /* NOTE: currently not used */
 void cyhal_gpio_register_irq(cyhal_gpio_t pin, uint8_t intrPriority, cyhal_gpio_irq_handler_t handler,
-	void *handler_arg)
+		void *handler_arg)
 {
 	cy_log_msg(CYLF_GPIO, CY_LOG_ERR, "cyhal_gpio_register_irq - not implemented!\n");
 }
@@ -167,3 +170,5 @@ void cyhal_gpio_irq_enable(cyhal_gpio_t pin, cyhal_gpio_irq_event_t event, bool 
 {
 	cy_log_msg(CYLF_GPIO, CY_LOG_ERR, "cyhal_gpio_irq_enable - not implemented!\n");
 }
+
+#endif /* !((CYBSP_WIFI_INTERFACE_TYPE == CYBSP_M2M_INTERFACE) || (CYBSP_WIFI_INTERFACE_TYPE == CYBSP_USB_INTERFACE)) */

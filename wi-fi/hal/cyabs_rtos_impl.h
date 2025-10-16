@@ -1,4 +1,4 @@
-/***********************************************************************************************/ /**
+/***************************************************************************************************
  * \file cyabs_rtos_impl.h
  *
  * \brief
@@ -28,6 +28,8 @@
 
 #pragma once
 
+#include <stdatomic.h>
+#include <stdbool.h>
 #include <sys/types.h>
 #include <sys/threads.h>
 
@@ -46,16 +48,16 @@ extern "C" {
  */
 
 /******************************************************
-*                 Constants
-******************************************************/
+ *                 Constants
+ ******************************************************/
 // TODO: Replace these with proper values for the target RTOS
 #define CY_RTOS_MIN_STACK_SIZE 300          /**< Minimum stack size */
 #define CY_RTOS_ALIGNMENT_MASK 0x00000007UL /**< Checks for 8-bit alignment */
 
 
 /******************************************************
-*                 Type Definitions
-******************************************************/
+ *                 Type Definitions
+ ******************************************************/
 
 // TODO: Replace all priority values with values specific to the RTOS
 /** RTOS thread priority.
@@ -65,14 +67,14 @@ extern "C" {
  * MAX >= REALTIME >= HIGH >= ABOVENORMAL >= NORMAL >= BELOWNORMAL >= LOW >= MIN
  */
 typedef enum {
-	CY_RTOS_PRIORITY_MIN = 0,         /**< Minimum allowable Thread priority */
-	CY_RTOS_PRIORITY_LOW = 1,         /**< A low priority Thread */
-	CY_RTOS_PRIORITY_BELOWNORMAL = 2, /**< A slightly below normal Thread priority */
-	CY_RTOS_PRIORITY_NORMAL = 3,      /**< The normal Thread priority */
-	CY_RTOS_PRIORITY_ABOVENORMAL = 4, /**< A slightly elevated Thread priority */
-	CY_RTOS_PRIORITY_HIGH = 5,        /**< A high priority Thread */
-	CY_RTOS_PRIORITY_REALTIME = 6,    /**< Realtime Thread priority */
-	CY_RTOS_PRIORITY_MAX = 7          /**< Maximum allowable Thread priority */
+	CY_RTOS_PRIORITY_MIN = 7,         /**< Minimum allowable Thread priority */
+	CY_RTOS_PRIORITY_LOW = 6,         /**< A low priority Thread */
+	CY_RTOS_PRIORITY_BELOWNORMAL = 5, /**< A slightly below normal Thread priority */
+	CY_RTOS_PRIORITY_NORMAL = 4,      /**< The normal Thread priority */
+	CY_RTOS_PRIORITY_ABOVENORMAL = 3, /**< A slightly elevated Thread priority */
+	CY_RTOS_PRIORITY_HIGH = 2,        /**< A high priority Thread */
+	CY_RTOS_PRIORITY_REALTIME = 1,    /**< Realtime Thread priority */
+	CY_RTOS_PRIORITY_MAX = 0          /**< Maximum allowable Thread priority */
 } cy_thread_priority_t;
 
 /** Alias for the RTOS specific definition of a thread handle */
@@ -83,6 +85,20 @@ typedef void *cy_thread_arg_t;
 typedef handle_t cy_mutex_t;
 /** Alias for the RTOS specific time unit (in milliseconds) */
 typedef time_t cy_time_t;
+/** Alias for the RTOS specific semaphore implementation */
+typedef struct {
+	handle_t mutex;
+	handle_t cond;
+	volatile unsigned int v;
+	unsigned int m;
+} cy_semaphore_t;
+/** Alias for the RTOS specific queue implementation */
+typedef struct {
+	atomic_uint head, tail;
+	size_t length, itemsz;
+	void *data;
+	bool was_dynamically_allocated;
+} cy_queue_t;
 
 /** \} group_abstraction_rtos_port */
 

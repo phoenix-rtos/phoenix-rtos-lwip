@@ -1,5 +1,5 @@
 /*
- * Copyright 2021, Cypress Semiconductor Corporation (an Infineon company)
+ * Copyright 2024, Cypress Semiconductor Corporation (an Infineon company)
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,6 +24,7 @@
 #ifndef INCLUDED_WHD_SDPCM_H
 #define INCLUDED_WHD_SDPCM_H
 
+#ifndef PROTO_MSGBUF
 #include "whd.h"
 #include "whd_events_int.h"
 #include "cyabs_rtos.h"
@@ -36,8 +37,8 @@ extern "C" {
 #endif
 
 /******************************************************
-*             Constants
-******************************************************/
+ *             Constants
+ ******************************************************/
 typedef enum {
 	DATA_HEADER = 2,
 	ASYNCEVENT_HEADER = 1,
@@ -45,15 +46,15 @@ typedef enum {
 } sdpcm_header_type_t;
 
 /******************************************************
-*             Macros
-******************************************************/
+ *             Macros
+ ******************************************************/
 
 #define BUS_HEADER_LEN (12)
 #define IOCTL_OFFSET   (sizeof(whd_buffer_header_t) + 12 + 16)
 
 /******************************************************
-*             Structures
-******************************************************/
+ *             Structures
+ ******************************************************/
 typedef struct whd_sdpcm_info {
 	/* Bus data credit variables */
 	uint8_t tx_seq;
@@ -62,9 +63,10 @@ typedef struct whd_sdpcm_info {
 
 	/* Packet send queue variables */
 	cy_semaphore_t send_queue_mutex;
-	whd_buffer_t send_queue_head;
-	whd_buffer_t send_queue_tail;
-	uint32_t npkt_in_q;
+	whd_buffer_t send_queue_head[5];
+	whd_buffer_t send_queue_tail[5];
+	uint32_t npkt_in_q[5]; /** 4 AC queues + 1 Control queue(IOVAR/IOCTLs) */
+	uint32_t totpkt_in_q;
 } whd_sdpcm_info_t;
 
 typedef struct
@@ -89,8 +91,8 @@ typedef struct
 #pragma pack()
 
 /******************************************************
-*             Function declarations
-******************************************************/
+ *             Function declarations
+ ******************************************************/
 
 extern void whd_sdpcm_process_rx_packet(whd_driver_t whd_driver, whd_buffer_t buffer);
 extern whd_result_t whd_sdpcm_init(whd_driver_t whd_driver);
@@ -103,17 +105,19 @@ extern whd_result_t whd_sdpcm_get_packet_to_send(whd_driver_t whd_driver, whd_bu
 extern void whd_sdpcm_update_credit(whd_driver_t whd_driver, uint8_t *data);
 extern uint8_t whd_sdpcm_get_available_credits(whd_driver_t whd_driver);
 extern void whd_update_host_interface_to_bss_index_mapping(whd_driver_t whd_driver, whd_interface_t interface,
-	uint32_t bssid_index);
+		uint32_t bssid_index);
 
 extern whd_result_t whd_send_to_bus(whd_driver_t whd_driver, whd_buffer_t buffer,
-	sdpcm_header_type_t header_type, uint8_t prio);
+		sdpcm_header_type_t header_type, uint8_t prio);
 
 /******************************************************
-*             Global variables
-******************************************************/
+ *             Global variables
+ ******************************************************/
 
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
+
+#endif /* PROTO_MSGBUF */
 
 #endif /* ifndef INCLUDED_WHD_SDPCM_H */

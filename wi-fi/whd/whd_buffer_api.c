@@ -1,5 +1,5 @@
 /*
- * Copyright 2021, Cypress Semiconductor Corporation (an Infineon company)
+ * Copyright 2024, Cypress Semiconductor Corporation (an Infineon company)
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -39,8 +39,8 @@
  *****************************************************/
 
 /******************************************************
-*               Function Definitions
-******************************************************/
+ *               Function Definitions
+ ******************************************************/
 /** Allocates a packet buffer
  *
  *  Implemented in the port layer interface which is specific to the
@@ -61,7 +61,7 @@
  *
  */
 whd_result_t whd_host_buffer_get(whd_driver_t whd_driver, whd_buffer_t *buffer, whd_buffer_dir_t direction,
-	uint16_t size, uint32_t timeout_ms)
+		uint16_t size, uint32_t timeout_ms)
 {
 	if (whd_driver->buffer_if->whd_host_buffer_get) {
 		return whd_driver->buffer_if->whd_host_buffer_get(buffer, direction, size, timeout_ms);

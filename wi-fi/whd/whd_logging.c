@@ -1,5 +1,5 @@
 /*
- * Copyright 2021, Cypress Semiconductor Corporation (an Infineon company)
+ * Copyright 2024, Cypress Semiconductor Corporation (an Infineon company)
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -34,17 +34,17 @@ int whd_buffer_printf(const char *format, ...)
 	va_start(args, format);
 
 	potential_num_written = vsnprintf(&(logbuf.buffer[logbuf.buffer_write]),
-		(size_t)(LOGGING_BUFFER_SIZE - (logbuf.buffer_write)) + 1, format, args);
+			(size_t)(LOGGING_BUFFER_SIZE - (logbuf.buffer_write)) + 1, format, args);
 
 	if (potential_num_written > (int)(LOGGING_BUFFER_SIZE - (logbuf.buffer_write))) {
 		/* full print did not fit in buffer - wipe what was just written
-           and reprint at start of buffer
-         */
+		   and reprint at start of buffer
+		 */
 		memset(&(logbuf.buffer[logbuf.buffer_write]), 0xf, (size_t)(LOGGING_BUFFER_SIZE - (logbuf.buffer_write)));
 
 		logbuf.buffer_write = 0;
 		potential_num_written = vsnprintf(&(logbuf.buffer[logbuf.buffer_write]),
-			(size_t)(LOGGING_BUFFER_SIZE - (logbuf.buffer_write)) + 1, format, args);
+				(size_t)(LOGGING_BUFFER_SIZE - (logbuf.buffer_write)) + 1, format, args);
 
 		logbuf.buffer_write += (unsigned)potential_num_written;
 		logbuf.buffer_write %= LOGGING_BUFFER_SIZE;

@@ -1,5 +1,5 @@
 /*
- * Copyright 2021, Cypress Semiconductor Corporation (an Infineon company)
+ * Copyright 2024, Cypress Semiconductor Corporation (an Infineon company)
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -33,23 +33,26 @@ extern "C" {
 /* List of events */
 #define WLC_E_NONE (0x7FFFFFFE) /**< Indicates the end of the event array list */
 
-#define WLC_E_SET_SSID     0           /**< Indicates status of set SSID. This event occurs when STA tries to join the AP*/
-#define WLC_E_AUTH         3           /**< 802.11 AUTH request event occurs when STA tries to get authenticated with the AP  */
-#define WLC_E_DEAUTH       5           /**< 802.11 DEAUTH request event occurs when the the SOFTAP is stopped to deuthenticate the connected stations*/
-#define WLC_E_DEAUTH_IND   6           /**< 802.11 DEAUTH indication event occurs when the STA gets deauthenticated by the AP */
-#define WLC_E_ASSOC        7           /**< 802.11 ASSOC request event occurs when STA joins the AP */
-#define WLC_E_ASSOC_IND    8           /**< 802.11 ASSOC indication occurs when a station joins the SOFTAP that is started */
-#define WLC_E_REASSOC      9           /**< 802.11 REASSOC request event when the STA again gets associated with the AP */
-#define WLC_E_REASSOC_IND  10          /**< 802.11 REASSOC indication occurs when a station again reassociates with the SOFTAP*/
-#define WLC_E_DISASSOC     11          /**< 802.11 DISASSOC request occurs when the STA the tries to leave the AP*/
-#define WLC_E_DISASSOC_IND 12          /**< 802.11 DISASSOC indication occurs when the connected station gets disassociates from SOFTAP, \
-											also when STA gets diassociated by the AP*/
-#define WLC_E_LINK                  16 /**< generic link indication */
-#define WLC_E_PROBREQ_MSG           44 /**< Indicates probe request received for the SOFTAP started*/
-#define WLC_E_PSK_SUP               46 /**< WPA Handshake fail during association*/
-#define WLC_E_ACTION_FRAME          59 /**< Indicates Action frame Rx */
-#define WLC_E_ACTION_FRAME_COMPLETE 60 /**< Indicates Action frame Tx complete */
-#define WLC_E_ESCAN_RESULT          69 /**< escan result event occurs when we scan for the networks */
+#define WLC_E_SET_SSID     0            /**< Indicates status of set SSID. This event occurs when STA tries to join the AP*/
+#define WLC_E_AUTH         3            /**< 802.11 AUTH request event occurs when STA tries to get authenticated with the AP  */
+#define WLC_E_DEAUTH       5            /**< 802.11 DEAUTH request event occurs when the the SOFTAP is stopped to deuthenticate the connected stations*/
+#define WLC_E_DEAUTH_IND   6            /**< 802.11 DEAUTH indication event occurs when the STA gets deauthenticated by the AP */
+#define WLC_E_ASSOC        7            /**< 802.11 ASSOC request event occurs when STA joins the AP */
+#define WLC_E_ASSOC_IND    8            /**< 802.11 ASSOC indication occurs when a station joins the SOFTAP that is started */
+#define WLC_E_REASSOC      9            /**< 802.11 REASSOC request event when the STA again gets associated with the AP */
+#define WLC_E_REASSOC_IND  10           /**< 802.11 REASSOC indication occurs when a station again reassociates with the SOFTAP*/
+#define WLC_E_DISASSOC     11           /**< 802.11 DISASSOC request occurs when the STA the tries to leave the AP*/
+#define WLC_E_DISASSOC_IND 12           /**< 802.11 DISASSOC indication occurs when the connected station gets disassociates from SOFTAP, \
+											 also when STA gets diassociated by the AP*/
+#define WLC_E_LINK                  16  /**< generic link indication */
+#define WLC_E_PROBREQ_MSG           44  /**< Indicates probe request received for the SOFTAP started*/
+#define WLC_E_PSK_SUP               46  /**< WPA Handshake fail during association*/
+#define WLC_E_ACTION_FRAME          59  /**< Indicates Action frame Rx */
+#define WLC_E_ACTION_FRAME_COMPLETE 60  /**< Indicates Action frame Tx complete */
+#define WLC_E_ESCAN_RESULT          69  /**< escan result event occurs when we scan for the networks */
+#define WLC_E_EXT_AUTH_REQ          187 /**< authentication request received */
+#define WLC_E_EXT_AUTH_FRAME_RX     188 /**< authentication request received */
+#define WLC_E_MGMT_FRAME_TXSTATUS   189 /**< mgmt frame Tx complete */
 
 /* List of status codes - Applicable for any event type */
 #define WLC_E_STATUS_SUCCESS     0    /**< operation was successful */
@@ -78,7 +81,7 @@ extern "C" {
  *
  * -Basic supplicant authentication states
  *
- + WLC_SUP_DISCONNECTED
+ *     + WLC_SUP_DISCONNECTED
  *     + WLC_SUP_CONNECTING
  *     + WLC_SUP_IDREQUIRED
  *     + WLC_SUP_AUTHENTICATING
@@ -87,7 +90,9 @@ extern "C" {
  *     + WLC_SUP_KEYED
  *     + WLC_SUP_TIMEOUT
  *     + WLC_SUP_LAST_BASIC_STATE
- *  -Extended supplicant authentication states
+ *
+ * -Extended supplicant authentication states
+ *
  *     + WLC_SUP_KEYXCHANGE_WAIT_M1
  *     + WLC_SUP_KEYXCHANGE_PREP_M2
  *     + WLC_SUP_KEYXCHANGE_WAIT_M3
@@ -114,6 +119,12 @@ typedef enum sup_auth_status {
 } sup_auth_status_t;
 
 #define WHD_MSG_IFNAME_MAX 16 /**< Max length of Interface name */
+
+/* Reason codes for LINK */
+#define WLC_E_LINK_BCN_LOSS   1 /**< Link down because of beacon loss */
+#define WLC_E_LINK_DISASSOC   2 /**< Link down because of disassoc */
+#define WLC_E_LINK_ASSOC_REC  3 /**< Link down because assoc recreate failed */
+#define WLC_E_LINK_BSSCFG_DIS 4 /**< Link down due to bsscfg down */
 
 #pragma pack(1)
 
@@ -178,7 +189,7 @@ typedef struct whd_event {
  *  @param  handler_user_data    semaphore data
  */
 typedef void *(*whd_event_handler_t)(whd_interface_t ifp, const whd_event_header_t *event_header,
-	const uint8_t *event_data, void *handler_user_data);
+		const uint8_t *event_data, void *handler_user_data);
 /** Error handler prototype definition
  *
  *  @param  whd_driver           Pointer to handle instance of whd driver
@@ -187,7 +198,7 @@ typedef void *(*whd_event_handler_t)(whd_interface_t ifp, const whd_event_header
  *  @param  handler_user_data    semaphore data
  */
 typedef void *(*whd_error_handler_t)(whd_driver_t whd_driver, const uint8_t *error_type,
-	const uint8_t *event_data, void *handler_user_data);
+		const uint8_t *event_data, void *handler_user_data);
 /* @} */
 /** Registers a handler to receive event callbacks.
  *
@@ -208,8 +219,8 @@ typedef void *(*whd_error_handler_t)(whd_driver_t whd_driver, const uint8_t *err
  *
  *  @return WHD_SUCCESS or Error code
  */
-uint32_t whd_wifi_set_event_handler(whd_interface_t ifp, const uint32_t *event_type, whd_event_handler_t handler_func,
-	void *handler_user_data, uint16_t *event_index);
+whd_result_t whd_wifi_set_event_handler(whd_interface_t ifp, const uint32_t *event_type, whd_event_handler_t handler_func,
+		void *handler_user_data, uint16_t *event_index);
 /** Registers a handler to receive error callbacks.
  *
  *  This function registers a callback handler to be notified when
@@ -229,8 +240,8 @@ uint32_t whd_wifi_set_event_handler(whd_interface_t ifp, const uint32_t *event_t
  *
  *  @return WHD_SUCCESS or Error code
  */
-uint32_t whd_wifi_set_error_handler(whd_interface_t ifp, const uint8_t *error_nums, whd_error_handler_t handler_func,
-	void *handler_user_data, uint16_t *error_index);
+whd_result_t whd_wifi_set_error_handler(whd_interface_t ifp, const uint8_t *error_nums, whd_error_handler_t handler_func,
+		void *handler_user_data, uint16_t *error_index);
 
 /** Delete/Deregister the event entry where callback is registered
  *
@@ -240,7 +251,7 @@ uint32_t whd_wifi_set_error_handler(whd_interface_t ifp, const uint8_t *error_nu
  *  @return WHD_SUCCESS or Error code
  */
 
-uint32_t whd_wifi_deregister_event_handler(whd_interface_t ifp, uint16_t event_index);
+whd_result_t whd_wifi_deregister_event_handler(whd_interface_t ifp, uint16_t event_index);
 /** Delete/Deregister the error entry where callback is registered
  *
  *  @param  ifp                Pointer to handle instance of whd interface
@@ -249,7 +260,7 @@ uint32_t whd_wifi_deregister_event_handler(whd_interface_t ifp, uint16_t event_i
  *  @return WHD_SUCCESS or Error code
  */
 
-uint32_t whd_wifi_deregister_error_handler(whd_interface_t ifp, uint16_t error_index);
+whd_result_t whd_wifi_deregister_error_handler(whd_interface_t ifp, uint16_t error_index);
 
 #ifdef __cplusplus
 } /* extern "C" */

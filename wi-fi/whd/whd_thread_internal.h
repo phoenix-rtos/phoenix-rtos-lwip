@@ -1,5 +1,5 @@
 /*
- * Copyright 2021, Cypress Semiconductor Corporation (an Infineon company)
+ * Copyright 2024, Cypress Semiconductor Corporation (an Infineon company)
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,8 +26,8 @@ extern "C" {
 #include "whd_int.h"
 
 /******************************************************
-*                      Macros
-******************************************************/
+ *                      Macros
+ ******************************************************/
 
 #define WHD_WLAN_KEEP_AWAKE(whd_driver) \
 	do { \
@@ -44,7 +44,7 @@ extern "C" {
 	} while (0)
 #define WHD_WLAN_MAY_SLEEP() \
 	((whd_driver->internal_info.whd_wlan_status.keep_wlan_awake == 0) && \
-		(whd_driver->internal_info.whd_wlan_status.state == WLAN_UP))
+			(whd_driver->internal_info.whd_wlan_status.state == WLAN_UP))
 
 #ifdef __cplusplus
 } /* extern "C" */

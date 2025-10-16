@@ -29,7 +29,7 @@
  * including Cypress's product in a High Risk Product, the manufacturer
  * of such system or application assumes all risk of such use and in doing
  * so agrees to indemnify Cypress against all liability.
-*/
+ */
 
 #ifndef LIBS_WIFI_MW_CORE_LWIP_WHD_PORT_CY_LWIP_LOG_H_
 #define LIBS_WIFI_MW_CORE_LWIP_WHD_PORT_CY_LWIP_LOG_H_

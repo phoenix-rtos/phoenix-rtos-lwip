@@ -1,5 +1,5 @@
 /*
- * Copyright 2021, Cypress Semiconductor Corporation (an Infineon company)
+ * Copyright 2024, Cypress Semiconductor Corporation (an Infineon company)
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,11 +21,12 @@
  */
 
 #include <stdint.h>
-#include <sys/types.h>
 
 #include "cybsp.h"
 #include "cy_result.h"
 #include "cyhal_hw_types.h"
+#include "cyhal_gpio.h"
+#include "cyabs_rtos.h"
 
 #ifndef INCLUDED_WHD_TYPES_H_
 #define INCLUDED_WHD_TYPES_H_
@@ -35,20 +36,24 @@ extern "C" {
 #endif
 
 /******************************************************
-*                      Macros
-******************************************************/
+ *                      Macros
+ ******************************************************/
 #define SSID_NAME_SIZE (32) /**< SSID Length */
 
-#define WEP_ENABLED    0x0001                                     /**< Flag to enable WEP Security        */
-#define TKIP_ENABLED   0x0002                                     /**< Flag to enable TKIP Encryption     */
-#define AES_ENABLED    0x0004                                     /**< Flag to enable AES Encryption      */
-#define SHARED_ENABLED 0x00008000                                 /**< Flag to enable Shared key Security */
-#define WPA_SECURITY   0x00200000                                 /**< Flag to enable WPA Security        */
-#define WPA2_SECURITY  0x00400000                                 /**< Flag to enable WPA2 Security       */
-#define WPA3_SECURITY  0x01000000                                 /**< Flag to enable WPA3 PSK Security   */
-#define SECURITY_MASK  (WEP_ENABLED | TKIP_ENABLED | AES_ENABLED) /**< Flag to Security mask */
+#define WEP_ENABLED    0x0001     /**< Flag to enable WEP Security        */
+#define TKIP_ENABLED   0x0002     /**< Flag to enable TKIP Encryption     */
+#define AES_ENABLED    0x0004     /**< Flag to enable AES Encryption      */
+#define SHARED_ENABLED 0x00008000 /**< Flag to enable Shared key Security */
+#define WPA_SECURITY   0x00200000 /**< Flag to enable WPA Security        */
+#define WPA2_SECURITY  0x00400000 /**< Flag to enable WPA2 Security       */
+#define WPA3_SECURITY  0x01000000 /**< Flag to enable WPA3 PSK Security   */
+#define WPA3_OWE       0x80000000 /**< Flag to enable WPA3 OWE Security   */
+
+#define SECURITY_MASK (WEP_ENABLED | TKIP_ENABLED | AES_ENABLED) /**< Flag to Security mask */
 
 #define ENTERPRISE_ENABLED 0x02000000 /**< Flag to enable Enterprise Security */
+#define SHA256_1X          0x04000000 /**< Flag 1X with SHA256 key derivation */
+#define SUITE_B_SHA384     0x08000000 /**< Flag to enable Suite B-192 SHA384 Security */
 #define WPS_ENABLED        0x10000000 /**< Flag to enable WPS Security        */
 #define IBSS_ENABLED       0x20000000 /**< Flag to enable IBSS mode           */
 #define FBT_ENABLED        0x40000000 /**< Flag to enable FBT                 */
@@ -56,6 +61,18 @@ extern "C" {
 #define PM1_POWERSAVE_MODE (1) /**< Powersave mode on specified interface without regard for throughput reduction */
 #define PM2_POWERSAVE_MODE (2) /**< Powersave mode on specified interface with High throughput */
 #define NO_POWERSAVE_MODE  (0) /**< No Powersave mode */
+
+#define ULP_BUSWIDTH_INTR_MODE (0) /**< Use BUS Width Interrupt method, when device is in DS2 state Exit */
+#define ULP_OOB_INTR_MODE      (1) /**< Use OOB interrupt method, when device is in DS2 state Exit */
+#define ULP_ASYNC_INTR_MODE    (2) /**< Use Asynchronous method, when device is in DS2 state Exit */
+
+#define PMKID_LEN (16) /**< PMKID LENGTH */
+
+#define ULP_NO_SUPPORT         (0) /**< Flag to disable ULP in 43022 */
+#define ULP_DS1_SUPPORT        (1) /**< Flag to enable DS1 mode in 43022 */
+#define ULP_DS2_SUPPORT        (2) /**< Flag to enable DS2 mode in 43022(Only supported in DM) */
+#define WHD_OOB_CONFIG_VERSION (2) /**< Indicate the version for whd_oob_config structure */
+#define WHD_SAP_USE_CHANSPEC   (1) /**< Define this macro as any value indicate whd_wifi_init_ap api uses chanspec instead of channel */
 
 /**
  * Suppress unused parameter warning
@@ -79,8 +96,8 @@ extern "C" {
 #endif
 
 /******************************************************
-*@cond               Type Definitions
-******************************************************/
+ *@cond               Type Definitions
+ ******************************************************/
 typedef void *whd_buffer_t;
 typedef struct wl_bss_info_struct whd_bss_info_t;
 typedef struct edcf_acparam whd_edcf_ac_param_t;
@@ -90,10 +107,14 @@ typedef struct wl_pkt_filter_stats whd_pkt_filter_stats_t;
 typedef struct whd_tko_retry whd_tko_retry_t;
 typedef struct whd_tko_connect whd_tko_connect_t;
 typedef struct whd_tko_status whd_tko_status_t;
+typedef struct whd_tko_auto_filter whd_tko_auto_filter_t;
+typedef struct whd_tko_autoconnect whd_tko_autoconnect_t;
+typedef struct tls_param_info tls_param_info_t;
+typedef struct secure_sess_info secure_sess_info_t;
 /** @endcond */
 /******************************************************
-*                    Constants
-******************************************************/
+ *                    Constants
+ ******************************************************/
 
 #define WIFI_IE_OUI_LENGTH (3) /**< OUI length for Information Element */
 #define VNDR_IE_MAX_LEN    255 /**< vendor IE max length, without ID and len */
@@ -101,6 +122,8 @@ typedef struct whd_tko_status whd_tko_status_t;
 /* Below constants are used to allocate the buffer pool by the application */
 
 #define BDC_HEADER_WITH_PAD 6 /**< BDC Header with padding 4 + 2 */
+
+#define MSGBUF_OVERHEAD_WITH_PAD 6 /**< Overhaed Space with padding 4 + 2 */
 
 /** From bdc header, Ethernet data starts after an offset of (bdc_header->data_offset<<2).
  * It is variable, but usually 4.
@@ -113,20 +136,32 @@ typedef struct whd_tko_status whd_tko_status_t;
 #define MAX_BUS_HEADER_SIZE 4 /**< Max bus header size for all bus types (sdio) */
 #elif (CYBSP_WIFI_INTERFACE_TYPE == CYBSP_SPI_INTERFACE)
 #define MAX_BUS_HEADER_SIZE 4 /**< Max bus header size for all bus types (spi) */
+#elif (CYBSP_WIFI_INTERFACE_TYPE == CYBSP_USB_INTERFACE)
+#define MAX_BUS_HEADER_SIZE 4 /**< Max bus header size for all bus types (usb) */
 #elif (CYBSP_WIFI_INTERFACE_TYPE == CYBSP_M2M_INTERFACE)
 #define MAX_BUS_HEADER_SIZE 8 /**< Max bus header size for all bus types (m2m) */
+#elif defined(COMPONENT_WIFI_INTERFACE_OCI)
+#define MAX_BUS_HEADER_SIZE 8 /**< Max bus header size for all bus types (custom/oci) */
 #else
-#error "CYBSP_WIFI_INTERFACE_TYPE is not defined"
+#error "CYBSP_WIFI_INTERFACE_TYPE or COMPONENT_WIFI_INTERFACE_OCI is not defined"
 #endif
 
 #define BUFFER_OVERHEAD 4 /**< Buffer overhead, sizeof(void *) */
 
+#ifndef PROTO_MSGBUF
 /**
  * The maximum space in bytes required for headers in front of the Ethernet header.
  * 6 + (8 + 4) + 4 + 4 + 4 = 30 bytes
  */
 #define WHD_LINK_HEADER (BDC_HEADER_WITH_PAD + BDC_HEADER_OFFSET_TO_DATA + \
-	SDPCM_HEADER + MAX_BUS_HEADER_SIZE + BUFFER_OVERHEAD)
+		SDPCM_HEADER + MAX_BUS_HEADER_SIZE + BUFFER_OVERHEAD)
+#else
+/*
+ * In nx_user.h NX_PHYSICAL_HEADER is (14(Ethernet) + 4(Overhaed) + 2(pad)),
+ * so we are doing the similar here -> 4(hedaer) + 2(pad) in front of ethernet header
+ */
+#define WHD_LINK_HEADER (MSGBUF_OVERHEAD_WITH_PAD)
+#endif /* PROTO_MSGBUF */
 
 /**
  * The size of an Ethernet header
@@ -162,8 +197,8 @@ typedef uint32_t whd_thread_arg_t;
 #endif
 /** @endcond */
 /******************************************************
-*               Structures and  Enumerations
-******************************************************/
+ *               Structures and  Enumerations
+ ******************************************************/
 /**
  * Enumeration of Dot11 Reason Codes
  */
@@ -201,6 +236,7 @@ typedef enum {
 	WHD_SECURITY_WPA_AES_PSK = (WPA_SECURITY | AES_ENABLED),                                       /**< WPA PSK Security with AES                             */
 	WHD_SECURITY_WPA_MIXED_PSK = (WPA_SECURITY | AES_ENABLED | TKIP_ENABLED),                      /**< WPA PSK Security with AES & TKIP                      */
 	WHD_SECURITY_WPA2_AES_PSK = (WPA2_SECURITY | AES_ENABLED),                                     /**< WPA2 PSK Security with AES                            */
+	WHD_SECURITY_WPA2_AES_PSK_SHA256 = (WPA2_SECURITY | SHA256_1X | AES_ENABLED),                  /**< WPA2 PSK SHA256 Security with AES                     */
 	WHD_SECURITY_WPA2_TKIP_PSK = (WPA2_SECURITY | TKIP_ENABLED),                                   /**< WPA2 PSK Security with TKIP                           */
 	WHD_SECURITY_WPA2_MIXED_PSK = (WPA2_SECURITY | AES_ENABLED | TKIP_ENABLED),                    /**< WPA2 PSK Security with AES & TKIP                     */
 	WHD_SECURITY_WPA2_FBT_PSK = (WPA2_SECURITY | AES_ENABLED | FBT_ENABLED),                       /**< WPA2 FBT PSK Security with AES & TKIP */
@@ -218,8 +254,13 @@ typedef enum {
 	WHD_SECURITY_WPA2_MIXED_ENT = (ENTERPRISE_ENABLED | WPA2_SECURITY | AES_ENABLED | TKIP_ENABLED), /**< WPA2 Enterprise Security with AES & TKIP              */
 	WHD_SECURITY_WPA2_FBT_ENT = (ENTERPRISE_ENABLED | WPA2_SECURITY | AES_ENABLED | FBT_ENABLED),    /**< WPA2 Enterprise Security with AES & FBT               */
 
-	WHD_SECURITY_IBSS_OPEN = (IBSS_ENABLED), /**< Open security on IBSS ad-hoc network                  */
-	WHD_SECURITY_WPS_SECURE = AES_ENABLED,   /**< WPS with AES security                                 */
+	WHD_SECURITY_WPA3_192BIT_ENT = (ENTERPRISE_ENABLED | WPA3_SECURITY | SUITE_B_SHA384 | AES_ENABLED),              /**< WPA3 192-BIT Enterprise Security with AES            */
+	WHD_SECURITY_WPA3_ENT = (ENTERPRISE_ENABLED | WPA3_SECURITY | SHA256_1X | AES_ENABLED),                          /**< WPA3 Enterprise Security with AES                    */
+	WHD_SECURITY_WPA3_ENT_AES_CCMP = (ENTERPRISE_ENABLED | WPA3_SECURITY | WPA2_SECURITY | SHA256_1X | AES_ENABLED), /**< WPA3 Enterprise transition Security with AES    */
+
+	WHD_SECURITY_IBSS_OPEN = (IBSS_ENABLED),                          /**< Open security on IBSS ad-hoc network                  */
+	WHD_SECURITY_WPS_SECURE = AES_ENABLED,                            /**< WPS with AES security                                 */
+	WHD_SECURITY_WPA3_OWE = (WPA3_SECURITY | AES_ENABLED | WPA3_OWE), /**< WPA3 Enhanced Open with AES security                                 */
 
 	WHD_SECURITY_UNKNOWN = -1, /**< May be returned by scan function if security is unknown. Do not pass this to the join function! */
 
@@ -253,8 +294,9 @@ typedef enum {
  * Enumeration of 802.11 radio bands
  */
 typedef enum {
-	WHD_802_11_BAND_5GHZ = 0,  /**< Denotes 5GHz radio band   */
-	WHD_802_11_BAND_2_4GHZ = 1 /**< Denotes 2.4GHz radio band */
+	WHD_802_11_BAND_5GHZ = 0,   /**< Denotes 5GHz radio band   */
+	WHD_802_11_BAND_2_4GHZ = 1, /**< Denotes 2.4GHz radio band */
+	WHD_802_11_BAND_6GHZ = 2    /**< Denotes 6GHz radio band   */
 } whd_802_11_band_t;
 
 /**
@@ -284,13 +326,21 @@ typedef enum {
 } whd_scan_status_t;
 
 /**
+ * Structure for storing status of auth event
+ */
+typedef enum {
+	WHD_AUTH_EXT_REQ,      /**< Request authentication received */
+	WHD_AUTH_EXT_FRAME_RX, /**< Authentication frame received */
+} whd_auth_status_t;
+
+/**
  * Structure for storing radio band list information
  */
 typedef struct
 {
 	int32_t number_of_bands; /**< Number of bands supported, currently 1 or 2      */
-	int32_t current_band;    /**< Current band type: WLC_BAND_2G or WLC_BAND_5G   */
-	int32_t other_band;      /**< If value of number_of_bands parameter is 2, then this member specifies the 2nd band */
+	int32_t current_band;    /**< Current band type: WLC_BAND_2G or WLC_BAND_5G or WLC_BAND_6G   */
+	int32_t other_band[2];   /**< If value of number_of_bands parameter is 2, then this member specifies the 2nd band */
 } whd_band_list_t;
 
 /**
@@ -298,7 +348,8 @@ typedef struct
  */
 typedef enum {
 	WHD_SCAN_RESULT_FLAG_RSSI_OFF_CHANNEL = 0x01, /**< RSSI came from an off channel DSSS (1 or 1 Mb) Rx */
-	WHD_SCAN_RESULT_FLAG_BEACON = 0x02            /**< Beacon (vs probe response)                        */
+	WHD_SCAN_RESULT_FLAG_BEACON = 0x02,           /**< Beacon (vs probe response)                        */
+	WHD_SCAN_RESULT_FLAG_SAE_H2E = 0x04,          /**< BSS is H2E(Hash-to-Element)                       */
 } whd_scan_result_flag_t;
 
 /**
@@ -383,9 +434,19 @@ typedef enum {
 	WHD_BUS_NO_DEFINE = 0xff,
 } whd_bus_type_t;
 
+/**
+ * Expand fw capabilities list to enumeration
+ */
+typedef enum {
+	WHD_FWCAP_SAE = 0,      /**< Internal SAE */
+	WHD_FWCAP_SAE_EXT = 1,  /**< External SAE */
+	WHD_FWCAP_OFFLOADS = 2, /**< Offload config */
+	WHD_FWCAP_GCMP = 3,     /**< GCMP */
+} whd_fwcap_id_t;
+
 /******************************************************
-*                 Type Definitions
-******************************************************/
+ *                 Type Definitions
+ ******************************************************/
 /** @cond */
 typedef struct whd_event_msg whd_event_header_t;
 /** @endcond */
@@ -439,12 +500,12 @@ typedef struct
  */
 #ifdef IL_BIGENDIAN
 #define MK_CNTRY(a, b, \
-	rev) (((unsigned char)(b)) + (((unsigned char)(a)) << 8) + \
-	(((unsigned short)(rev)) << 16))
+		rev) (((unsigned char)(b)) + (((unsigned char)(a)) << 8) + \
+		(((unsigned short)(rev)) << 16))
 #else /* ifdef IL_BIGENDIAN */
 #define MK_CNTRY(a, b, \
-	rev) (((unsigned char)(a)) + (((unsigned char)(b)) << 8) + \
-	(((unsigned short)(rev)) << 16))
+		rev) (((unsigned char)(a)) + (((unsigned char)(b)) << 8) + \
+		(((unsigned short)(rev)) << 16))
 #endif /* ifdef IL_BIGENDIAN */
 /** @endcond */
 
@@ -750,6 +811,7 @@ typedef struct wl_bss_info_struct {
 	uint16_t capability;    /**< Capability information */
 	uint8_t SSID_len;       /**< SSID length */
 	uint8_t SSID[32];       /**< Array to store SSID */
+	uint8_t reserved1[1];   /**< Reserved(padding) */
 	struct
 	{
 		uint32_t count;     /**< Count of rates in this set */
@@ -758,15 +820,19 @@ typedef struct wl_bss_info_struct {
 	wl_chanspec_t chanspec; /**< Channel specification for basic service set */
 	uint16_t atim_window;   /**< Announcement traffic indication message window size. Units are Kusec */
 	uint8_t dtim_period;    /**< Delivery traffic indication message period */
+	uint8_t reserved2[1];   /**< Reserved(padding) */
 	int16_t RSSI;           /**< receive signal strength (in dBm) */
 	int8_t phy_noise;       /**< noise (in dBm) */
 
 	uint8_t n_cap;                 /**< BSS is 802.11N Capable */
+	uint8_t reserved3[2];          /**< Reserved(padding) */
 	uint32_t nbss_cap;             /**< 802.11N BSS Capabilities (based on HT_CAP_*) */
 	uint8_t ctl_ch;                /**< 802.11N BSS control channel number */
+	uint8_t reserved4[3];          /**< Reserved(padding) */
 	uint32_t reserved32[1];        /**< Reserved for expansion of BSS properties */
 	uint8_t flags;                 /**< flags */
-	uint8_t reserved[3];           /**< Reserved for expansion of BSS properties */
+	uint8_t vht_cap;               /**< BSS is vht capable */
+	uint8_t reserved5[2];          /**< Reserved(padding) */
 	uint8_t basic_mcs[MCSSET_LEN]; /**< 802.11N BSS required MCS set */
 
 	uint16_t ie_offset; /**< offset at which IEs start, from beginning */
@@ -871,6 +937,10 @@ typedef uint32_t whd_result_t;
 #define WHD_HAL_ERROR                    WHD_RESULT_CREATE(1069) /**< WHD HAL Error */
 #define WHD_RTOS_STATIC_MEM_LIMIT        WHD_RESULT_CREATE(1070) /**< Exceeding the RTOS static objects memory */
 #define WHD_NO_REGISTER_FUNCTION_POINTER WHD_RESULT_CREATE(1071) /**< No register function pointer */
+#define WHD_BLHS_VALIDATE_FAILED         WHD_RESULT_CREATE(1072) /**< Bootloader handshake validation failed */
+#define WHD_BUS_UP_FAIL                  WHD_RESULT_CREATE(1073) /**< bus failed to come up */
+#define WHD_BUS_MEM_RESERVE_FAIL         WHD_RESULT_CREATE(1074) /**< commonring reserve for write failed */
+#define WHD_NO_PKT_ID_AVAILABLE          WHD_RESULT_CREATE(1075) /**< commonring reserve for write failed */
 
 #define WLAN_ENUM_OFFSET 2000 /**< WLAN enum offset for WHD_WLAN error processing */
 
@@ -955,9 +1025,34 @@ typedef struct
 #pragma pack()
 
 /**
+ * Structure describing a list of PMKID
+ */
+typedef struct _pmkid {
+	whd_mac_t BSSID;
+	uint8_t PMKID[PMKID_LEN];
+} pmkid_t;
+
+typedef struct _pmkid_list {
+	uint32_t npmkid;
+	pmkid_t pmkid[1];
+} pmkid_list_t;
+
+/**
+ * Structure used by both dongle and host
+ * dongle asks host to start auth(SAE), host updates auth status to dongle.
+ */
+typedef struct whd_auth_req_status {
+	uint16_t flags;
+	whd_mac_t peer_mac; /* peer mac address */
+	uint32_t ssid_len;
+	uint8_t ssid[SSID_NAME_SIZE];
+	uint8_t pmkid[PMKID_LEN];
+} whd_auth_req_status_t;
+
+/**
  * Time value in milliseconds
  */
-typedef time_t whd_time_t;
+typedef cy_time_t whd_time_t;
 
 /**
  * Structure for storing a WEP key
@@ -970,13 +1065,145 @@ typedef struct
 } whd_wep_key_t;
 
 /**
+ * Structure for management frame(auth) params
+ */
+typedef struct whd_auth_params {
+	uint32_t version;
+	uint32_t dwell_time;
+	uint16_t len; /* Len includes Len(MAC Headers) + Len(Contents) */
+	uint16_t fc;
+	uint16_t channel;
+	whd_mac_t da;
+	whd_mac_t bssid;
+	uint32_t packetId;
+	uint8_t data[1]; /* It contains MAC Headers + Contexts*/
+} whd_auth_params_t;
+
+/**
+ * Structure for he_omi params
+ */
+typedef struct
+{
+	uint8_t rx_nss;
+	uint8_t chnl_wdth;
+	uint8_t ul_mu_dis;
+	uint8_t tx_nsts;
+	uint8_t er_su_dis;
+	uint8_t dl_mu_resound;
+	uint8_t ul_mu_data_dis;
+	uint8_t reserved;
+} whd_he_omi_params_t;
+
+/**
+ * Structure for itwt_setup params
+ */
+typedef struct
+{
+	uint8_t setup_cmd;
+	uint8_t trigger;
+	uint8_t flow_type;     /* Un-Announced or Announced */
+	uint8_t flow_id;       /* 0xFF means any */
+	uint8_t wake_duration; /* Minimum TWT wake duration in units of 256 usec */
+	uint8_t exponent;      /* Used to compute TWT wake interval */
+	uint16_t mantissa;     /* Used to compute TWT wake interval */
+	uint32_t wake_time_h;  /* target wake time - BSS TSF (us) */
+	uint32_t wake_time_l;
+} whd_itwt_setup_params_t;
+
+/**
+ * Structure for btwt_join params
+ */
+typedef struct
+{
+	uint8_t setup_cmd;
+	uint8_t trigger;
+	uint8_t flow_type;     /* Un-Announced or Announced */
+	uint8_t bid;           /* bTWT ID */
+	uint8_t wake_duration; /* Minimum TWT wake duration in units of 256 usec */
+	uint8_t exponent;      /* Used to compute TWT wake interval */
+	uint16_t mantissa;     /* Used to compute TWT wake interval */
+	uint32_t wake_time_h;  /* target wake time - BSS TSF (us) */
+	uint32_t wake_time_l;
+} whd_btwt_join_params_t;
+
+/**
+ * Structure for twt_teardown params
+ */
+typedef struct
+{
+	uint8_t negotiation_type;
+	uint8_t flow_id;
+	uint8_t bcast_twt_id;
+	uint8_t teardown_all_twt;
+} whd_twt_teardown_params_t;
+
+/**
+ * Structure for btwt_config params
+ */
+typedef struct
+{
+	uint8_t setup_cmd;
+	uint8_t trigger;
+	uint8_t flow_type;     /* Un-Announced or Announced */
+	uint8_t bid;           /* bTWT ID */
+	uint8_t wake_duration; /* Minimum TWT wake duration in units of 256 usec */
+	uint8_t exponent;      /* Used to compute TWT wake interval */
+	uint16_t mantissa;     /* Used to compute TWT wake interval */
+} whd_btwt_config_params_t;
+
+/**
+ * Structure for twt_information params
+ */
+typedef struct
+{
+	uint8_t flow_id;
+	uint8_t suspend;     /* 1: suspend, 0: resume */
+	uint8_t resume_time; /* 0 ~ 4095 seconds */
+	uint8_t reserved;
+} whd_twt_information_params_t;
+
+/* MBO attributes as defined in the mbo spec */
+enum {
+	MBO_ATTR_MBO_AP_CAPABILITY = 1,
+	MBO_ATTR_NON_PREF_CHAN_REPORT = 2,
+	MBO_ATTR_CELL_DATA_CAP = 3,
+	MBO_ATTR_ASSOC_DISALLOWED = 4,
+	MBO_ATTR_CELL_DATA_CONN_PREF = 5,
+	MBO_ATTR_TRANS_REASON_CODE = 6,
+	MBO_ATTR_TRANS_REJ_REASON_CODE = 7,
+	MBO_ATTR_ASSOC_RETRY_DELAY = 8
+};
+
+/**
+ * Structure for mbo add_chan_pref params
+ */
+typedef struct
+{
+	uint8_t opclass;
+	uint8_t chan;
+	uint8_t pref; /* 0: non operable band/chan, 1: non preferred band/chan, 255: preferred band/chan */
+	uint8_t reason;
+} whd_mbo_add_chan_pref_params_t;
+
+/**
+ * Structure for mbo del_chan_pref params
+ */
+typedef struct
+{
+	uint8_t opclass;
+	uint8_t chan;
+} whd_mbo_del_chan_pref_params_t;
+
+/**
  * Structure for Out-of-band interrupt config parameters which can be set by application during whd power up
  */
 typedef struct whd_oob_config {
-	cyhal_gpio_t host_oob_pin;  /**< Host-side GPIO pin selection */
-	uint8_t dev_gpio_sel;       /**< WiFi device-side GPIO pin selection (must be zero) */
-	whd_bool_t is_falling_edge; /**< Interrupt trigger (polarity) */
-	uint8_t intr_priority;      /**< OOB interrupt priority */
+	cyhal_gpio_t host_oob_pin;          /**< Host-side GPIO pin selection */
+	cyhal_gpio_drive_mode_t drive_mode; /**< Host-side GPIO pin drive mode */
+	whd_bool_t init_drive_state;        /**< Host-side GPIO pin initial drive state */
+	uint8_t dev_gpio_sel;               /**< WiFi device-side GPIO pin selection (must be zero) */
+	whd_bool_t is_falling_edge;         /**< Interrupt trigger (polarity) */
+	uint8_t intr_priority;              /**< OOB interrupt priority */
 } whd_oob_config_t;
 
 /**
@@ -999,6 +1226,14 @@ typedef struct whd_spi_config {
 } whd_spi_config_t;
 
 /**
+ * Structure for USB config parameters which can be set by application during whd power up
+ */
+typedef struct whd_usb_config {
+	/* Bus config */
+	const char *path; /**< Path to USB device */
+} whd_usb_config_t;
+
+/**
  * Structure for M2M config parameters which can be set by application during whd power up
  */
 typedef struct whd_m2m_config {
@@ -1006,6 +1241,13 @@ typedef struct whd_m2m_config {
 	whd_bool_t is_normal_mode; /**< Default is false */
 } whd_m2m_config_t;
 
+/**
+ * Structure for OCI config parameters which can be set by application during whd power up
+ */
+typedef struct whd_oci_config {
+	/* Bus config */
+	whd_bool_t is_normal_mode; /**< Default is false */
+} whd_oci_config_t;
 
 /**
  * Enumeration of applicable packet mask bits for custom Information Elements (IEs)
@@ -1019,8 +1261,8 @@ typedef enum {
 	VENDOR_IE_ASSOC_REQUEST = 0x20, /**< Denotes association request packet     */
 	VENDOR_IE_CUSTOM = 0x100,       /**< Denotes a custom IE(Information Element) identifier */
 	VENDOR_IE_UNKNOWN = ~(VENDOR_IE_BEACON | VENDOR_IE_PROBE_RESPONSE | VENDOR_IE_ASSOC_RESPONSE |
-		VENDOR_IE_AUTH_RESPONSE | VENDOR_IE_PROBE_REQUEST | VENDOR_IE_ASSOC_REQUEST |
-		VENDOR_IE_CUSTOM)
+			VENDOR_IE_AUTH_RESPONSE | VENDOR_IE_PROBE_REQUEST | VENDOR_IE_ASSOC_REQUEST |
+			VENDOR_IE_CUSTOM)
 } whd_ie_packet_flag_t;
 
 /**
@@ -1065,6 +1307,109 @@ typedef struct
 	uint8_t *pattern;              /**< Pattern bytes used to filter eg. "\x0800"  (must be in network byte order) */
 	whd_bool_t enabled_status;     /**< When returned from wwd_wifi_get_packet_filters, indicates if the filter is enabled */
 } whd_packet_filter_t;
+
+typedef struct whd_keep_alive {
+	uint32_t period_msec;
+	uint16_t len_bytes;
+	uint8_t *data;
+} whd_keep_alive_t;
+
+#define TLS_MAX_KEY_LENGTH      48
+#define TLS_MAX_MAC_KEY_LENGTH  32
+#define TLS_MAX_IV_LENGTH       32
+#define TLS_MAX_SEQUENCE_LENGTH 8
+#define TLS_MAX_PAYLOAD_LEN     1024
+
+/* Secured WOWL packet was encrypted, need decrypted before check filter match */
+typedef enum wl_wowl_tls_mode {
+	TLS_MODE_SSWOWL,
+	TLS_MODE_MIWOWL
+} wl_wowl_tls_mode_t;
+
+/* add supported cipher suite according rfc5246#appendix-A.5 */
+typedef enum {
+	TLS_RSA_WITH_AES_128_CBC_SHA = 0x002F,
+	TLS_RSA_WITH_AES_256_CBC_SHA = 0x0035
+} Cipher_Suite_e;
+
+typedef enum {
+	CONTENTTYPE_CHANGE_CIPHER_SPEC = 20,
+	CONTENTTYPE_ALERT,
+	CONTENTTYPE_HANDSHAKE,
+	CONTENTTYPE_APPLICATION_DATA
+} ContentType_e;
+
+typedef enum {
+	COMPRESSIONMETHOD_NULL = 0
+} CompressionMethod_e;
+
+typedef enum {
+	BULKCIPHERALGORITHM_NULL,
+	BULKCIPHERALGORITHM_RC4,
+	BULKCIPHERALGORITHM_3DES,
+	BULKCIPHERALGORITHM_AES
+} BulkCipherAlgorithm_e;
+
+typedef enum {
+	CIPHERTYPE_STREAM = 1,
+	CIPHERTYPE_BLOCK,
+	CIPHERTYPE_AEAD
+} CipherType_e;
+
+typedef enum {
+	MACALGORITHM_NULL,
+	MACALGORITHM_HMAC_MD5,
+	MACALGORITHM_HMAC_SHA1,
+	MACALGORITHM_HMAC_SHA256,
+	MACALGORITHM_HMAC_SHA384,
+	MACALGORITHM_HMAC_SHA512
+} MACAlgorithm_e;
+
+typedef struct {
+	uint8_t major;
+	uint8_t minor;
+	uint8_t padding[2];
+} ProtocolVersion;
+
+#define ETHER_ADDR_LEN 6
+#define IPV4_ADDR_LEN  4
+
+struct tls_param_info {
+	ProtocolVersion version;
+	uint32_t compression_algorithm;
+	uint32_t cipher_algorithm;
+	uint32_t cipher_type;
+	uint32_t mac_algorithm;
+	uint32_t keepalive_interval; /* keepalive interval, in seconds */
+	uint8_t read_master_key[TLS_MAX_KEY_LENGTH];
+	uint32_t read_master_key_len;
+	uint8_t read_iv[TLS_MAX_IV_LENGTH];
+	uint32_t read_iv_len;
+	uint8_t read_mac_key[TLS_MAX_MAC_KEY_LENGTH];
+	uint32_t read_mac_key_len;
+	uint8_t read_sequence[TLS_MAX_SEQUENCE_LENGTH];
+	uint32_t read_sequence_len;
+	uint8_t write_master_key[TLS_MAX_KEY_LENGTH];
+	uint32_t write_master_key_len;
+	uint8_t write_iv[TLS_MAX_IV_LENGTH];
+	uint32_t write_iv_len;
+	uint8_t write_mac_key[TLS_MAX_MAC_KEY_LENGTH];
+	uint32_t write_mac_key_len;
+	uint8_t write_sequence[TLS_MAX_SEQUENCE_LENGTH];
+	uint32_t write_sequence_len;
+	uint32_t tcp_ack_num;
+	uint32_t tcp_seq_num;
+	uint8_t local_ip[IPV4_ADDR_LEN];
+	uint8_t remote_ip[IPV4_ADDR_LEN];
+	uint16_t local_port;
+	uint16_t remote_port;
+	uint8_t local_mac_addr[ETHER_ADDR_LEN];
+	uint8_t remote_mac_addr[ETHER_ADDR_LEN];
+	uint32_t app_syncid;
+	uint8_t payload[TLS_MAX_PAYLOAD_LEN];
+	uint16_t payload_len;
+	bool encrypt_then_mac;
+};
 
 #define TKO_DATA_OFFSET offsetof(wl_tko_t, data) /**< TKO data offset */
 
