@@ -225,6 +225,56 @@ static void wifi_ap_main_loop(void)
 }
 
 
+static void wifi_deinit_interface(void)
+{
+	/* All below functions are safe to call even if interface has not been initialized */
+	(void)cy_lwip_network_down(&wifi_common.iface);
+	(void)cy_lwip_remove_interface(&wifi_common.iface);
+	cybsp_wifi_deinit(wifi_common.iface.whd_iface);
+	cybsp_free();
+}
+
+
+static int wifi_init_interface(cy_lwip_nw_interface_role_t role)
+{
+	cy_rslt_t result;
+
+	result = cybsp_init();
+	if (result != CY_RSLT_SUCCESS) {
+		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't init Wi-Fi HW\n");
+		return -1;
+	}
+
+	result = cybsp_wifi_init_primary(&wifi_common.iface.whd_iface);
+	if (result != CY_RSLT_SUCCESS) {
+		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't init Wi-Fi interface\n");
+		cybsp_free();
+		return -1;
+	}
+
+	wifi_common.iface.role = role;
+
+	result = cy_lwip_add_interface(&wifi_common.iface, &ap_addr);
+	if (result != CY_RSLT_SUCCESS) {
+		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't add Wi-Fi interface\n");
+		cybsp_wifi_deinit(wifi_common.iface.whd_iface);
+		cybsp_free();
+		return -1;
+	}
+
+	result = cy_lwip_network_up(&wifi_common.iface);
+	if (result != CY_RSLT_SUCCESS) {
+		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't bring up Wi-Fi interface\n");
+		cy_lwip_remove_interface(&wifi_common.iface);
+		cybsp_wifi_deinit(wifi_common.iface.whd_iface);
+		cybsp_free();
+		return -1;
+	}
+
+	return 0;
+}
+
+
 static void wifi_ap_thread(void *arg)
 {
 	bool started = false;
@@ -243,55 +293,21 @@ static void wifi_ap_thread(void *arg)
 
 		mutexUnlock(wifi_common.lock);
 
-		result = cybsp_init();
-		if (result != CY_RSLT_SUCCESS) {
-			wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't init Wi-Fi HW\n");
-			break;
-		}
-
-		result = cybsp_wifi_init_primary(&wifi_common.iface.whd_iface);
-		if (result != CY_RSLT_SUCCESS) {
-			wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't init Wi-Fi interface\n");
-			cybsp_free();
-			break;
-		}
-
-		wifi_common.iface.role = CY_LWIP_AP_NW_INTERFACE;
-
-		result = cy_lwip_add_interface(&wifi_common.iface, &ap_addr);
-		if (result != CY_RSLT_SUCCESS) {
-			wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't add Wi-Fi interface\n");
-			cybsp_wifi_deinit(wifi_common.iface.whd_iface);
-			cybsp_free();
-			break;
-		}
-
-		result = cy_lwip_network_up(&wifi_common.iface);
-		if (result != CY_RSLT_SUCCESS) {
-			wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't bring up Wi-Fi interface\n");
-			cy_lwip_remove_interface(&wifi_common.iface);
-			cybsp_wifi_deinit(wifi_common.iface.whd_iface);
-			cybsp_free();
+		if (wifi_init_interface(CY_LWIP_AP_NW_INTERFACE) < 0) {
 			break;
 		}
 
 		result = whd_wifi_init_ap(wifi_common.iface.whd_iface, &ssid, AP_SECURITY_MODE, key, key_len, AP_CHANNEL);
 		if (result != WHD_SUCCESS) {
 			wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't init Wi-Fi AP\n");
-			cy_lwip_network_down(&wifi_common.iface);
-			cy_lwip_remove_interface(&wifi_common.iface);
-			cybsp_wifi_deinit(wifi_common.iface.whd_iface);
-			cybsp_free();
+			wifi_deinit_interface();
 			break;
 		}
 
 		result = whd_wifi_start_ap(wifi_common.iface.whd_iface);
 		if (result != WHD_SUCCESS) {
 			wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't start Wi-Fi AP\n");
-			cy_lwip_network_down(&wifi_common.iface);
-			cy_lwip_remove_interface(&wifi_common.iface);
-			cybsp_wifi_deinit(wifi_common.iface.whd_iface);
-			cybsp_free();
+			wifi_deinit_interface();
 			break;
 		}
 
@@ -307,10 +323,7 @@ static void wifi_ap_thread(void *arg)
 		wifi_ap_main_loop();
 
 		whd_wifi_stop_ap(wifi_common.iface.whd_iface);
-		cy_lwip_network_down(&wifi_common.iface);
-		cy_lwip_remove_interface(&wifi_common.iface);
-		cybsp_wifi_deinit(wifi_common.iface.whd_iface);
-		cybsp_free();
+		wifi_deinit_interface();
 	}
 
 	mutexLock(wifi_common.lock);
