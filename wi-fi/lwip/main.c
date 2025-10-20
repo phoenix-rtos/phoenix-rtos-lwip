@@ -121,12 +121,32 @@ static int wifi_ap_set_idle_timeout(const char *data, size_t len)
 }
 
 
+static const char *trim(const char *str, size_t *len)
+{
+	size_t sz = *len;
+	while (sz > 0 && !isgraph(*str)) {
+		str++;
+		sz--;
+	}
+
+	while (sz > 0 && !isgraph(str[sz - 1])) {
+		sz--;
+	}
+
+	*len = sz;
+
+	return str;
+}
+
+
 static int wifi_ap_set_ssid(const char *ssid, size_t len)
 {
 	if (len > SSID_NAME_SIZE) {
 		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't set Wi-Fi SSID (max length is %u)\n", SSID_NAME_SIZE);
 		return -1;
 	}
+
+	ssid = trim(ssid, &len);
 
 	mutexLock(wifi_common.lock);
 	memcpy(wifi_common.ssid.value, ssid, len);
@@ -148,6 +168,8 @@ static int wifi_ap_set_key(const char *key, size_t len)
 		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't set Wi-Fi key (max length is %u)\n", WSEC_MAX_PSK_LEN);
 		return -1;
 	}
+
+	key = trim(key, &len);
 
 	mutexLock(wifi_common.lock);
 	memcpy(wifi_common.key, key, len);
@@ -446,6 +468,7 @@ static int wifi_dev_read(char *data, size_t size, off_t offset)
 
 static int wifi_dev_write(const char *data, size_t size)
 {
+	data = trim(data, &size);
 	if (size >= 8 && strncmp("timeout ", data, 8) == 0) {
 		wifi_ap_set_idle_timeout(data + 8, size - 8);
 	}
