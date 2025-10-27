@@ -1,0 +1,12 @@
+#
+# Makefile for Phoenix-RTOS LwIP
+#
+# aarch64a53-zynqmp target
+#
+# Copyright 2025 Phoenix Systems
+#
+
+NET_DRIVERS_SUPPORTED := zynq
+NET_DRIVERS ?= $(NET_DRIVERS_SUPPORTED)
+
+DRIVERS_SRCS_zynq = zynq-gem.c ephy_alaska.c null-gpio.c $(DRIVERS_SRCS_UTIL)
