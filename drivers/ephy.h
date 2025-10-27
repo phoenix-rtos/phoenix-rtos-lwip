@@ -25,7 +25,8 @@ typedef struct {
 		ephy_ksz9031mnx,
 		ephy_dp83867is,
 		ephy_rtl8201fi,
-		ephy_rtl8211fdi } model;
+		ephy_rtl8211fdi,
+		ephy_alaska88e1512 } model;
 	unsigned bus;
 	unsigned addr;
 	unsigned reset_hold_time_us;
@@ -55,5 +56,12 @@ void ephy_macInterrupt(const eth_phy_state_t *phy);
 
 /* toggle MACPHY internal loopback for test mode */
 int ephy_enableLoopback(const eth_phy_state_t *phy, bool enable);
+
+
+void ephy_macInterrupt(const eth_phy_state_t *phy);
+
+
+int ephy_linkStateGet(const eth_phy_state_t *phy);
+
 
 #endif /* NET_EPHY_H_ */
