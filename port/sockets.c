@@ -1139,7 +1139,7 @@ static void socketsrv_thread(void *arg)
 	const char *node, *serv;
 #endif
 
-	port = (unsigned)arg;
+	port = (uintptr_t)arg;
 
 	while ((err = msgRecv(port, &msg, &respid)) >= 0) {
 		const sockport_msg_t *smi = (const void *)msg.i.raw;
@@ -1235,7 +1235,7 @@ __constructor__(1000) void init_lwip_sockets(void)
 		errout(err, "create_dev(%s)", PATH_SOCKSRV);
 	}
 
-	if ((err = sys_thread_opt_new("socketsrv", socketsrv_thread, (void *)oid.port, SOCKTHREAD_STACKSZ, SOCKTHREAD_PRIO, NULL))) {
+	if ((err = sys_thread_opt_new("socketsrv", socketsrv_thread, (void *)(uintptr_t)oid.port, SOCKTHREAD_STACKSZ, SOCKTHREAD_PRIO, NULL))) {
 		portDestroy(oid.port);
 		errout(err, "thread(socketsrv)");
 	}
