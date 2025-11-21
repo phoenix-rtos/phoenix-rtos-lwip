@@ -1225,9 +1225,13 @@ lowpan6_g3_input(struct pbuf *p, struct netif *netif)
         return ERR_OK;
       }
     } else if (b == LOWPAN6_HEADER_ESC && puc[1] == LOWPAN6_CMD_LBP) {
-      return lbp_g3_input(netif, p, originator);
+      /* always return ERR_OK here to prevent the caller freeing the pbuf */
+      lbp_g3_input(netif, p, originator);
+      return ERR_OK;
     } else if (b == LOWPAN6_HEADER_ESC && puc[1] == LOWPAN6_CMD_LOADNG) {
-      return loadng_g3_input(netif, p, src, indication);
+      /* always return ERR_OK here to prevent the caller freeing the pbuf */
+      loadng_g3_input(netif, p, src, indication);
+      return ERR_OK;
     } else {
       goto lowpan6_input_discard;
     }
