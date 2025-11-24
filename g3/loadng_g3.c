@@ -16,6 +16,9 @@
 #include "lwip/arch.h"
 #include "lwip/sys.h"
 
+#include <math.h>
+#include <stdint.h>
+
 #define LOADNG_G3_MAX_DIST          0xFFFF
 #define LOADNG_G3_MAX_SEQ_NUM       65535
 #define LOADNG_G3_MAX_HOP_COUNT     15
@@ -291,26 +294,33 @@ loadng_g3_msg_init(u8_t msg_type)
  * the MAC neighbour table.
  */
 static u16_t
-loadng_g3_link_cost_dir(struct netif *netif, u8_t mod_type, u8_t active_tones, u8_t lqi)
+loadng_g3_link_cost_dir(struct netif *netif, u8_t modType, u8_t activeTones, u8_t lqi)
 {
   lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
-  const u8_t mod_km[5] = { 3, 3, 2, 1, 0 };
-  const u8_t mod_kr = mod_type == 0; /* Check for Robust modulation type */
-  u16_t kq_part, kc_part;
+  const u8_t modKm[5] = { 3, 3, 2, 1, 0 };
+  const u8_t modKr = (modType == 0)? 1 : 0;	/* Check for Robust modulation type */
+  float kqPart, kcPart;
+  float costTot, costInt, costFract;
+  u8_t costRound;
 
-  if (mod_type >= sizeof(mod_km)) {
+  if (modType >= sizeof(modKm)) {
     return 0;
   }
 
-  kq_part = (ctx->high_lqi_value > lqi) ? (ctx->high_lqi_value - lqi) : 0;
-  kq_part = LWIP_MIN(1, kq_part / (ctx->high_lqi_value - ctx->low_lqi_value));
+  kqPart = (ctx->high_lqi_value > lqi) ? (ctx->high_lqi_value - lqi) : 0;
+  kqPart = LWIP_MIN(1, kqPart / (ctx->high_lqi_value - ctx->low_lqi_value));
 
-  kc_part = (ctx->max_tones - active_tones) / ctx->max_tones;
+  kcPart = (ctx->max_tones - activeTones) / ctx->max_tones;
 
-  return ctx->kr * mod_kr
-         + ctx->km * mod_km[mod_type]
-         + ctx->kc * kc_part
-         + ctx->kq * kq_part;
+  costTot = (ctx->kr * modKr + ctx->km * modKm[modType] + ctx->kc * kcPart + ctx->kq * kqPart);
+  /* rounding half towards zero as per G3 spec. */
+  costFract = modff(costTot, &costInt);
+  if (costInt >= UINT16_MAX) {
+	return UINT16_MAX;
+  }
+  costRound = (costFract <= 0.5)? 0 : 1;
+
+  return ((u16_t)costInt + costRound);
 }
 
 /**
