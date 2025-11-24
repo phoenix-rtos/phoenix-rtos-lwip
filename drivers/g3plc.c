@@ -99,7 +99,7 @@ static struct macMibValue setup_nb_table(ps_g3_mac_nb_entry_t *nb_entry)
 	struct macMibValue value;
 	uint8_t *ptr = (uint8_t *)value.data;
 
-	*ptr++ = nb_entry->short_address && 0xff;
+	*ptr++ = nb_entry->short_address & 0xff;
 	*ptr++ = (nb_entry->short_address >> 8) & 0xff;
 	memcpy(ptr, nb_entry->tone_map.tm, sizeof(nb_entry->tone_map));
 	ptr += sizeof(ps_g3_phy_tone_map_t);
