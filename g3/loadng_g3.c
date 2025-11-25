@@ -647,8 +647,7 @@ adpm_route_discovery(struct netif *netif, struct lowpan6_link_addr *dst, u8_t ma
 
 static err_t
 loadng_g3_routing_table_update(struct netif *netif, struct loadng_g3_route_msg *msg, u16_t previous_hop, u8_t weak_link_count,
-                            u8_t used_metric_type, u16_t link_metric, u16_t route_metric,
-                            u8_t hop_count, u8_t msg_type)
+                            u8_t used_metric_type, u16_t link_metric, u8_t link_lqi, u16_t route_metric, u8_t hop_count, u8_t msg_type)
 {
   lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
   struct lowpan6_g3_routing_entry *entry;
@@ -710,7 +709,7 @@ loadng_g3_routing_table_update(struct netif *netif, struct loadng_g3_route_msg *
       entry->valid_time = ctx->routing_table_ttl;
       entry->is_bidirectional = (msg_type == LOADNG_G3_MSG_TYPE_RREP) ? 1 : 0;
       entry->local_iface_addr = lowpan6_dev_short_addr(ctx);
-      entry->weak_link_count = (link_metric > ctx->weak_lqi_value) ? 1 : 0;
+      entry->weak_link_count = (link_lqi < ctx->weak_lqi_value)? 1 : 0;
       loadng_g3_routing_entry_debug(entry);
     }
   }
@@ -1237,7 +1236,7 @@ loadng_g3_rreq_rrep_process(struct netif *netif, struct pbuf *p, u8_t msg_type, 
   hop_limit = msg->hop_limit - 1;
   weak_link_count = msg->weak_link;
 
-  if (indication->msdu_linkquality > ctx->weak_lqi_value) {
+  if (indication->msdu_linkquality < ctx->weak_lqi_value) {
     weak_link_count++;
   }
 
@@ -1254,7 +1253,7 @@ loadng_g3_rreq_rrep_process(struct netif *netif, struct pbuf *p, u8_t msg_type, 
 
   /* If we don't update the routing table, discard the msg */
   if (loadng_g3_routing_table_update(netif, msg, previous_hop, weak_link_count, used_metric_type,
-                                     link_metric, route_metric, hop_count, msg_type) < 0) {
+                                     link_metric, indication->msdu_linkquality, route_metric, hop_count, msg_type) < 0) {
     return ERR_OK;
   }
 
@@ -1283,7 +1282,7 @@ loadng_g3_rlc_rreq_rrep_reprocess(struct netif *netif, struct pbuf *p, u8_t msg_
   hop_limit = msg->hop_limit - 1;
   weak_link_count = msg->weak_link;
 
-  if (lqi > ctx->weak_lqi_value)
+  if (lqi < ctx->weak_lqi_value)
     weak_link_count++;
 
   used_metric_type = msg->metric_type;
@@ -1291,7 +1290,7 @@ loadng_g3_rlc_rreq_rrep_reprocess(struct netif *netif, struct pbuf *p, u8_t msg_
   route_metric = lwip_ntohs(msg->route_cost) + link_metric;
 
   loadng_g3_routing_table_update(netif, msg, previous_hop, weak_link_count, used_metric_type,
-                                link_metric, route_metric, hop_count, msg_type);
+                                link_metric, lqi, route_metric, hop_count, msg_type);
 
   LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3_rlc_rreq_rrep_reprocess: Reprocessing %s msg destined to %04X\n",
                              (msg_type == LOADNG_G3_MSG_TYPE_RREQ) ? "RREQ" : "RREP", lwip_ntohs(msg->destination)));
