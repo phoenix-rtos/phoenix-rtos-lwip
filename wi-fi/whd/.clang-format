@@ -1,0 +1,8 @@
+---
+# disable clang-format to keep the original LwIP code style
+DisableFormat: 'true'
+
+# clang-format has a bug in which it insists on sorting includes even if disabled
+SortIncludes: 'false'
+
+...
