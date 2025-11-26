@@ -368,7 +368,6 @@ static void whd_thread_func(cy_thread_arg_t thread_input)
     int8_t tx_status;
     uint8_t rx_cnt, rx_over_bound = 0;
     uint8_t bus_fail = 0;
-    uint8_t error_type;
     uint32_t status;
 
     whd_driver_t whd_driver = ( whd_driver_t )thread_input;
@@ -424,9 +423,13 @@ static void whd_thread_func(cy_thread_arg_t thread_input)
         }
         if (bus_fail > WHD_MAX_BUS_FAIL)
         {
-            WPRINT_WHD_ERROR( ("%s: Error bus_fail over %d times\n", __FUNCTION__, WHD_MAX_BUS_FAIL) );
-            error_type = WLC_ERR_BUS;
+            WPRINT_WHD_ERROR( ("%s: Error bus_fail over %d times, exiting\n", __FUNCTION__, WHD_MAX_BUS_FAIL) );
+#if 0
+            uint8_t error_type = WLC_ERR_BUS;
             whd_set_error_handler_locally(whd_driver, &error_type, NULL, NULL, NULL);
+#else
+            break;
+#endif
         }
 
         /* Sleep till WLAN do something */
