@@ -1448,6 +1448,7 @@ loadng_g3_tmr(void)
   struct lowpan6_link_addr dest, orig;
   struct loadng_g3_q_entry *tmp;
   struct loadng_g3_route_msg *rreq;
+  struct lowpan6_g3_routing_entry *routEntry;
   u32_t now = sys_now();
   unsigned i;
 
@@ -1505,6 +1506,10 @@ loadng_g3_tmr(void)
           /* Route discovery fail */
           LWIP_DEBUGF(LOADNG_G3_DEBUG, ("loadng_g3_tmr: Route discovery of %04X failed.\n",
                                      lwip_ntohs(rreq_table[i].dest_addr)));
+          routEntry = lowpan6_g3_routing_table_lookup(rreq_table[i].dest_addr, 0);
+          if (routEntry != NULL) {
+              lowpan6_g3_routing_table_delete(routEntry);
+          }
 
           /* If it was a route repair started by an intermediate device, inform the frame's
            * originator by sending an RERR.
