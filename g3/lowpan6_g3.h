@@ -257,6 +257,7 @@ unsigned int lowpan6_g3_add_mesh_header(u8_t *buffer, u8_t hops_left, const stru
 
 int lowpan6_g3_group_table_add(u16_t addr);
 struct lowpan6_g3_blacklist_entry *lowpan6_g3_blacklist_table_add(u16_t addr);
+void lowpan6_g3_blacklist_table_remove(struct lowpan6_g3_blacklist_entry *entry);
 struct lowpan6_g3_blacklist_entry *lowpan6_g3_blacklist_table_lookup(u16_t addr);
 struct lowpan6_g3_routing_entry *lowpan6_g3_routing_table_lookup(u16_t dst, u8_t bidirectional_only);
 struct lowpan6_g3_routing_entry *lowpan6_g3_routing_table_add(u16_t dst, u16_t next, u16_t metric, u16_t hop_count);

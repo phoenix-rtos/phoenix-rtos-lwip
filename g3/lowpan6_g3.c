@@ -321,6 +321,15 @@ lowpan6_g3_blacklist_table_add(u16_t addr)
   return NULL;
 }
 
+void lowpan6_g3_blacklist_table_remove(struct lowpan6_g3_blacklist_entry *entry)
+{
+	if (entry == NULL) {
+		return;
+	}
+	entry->valid_time = 0;
+	entry->address = 0;
+}
+
 struct lowpan6_g3_blacklist_entry *
 lowpan6_g3_blacklist_table_lookup(u16_t addr)
 {
@@ -789,6 +798,7 @@ lowpan6_g3_status_handle(struct netif *netif, struct pbuf *p, struct lowpan6_lin
 {
   lowpan6_g3_data_t *ctx = (lowpan6_g3_data_t *) netif->state;
   struct lowpan6_link_addr *originator, *final_dest;
+  struct lowpan6_g3_blacklist_entry *bentry;
   struct lowpan6_g3_mesh_hdr mesh_hdr;
   u8_t *buf;
   u8_t max_hops;
@@ -822,6 +832,27 @@ lowpan6_g3_status_handle(struct netif *netif, struct pbuf *p, struct lowpan6_lin
   }
 
   is_route_repair = loadng_g3_route_repair_status(netif, final_dest);
+
+  /* Blacklist table update */
+  if (status == g3plc_mac_status_no_ack) {
+	bentry = lowpan6_g3_blacklist_table_lookup(lowpan6_link_addr_to_u16(dest));
+	if (bentry == NULL) {
+		bentry = lowpan6_g3_blacklist_table_add(lowpan6_link_addr_to_u16(dest));
+		LWIP_ERROR("lowpan6_g3_status_handle: Blacklist table full!\n", bentry != NULL, break);
+	}
+	bentry->valid_time = ctx->blacklist_table_ttl;
+  } else if (status == g3plc_mac_status_success) {
+	bentry = lowpan6_g3_blacklist_table_lookup(lowpan6_link_addr_to_u16(dest));
+	if (bentry != NULL) {
+		lowpan6_g3_blacklist_table_remove(bentry);
+		LWIP_DEBUGF(LWIP_LOWPAN6_DEBUG,("lowpan6_g3_status_handle: device %02X%02X deleted from blacklist\n",
+										dest->addr[0], dest->addr[1]));
+	}
+  } else {
+	/* No action required */
+  }
+
+  /* Route Repair decision tree */
   if (status == g3plc_mac_status_no_ack ||
       status == g3plc_mac_status_transaction_expires) {
     LWIP_DEBUGF(LWIP_LOWPAN6_DEBUG, ("lowpan6_g3_status_handle: Sending data failed due to device %02X%02X being unreachable.\n",
@@ -843,8 +874,8 @@ lowpan6_g3_status_handle(struct netif *netif, struct pbuf *p, struct lowpan6_lin
   } else if (status != g3plc_mac_status_success) {
     LWIP_DEBUGF(LWIP_LOWPAN6_DEBUG, ("lowpan6_g3_status_handle: Sending data failed with status: %02X\n", status));
   } else {
+	/* No action required */
   }
-  /* TODO: do we have to remove a device from blacklist? */
 
   return ERR_OK;
 }
