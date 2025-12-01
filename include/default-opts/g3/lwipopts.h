@@ -10,7 +10,7 @@
 #define LWIP_ICMP                     1
 #define LWIP_RAW                      1
 #define LWIP_DHCP                     0
-#define LWIP_DNS                      0
+#define LWIP_DNS                      1
 #define LWIP_AUTOIP                   1
 #define LWIP_UDP                      1
 #define LWIP_TCP                      0
