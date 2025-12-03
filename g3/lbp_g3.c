@@ -324,7 +324,7 @@ lbp_g3_handle_params(struct netif *netif, u8_t *in_buf, u16_t in_len,
             pos_out += lbp_g3_encode_param_result(out_buf + pos_out, attr_id, LBP_G3_PARAM_INVALID_VAL);
           }
         } else {
-          ctx->active_key_index = *attr_val;
+          ctx->rekey_gmk = *attr_val;
         }
         break;
       case LBP_G3_ATTR_SHORT_ADDR:
@@ -500,7 +500,6 @@ lbp_g3_handle_accepted(struct netif *netif, struct pbuf *p, struct lowpan6_link_
 
     if (ctx->is_rekeying) {
       expected_params_mask = lbp_g3_attr_flg(LBP_G3_ATTR_GMK_ACTIVATION);
-      ctx->is_rekeying = 0;
     }
 
     p_res_len = lbp_g3_handle_params(netif, lbp_payload, payload_len,
@@ -511,6 +510,12 @@ lbp_g3_handle_accepted(struct netif *netif, struct pbuf *p, struct lowpan6_link_
     /* Reply to coordinator */
     ret = lbp_g3_output(netif, reply, origin);
     pbuf_free(reply);
+
+    /* new GMK key activated after LBP JOINING message embedding Parameter-result sent to LBS */
+    if (ctx->is_rekeying) {
+        ctx->is_rekeying = 0;
+        ctx->active_key_index = ctx->rekey_gmk;
+    }
 
     return ret;
   } else {
@@ -1193,7 +1198,7 @@ err_t lbp_g3_lbs_rekey(struct netif *netif, u8_t gmk_id)
 
   for (i = 0; i < LBP_G3_PAN_DEVINFO_TABLE_SIZE; i++) {
     if (device_table[i].dev_state == LBP_G3_LBS_DEV_ACCEPTED) {
-      lowpan6_link_addr_set_u16(&dst, lwip_htons(device_table[i].short_addr));
+      lowpan6_link_addr_set_u16(&dst, device_table[i].short_addr);
       if (lbp_g3_lbs_gen_msg1(netif, device_table[i].ext_addr, &dst) < 0) {
         LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_lbs_rekey: Rekeying initiation failed!\n"));
         return ERR_VAL;
@@ -1323,7 +1328,7 @@ lbp_g3_lbs_handle_rekey_update(struct netif *netif)
       }
       lbp_g3_param_encode(lbp_g3_msg_payload(p), LBP_G3_ATTR_GMK_ACTIVATION,
                           LBP_G3_LIB_PSI, 1, &ctx->rekey_gmk);
-      lowpan6_link_addr_set_u16(&dest, lwip_htons(device_table[i].short_addr));
+      lowpan6_link_addr_set_u16(&dest, device_table[i].short_addr);
       lbp_g3_output(netif, p, &dest);
       device_table[i].dev_state = LBP_G3_LBS_DEV_ACCEPTED;
       pbuf_free(p);
@@ -1807,6 +1812,7 @@ lbp_g3_output(struct netif *netif, struct pbuf *p, struct lowpan6_link_addr *dst
   }
 
   LWIP_DEBUGF(LBP_G3_DEBUG, ("lbp_g3_output: lbp_g3_output: %02X%02X\n", dst->addr[0], dst->addr[1]));
+
   return g3plc_output(netif, p, src, dst, security_level,
                               ctx->pan_id, 0, ctx->active_key_index);
 }
