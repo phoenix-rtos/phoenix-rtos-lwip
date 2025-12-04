@@ -23,7 +23,11 @@
 #define LOADNG_G3_MAX_SEQ_NUM       65535
 #define LOADNG_G3_MAX_HOP_COUNT     15
 
-/* Common structure for RREQ and RREP messages */
+/* 
+ * Common structure for RREQ and RREP messages
+ * 
+ * FIXME: assuming little-endian
+ */ 
 #ifdef PACK_STRUCT_USE_INCLUDES
 #include "arch/bpstruct.h"
 #endif
@@ -114,8 +118,8 @@ PACK_STRUCT_BEGIN
 struct loadng_g3_rlcreq_msg {
   PACK_STRUCT_FIELD(u16_t destination);
   PACK_STRUCT_FIELD(u16_t originator);
+  PACK_STRUCT_FLD_8(u8_t reserved:4); 
   PACK_STRUCT_FLD_8(u8_t metric_type:4);
-  PACK_STRUCT_FLD_8(u8_t reserved:4);
 } PACK_STRUCT_STRUCT;
 PACK_STRUCT_END
 #ifdef PACK_STRUCT_USE_INCLUDES
