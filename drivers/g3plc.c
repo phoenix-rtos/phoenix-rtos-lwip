@@ -278,8 +278,8 @@ static void mcps_data_request_test_vector_dump(ps_g3_mcps_data_request_t *reques
 	for (i = 0; i < request->msdu_len; i++)
 		DEBUG_LOG("%02X", request->msdu[i]);
 
-	DEBUG_LOG(",%02X,%02X,%02X,%02X\n", request->tx_opts, request->qos, request->security_level, request->key_index);
-	DEBUG_LOG("\033[0m");
+	DEBUG_LOG(",%02X,%02X,%02X,%02X", request->tx_opts, request->qos, request->security_level, request->key_index);
+	DEBUG_LOG("\033[0m\n");
 }
 
 static void mcps_data_indication(ps_g3_sap_t *sap, ps_g3_mcps_data_indication_t *indication)
