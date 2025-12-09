@@ -41,6 +41,12 @@ enum {
 	EPHY_COMMON_0F_GBESR = 0x0F, /* 1000Base-T Ext Status */
 };
 
+/* MMD access common registers */
+enum {
+	EPHY_MMD_0D_MACR = 0x0D, /* MMD Access Ctrl */
+	EPHY_MMD_0E_MAADR,       /* MMD Access Addr Data */
+};
+
 /* KSZ8081-specific registers */
 enum {
 	EPHY_KSZ8081_10_DRCR = 0x10,      /* Digital Reserved Control */
@@ -57,8 +63,6 @@ enum {
 
 /* RTL common registers */
 enum {
-	EPHY_RTL_0D_MACR = 0x0D,   /* MMD Access Ctrl */
-	EPHY_RTL_0E_MAADR,         /* MMD Access Addr Data */
 	EPHY_RTL_1F_PAGESEL = 0x1F /* Page Select */
 };
 
@@ -112,6 +116,20 @@ enum {
 	EPHY_KSZ9031_1F_PHYCR = 0x1F, /* PHY Control */
 };
 
+/* DP83867IS-specific registers*/
+enum {
+	EPHY_DP83867IS_10_PHYCR = 0x10,    /* PHY Control */
+	EPHY_DP83867IS_11_PHYSTS,          /* PHY Status */
+	EPHY_DP83867IS_12_MICR,            /* MII Interrupt Control */
+	EPHY_DP83867IS_13_ISR,             /* MII Interrupt Status */
+	EPHY_DP83867IS_14_SGMIICR,         /* SGMII Control */
+	EPHY_DP83867IS_1E_CFG3 = 0x1E,     /* Configuration 3 */
+	EPHY_DP83867IS_1F_CFG4,            /* Configuration 4 */
+	EPHY_DP83867IS_31_CFG4 = 0x31,     /* CFG4 (SGMII Auto-Neg Timer) */
+	EPHY_DP83867IS_32_RGMIICTL,        /* RGMII Control */
+	EPHY_DP83867IS_D3_SGMIICTL1 = 0xD3 /* SGMIICTL1 (via MMD access) */
+};
+
 
 #define ephy_printf(phy, fmt, ...) printf("lwip: ephy%u.%u: " fmt "\n", phy->bus, phy->addr, ##__VA_ARGS__)
 
@@ -136,10 +154,19 @@ static void ephy_regWrite(const eth_phy_state_t *phy, uint16_t reg, uint16_t val
 
 static inline void ephy_mmdWrite(const eth_phy_state_t *phy, uint16_t devad, uint16_t addr, uint16_t val)
 {
-	ephy_regWrite(phy, EPHY_RTL_0D_MACR, devad);
-	ephy_regWrite(phy, EPHY_RTL_0E_MAADR, addr);
-	ephy_regWrite(phy, EPHY_RTL_0D_MACR, (1 << 14) | devad);
-	ephy_regWrite(phy, EPHY_RTL_0E_MAADR, val);
+	ephy_regWrite(phy, EPHY_MMD_0D_MACR, devad);
+	ephy_regWrite(phy, EPHY_MMD_0E_MAADR, addr);
+	ephy_regWrite(phy, EPHY_MMD_0D_MACR, (1U << 14) | devad);
+	ephy_regWrite(phy, EPHY_MMD_0E_MAADR, val);
+}
+
+
+__attribute__((unused)) static inline uint16_t ephy_mmdRead(const eth_phy_state_t *phy, uint16_t devad, uint16_t addr)
+{
+	ephy_regWrite(phy, EPHY_MMD_0D_MACR, devad);
+	ephy_regWrite(phy, EPHY_MMD_0E_MAADR, addr);
+	ephy_regWrite(phy, EPHY_MMD_0D_MACR, (1U << 14) | devad);
+	return ephy_regRead(phy, EPHY_MMD_0E_MAADR);
 }
 
 
@@ -162,12 +189,12 @@ static void ephy_reset(const eth_phy_state_t *phy)
 
 		ephy_debug_printf(phy, "ephy_reset: start software reset...");
 
-		ephy_regWrite(phy, EPHY_COMMON_00_BMCR, 1u << 15);
+		ephy_regWrite(phy, EPHY_COMMON_00_BMCR, 1U << 15);
 		usleep(phy->reset_release_time_us);
 
 		while (retries-- > 0) {
 			res = ephy_regRead(phy, EPHY_COMMON_00_BMCR);
-			if ((res & (1u << 15)) == 0) {
+			if ((res & (1U << 15)) == 0) {
 				return;
 			}
 		}
@@ -227,7 +254,7 @@ static void ephy_setLinkState(const eth_phy_state_t *phy)
 
 	speed = ephy_linkSpeed(phy, &full_duplex);
 
-	int linkup = (bstat & (1u << 2)) != 0;
+	int linkup = (bstat & (1U << 2)) != 0;
 
 	if (phy->link_state_callback != NULL) {
 		phy->link_state_callback(phy->link_state_callback_arg, linkup);
@@ -243,6 +270,7 @@ static void ephy_setLinkState(const eth_phy_state_t *phy)
 					(linkup != 0) ? "UP  " : "DOWN", speed, (full_duplex != 0) ? "Full" : "Half", bctl, bstat, adv, lpa, pc1, pc2);
 			break;
 		case ephy_ksz9031mnx:
+		case ephy_dp83867is:
 		case ephy_rtl8201fi:
 			ephy_printf(phy, "link is %s %uMbps/%s (ctl %04x, status %04x, adv %04x, lpa %04x)",
 					(linkup != 0) ? "UP  " : "DOWN", speed, (full_duplex != 0) ? "Full" : "Half", bctl, bstat, adv, lpa);
@@ -269,7 +297,7 @@ static inline int ephy_ksz8081rnx_linkSpeed(const eth_phy_state_t *phy, int *ful
 	}
 
 	if (full_duplex != NULL) {
-		*full_duplex = ((pc1 & (1u << 2)) != 0) ? 1 : 0;
+		*full_duplex = ((pc1 & (1U << 2)) != 0) ? 1 : 0;
 	}
 
 	return ((pc1 & 0x1) != 0) ? 10 : 100;
@@ -280,26 +308,55 @@ static inline int ephy_ksz9031mnx_linkSpeed(const eth_phy_state_t *phy, int *ful
 {
 	uint16_t st = ephy_regRead(phy, EPHY_COMMON_01_BMSR);
 	/* PHY still in auto-negotiation */
-	if ((st & (1u << 5)) == 0) {
+	if ((st & (1U << 5)) == 0) {
 		return 0;
 	}
 
 	uint16_t pc = ephy_regRead(phy, EPHY_KSZ9031_1F_PHYCR);
 	if (full_duplex != NULL) {
-		*full_duplex = ((pc & (1u << 3)) != 0) ? 1 : 0;
+		*full_duplex = ((pc & (1U << 3)) != 0) ? 1 : 0;
 	}
 
-	if ((pc & (1u << 4)) != 0) {
+	if ((pc & (1U << 4)) != 0) {
 		return 10;
 	}
-	else if ((pc & (1u << 5)) != 0) {
+	else if ((pc & (1U << 5)) != 0) {
 		return 100;
 	}
-	else if ((pc & (1u << 6)) != 0) {
+	else if ((pc & (1U << 6)) != 0) {
 		return 1000;
 	}
 	else {
 		return 0;
+	}
+}
+
+
+static inline int ephy_dp83867is_linkSpeed(const eth_phy_state_t *phy, int *full_duplex)
+{
+	uint16_t st = ephy_regRead(phy, EPHY_COMMON_01_BMSR);
+	uint16_t sts = ephy_regRead(phy, EPHY_DP83867IS_11_PHYSTS);
+	uint16_t speed;
+
+	/* PHY still in auto-negotiation */
+	if ((st & (1U << 5)) == 0) {
+		return 0;
+	}
+
+	if (full_duplex != NULL) {
+		*full_duplex = ((sts & (1U << 13)) != 0) ? 1 : 0;
+	}
+
+	speed = (sts >> 14) & 0x3;
+	switch (speed) {
+		case 0x0:
+			return 10;
+		case 0x1:
+			return 100;
+		case 0x2:
+			return 1000;
+		default:
+			return 0;
 	}
 }
 
@@ -309,10 +366,10 @@ static inline int ephy_rtl8201fi_linkSpeed(const eth_phy_state_t *phy, int *full
 	uint16_t bmcr = ephy_regRead(phy, EPHY_COMMON_00_BMCR);
 
 	if (full_duplex != NULL) {
-		*full_duplex = ((bmcr & (1 << 8)) != 0) ? 1 : 0;
+		*full_duplex = ((bmcr & (1U << 8)) != 0) ? 1 : 0;
 	}
 
-	return ((bmcr & (1 << 13)) == 0) ? 10 : 100;
+	return ((bmcr & (1U << 13)) == 0) ? 10 : 100;
 }
 
 
@@ -322,7 +379,7 @@ static inline int ephy_rtl8211fdi_linkSpeed(const eth_phy_state_t *phy, int *ful
 	uint16_t speed;
 
 	if (full_duplex != NULL) {
-		*full_duplex = ((physr & (1 << 3)) != 0) ? 1 : 0;
+		*full_duplex = ((physr & (1U << 3)) != 0) ? 1 : 0;
 	}
 
 	speed = (physr >> 4) & 0x3;
@@ -349,6 +406,8 @@ int ephy_linkSpeed(const eth_phy_state_t *phy, int *full_duplex)
 			return ephy_ksz8081rnx_linkSpeed(phy, full_duplex);
 		case ephy_ksz9031mnx:
 			return ephy_ksz9031mnx_linkSpeed(phy, full_duplex);
+		case ephy_dp83867is:
+			return ephy_dp83867is_linkSpeed(phy, full_duplex);
 		case ephy_rtl8201fi:
 			return ephy_rtl8201fi_linkSpeed(phy, full_duplex);
 		case ephy_rtl8211fdi:
@@ -367,9 +426,9 @@ static inline uint16_t ephy_bmcrMaxSpeedMask(const eth_phy_state_t *phy)
 		case ephy_ksz8081rnb:
 		case ephy_ksz8081rnd:
 		case ephy_rtl8201fi:
-			return 1u << 13;
+			return 1U << 13;
 		case ephy_rtl8211fdi:
-			return 1u << 6;
+			return 1U << 6;
 		default:
 			return 0;
 	}
@@ -379,19 +438,19 @@ static inline uint16_t ephy_bmcrMaxSpeedMask(const eth_phy_state_t *phy)
 static void ephy_restartAN(const eth_phy_state_t *phy)
 {
 	/* max speed, enable AN, restart AN, full-duplex */
-	uint16_t bmcr = ephy_bmcrMaxSpeedMask(phy) | (1u << 12) | (1u << 9) | (1u << 8);
+	uint16_t bmcr = ephy_bmcrMaxSpeedMask(phy) | (1U << 12) | (1U << 9) | (1U << 8);
 	if (phy->model == ephy_rtl8211fdi) {
 		/* adv: 1000M-FD */
-		ephy_regWrite(phy, EPHY_COMMON_09_GBCR, (1u << 9));
+		ephy_regWrite(phy, EPHY_COMMON_09_GBCR, (1U << 9));
 		/* don't adv: 1000Base-T EEE (MMD write) */
 		ephy_mmdWrite(phy, 0x7, 0x3c /* EEEAR */, 0);
 	}
-	if (phy->model == ephy_ksz9031mnx) {
+	if (phy->model == ephy_ksz9031mnx || phy->model == ephy_dp83867is) {
 		/* adv: 1000M-FD */
-		ephy_regWrite(phy, EPHY_COMMON_09_GBCR, (1u << 9));
+		ephy_regWrite(phy, EPHY_COMMON_09_GBCR, (1U << 9));
 	}
 	/* adv: no-next-page, no-rem-fault, no-pause, no-T4, 100M/10M-FD & 10M-HD, 802.3 */
-	ephy_regWrite(phy, EPHY_COMMON_04_ANAR, (1u << 8) | (1u << 6) | (1u << 5) | 1u);
+	ephy_regWrite(phy, EPHY_COMMON_04_ANAR, (1U << 8) | (1U << 6) | (1U << 5) | 1U);
 	ephy_regWrite(phy, EPHY_COMMON_00_BMCR, bmcr);
 }
 
@@ -483,6 +542,9 @@ static __attribute__((unused)) char *ephy_parsePhyModel(eth_phy_state_t *phy, ch
 	}
 	else if (strcmp(cfg, "ksz9031mnx") == 0) {
 		phy->model = ephy_ksz9031mnx;
+	}
+	else if (strcmp(cfg, "dp83867is") == 0) {
+		phy->model = ephy_dp83867is;
 	}
 	else if (strcmp(cfg, "rtl8201fi-vc-cg") == 0) {
 		phy->model = ephy_rtl8201fi;
@@ -582,7 +644,7 @@ static int ephy_config(eth_phy_state_t *phy, char *cfg)
 int ephy_enableLoopback(const eth_phy_state_t *phy, bool enable)
 {
 	uint16_t bmcr = ephy_regRead(phy, EPHY_COMMON_00_BMCR);
-	bool loopback_enabled = bmcr & (1u << 14);
+	bool loopback_enabled = bmcr & (1U << 14);
 
 	if (loopback_enabled == enable) {
 		return 0;
@@ -590,9 +652,9 @@ int ephy_enableLoopback(const eth_phy_state_t *phy, bool enable)
 
 	if (enable) {
 		/* disable AN */
-		bmcr &= ~1u << 12;
+		bmcr &= ~1U << 12;
 		/* full-duplex */
-		bmcr |= 1u << 8;
+		bmcr |= 1U << 8;
 		bmcr |= ephy_bmcrMaxSpeedMask(phy);
 	}
 
@@ -601,7 +663,7 @@ int ephy_enableLoopback(const eth_phy_state_t *phy, bool enable)
 		case ephy_ksz8081rnb:
 		case ephy_ksz8081rnd: {
 			/* force link up, disable transmitter */
-			const uint16_t mask = (1u << 11) | (1u << 3);
+			const uint16_t mask = (1U << 11) | (1U << 3);
 			uint16_t phycr2 = ephy_regRead(phy, EPHY_KSZ8081_1F_PHYCR2);
 			phycr2 = enable ?
 					(phycr2 | mask) :
@@ -615,8 +677,8 @@ int ephy_enableLoopback(const eth_phy_state_t *phy, bool enable)
 
 	/* loopback */
 	bmcr = enable ?
-			(bmcr | (1u << 14)) :
-			(bmcr & ~(1u << 14));
+			(bmcr | (1U << 14)) :
+			(bmcr & ~(1U << 14));
 	ephy_regWrite(phy, EPHY_COMMON_00_BMCR, bmcr);
 
 	if (!enable) {
@@ -649,10 +711,10 @@ static int ephy_setAltConfig(eth_phy_state_t *phy, int cfg_id)
 
 	switch (cfg_id) {
 		case 0:
-			phy_ctrl2 &= ~(1 << 7);
+			phy_ctrl2 &= ~(1U << 7);
 			break;
 		case 1:
-			phy_ctrl2 |= (1 << 7);
+			phy_ctrl2 |= (1U << 7);
 			break;
 		default:
 			return 0; /* unknown config ID */
@@ -673,7 +735,7 @@ static inline int ephy_ksz8081rnx_init(eth_phy_state_t *phy, uint8_t board_rev)
 	int err;
 
 	/* disable: addr 0 broadcast, NAND-tree mode */
-	ephy_regWrite(phy, EPHY_KSZ8081_16_OMSOR, (1u << 1) | (1u << 9));
+	ephy_regWrite(phy, EPHY_KSZ8081_16_OMSOR, (1U << 1) | (1U << 9));
 
 	switch (phy->model) {
 		case ephy_ksz8081rna:
@@ -703,11 +765,39 @@ static inline int ephy_ksz8081rnx_init(eth_phy_state_t *phy, uint8_t board_rev)
 }
 
 
+static inline void ephy_dp83867is_init(eth_phy_state_t *phy)
+{
+	const uint16_t devad = 0x1fU;
+	/* Enable differential SGMII clock to MAC */
+	ephy_mmdWrite(phy, devad, EPHY_DP83867IS_D3_SGMIICTL1, 0x4000);
+
+	/* Enable SGMII autonegotiation and speed optimization */
+	ephy_regWrite(phy, EPHY_COMMON_00_BMCR, 0x1000U);
+	ephy_regWrite(phy, EPHY_DP83867IS_14_SGMIICR, 0x2bc0U);
+
+	/* Set SGMII Auto-Negotiation Timer Duration to 11 ms */
+	ephy_mmdWrite(phy, devad, EPHY_DP83867IS_31_CFG4, 0x0070);
+
+	/* Disable RGMII */
+	ephy_mmdWrite(phy, devad, EPHY_DP83867IS_32_RGMIICTL, 0x0);
+
+#if EPHY_DEBUG
+	uint16_t reg;
+	reg = ephy_mmdRead(phy, devad, 0xD3);
+	ephy_debug_printf(phy, "extended reg 0xD3: %04x", reg);
+	reg = ephy_mmdRead(phy, devad, 0x31);
+	ephy_debug_printf(phy, "extended reg 0x31: %04x", reg);
+	reg = ephy_mmdRead(phy, devad, 0x32);
+	ephy_debug_printf(phy, "extended reg 0x32: %04x", reg);
+#endif
+}
+
+
 static inline void ephy_rtl8201fi_init(eth_phy_state_t *phy)
 {
 	/* RMII mode, TXC output, default tx/rx offset */
 	ephy_regWrite(phy, EPHY_RTL_1F_PAGESEL, 7);
-	ephy_regWrite(phy, EPHY_RTL8201_PAGE07_10_RMSR, (0xff << 4) | (1 << 3));
+	ephy_regWrite(phy, EPHY_RTL8201_PAGE07_10_RMSR, (0xffU << 4) | (1U << 3));
 	ephy_regWrite(phy, EPHY_RTL_1F_PAGESEL, 0);
 }
 
@@ -715,9 +805,9 @@ static inline void ephy_rtl8201fi_init(eth_phy_state_t *phy)
 static inline void ephy_rtl8211fdi_init(eth_phy_state_t *phy)
 {
 	/* no addr 0 broadcast, auto-MDI, TX CRS assert, no PHYAD detect, check preamble, no jabber detection, no ALDPS/PLL-OFF  */
-	ephy_regWrite(phy, EPHY_RTL8211_18_PHYCR1, (1 << 8) | (1 << 4));
+	ephy_regWrite(phy, EPHY_RTL8211_18_PHYCR1, (1U << 8) | (1U << 4));
 	/* clkout 125MHz, no clkout SSC, no RXC SSC, no EEE, RXC out enabled, clkout out disabled */
-	ephy_regWrite(phy, EPHY_RTL8211_19_PHYCR2, (1 << 6));
+	ephy_regWrite(phy, EPHY_RTL8211_19_PHYCR2, (1U << 6));
 
 	/* Pin 31 INTB */
 	ephy_regWrite(phy, EPHY_RTL_1F_PAGESEL, 0xd40);
@@ -774,7 +864,7 @@ int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb
 	ephy_reset(phy);
 
 	phyid = ephy_readPhyId(phy);
-	if (phyid == 0u || phyid == ~0u) {
+	if (phyid == 0U || phyid == ~0U) {
 		ephy_printf(phy, "Couldn't read PHY ID");
 		gpio_set(&phy->reset, 1);
 		return -ENODEV;
@@ -795,6 +885,11 @@ int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb
 			break;
 		case ephy_ksz9031mnx:
 			phy->irq.reg = EPHY_KSZ9031_1B_ICSR;
+			phy->irq.mask = 0x00FF;
+			break;
+		case ephy_dp83867is:
+			ephy_dp83867is_init(phy);
+			phy->irq.reg = EPHY_DP83867IS_13_ISR;
 			phy->irq.mask = 0x00FF;
 			break;
 		case ephy_rtl8201fi:
@@ -833,18 +928,22 @@ int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb
 		case ephy_ksz8081rna:
 		case ephy_ksz8081rnb:
 		case ephy_ksz8081rnd:
-			ephy_regWrite(phy, EPHY_KSZ8081_1B_ICSR, (1 << 8) | (1 << 10));
+			ephy_regWrite(phy, EPHY_KSZ8081_1B_ICSR, (1U << 8) | (1U << 10));
 			break;
 		case ephy_ksz9031mnx:
-			ephy_regWrite(phy, EPHY_KSZ9031_1B_ICSR, (1 << 8) | (1 << 10));
+			ephy_regWrite(phy, EPHY_KSZ9031_1B_ICSR, (1U << 8) | (1U << 10));
+			break;
+		case ephy_dp83867is:
+			ephy_regWrite(phy, EPHY_DP83867IS_1E_CFG3, (1U << 7) | (1U << 1));
+			ephy_regWrite(phy, EPHY_DP83867IS_12_MICR, (1U << 10));
 			break;
 		case ephy_rtl8201fi:
 			ephy_regWrite(phy, EPHY_RTL_1F_PAGESEL, 7);
-			ephy_regWrite(phy, EPHY_RTL8201_PAGE07_13_IWELFR, ephy_regRead(phy, EPHY_RTL8201_PAGE07_13_IWELFR) | (1 << 13));
+			ephy_regWrite(phy, EPHY_RTL8201_PAGE07_13_IWELFR, ephy_regRead(phy, EPHY_RTL8201_PAGE07_13_IWELFR) | (1U << 13));
 			ephy_regWrite(phy, EPHY_RTL_1F_PAGESEL, 0);
 			break;
 		case ephy_rtl8211fdi:
-			ephy_regWrite(phy, EPHY_RTL8211_12_INER, (1 << 4));
+			ephy_regWrite(phy, EPHY_RTL8211_12_INER, (1U << 4));
 			break;
 		default:
 			/* unreachable */

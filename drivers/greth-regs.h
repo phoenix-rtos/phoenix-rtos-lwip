@@ -1,7 +1,7 @@
 /*
  * Phoenix-RTOS --- networking stack
  *
- * GR740 GRETH network module driver
+ * GRETH network module driver
  *
  * Copyright 2025 Phoenix Systems
  * Author: Andrzej Tlomak
