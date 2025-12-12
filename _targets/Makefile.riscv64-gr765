@@ -1,0 +1,12 @@
+#
+# Makefile for Phoenix-RTOS 3 LwIP
+#
+# riscv64/gr765 target
+#
+# Copyright 2025 Phoenix Systems
+#
+
+NET_DRIVERS_SUPPORTED := greth
+NET_DRIVERS ?= $(NET_DRIVERS_SUPPORTED)
+
+DRIVERS_SRCS_greth = greth.c ephy.c null-gpio.c $(DRIVERS_SRCS_UTIL)
