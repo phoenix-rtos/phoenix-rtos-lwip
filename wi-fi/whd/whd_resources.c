@@ -27,11 +27,23 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "lwipopts.h"
 
-#define AW_NM512_FIRMWARE_FILENAME     "/firmware/43439A0.bin"
-#define AW_NM512_CLM_FILENAME          "/firmware/43439A0.clm_blob"
-#define STERLING_LWB_FIRMWARE_FILENAME "/firmware/brcmfmac43430-sdio-prod.bin"
-#define STERLING_LWB_CLM_FILENAME      "/firmware/brcmfmac43430-sdio.clm_blob"
+#ifndef WIFI_FIRMWARE_FILES_DIRECTORY_PATH
+#define WIFI_FIRMWARE_FILES_DIRECTORY_PATH "/firmware"
+#endif
+
+#ifndef FIRMWARE_FILE_EXTENSION
+#define FIRMWARE_FILE_EXTENSION ".bin"
+#endif
+
+#ifndef CLM_FILE_EXTENSION
+#define CLM_FILE_EXTENSION ".clm_blob"
+#endif
+
+#define AW_NM512_FILENAME          "43439A0"
+#define STERLING_LWB_FILENAME      "brcmfmac43430-sdio-prod"
+#define STERLING_LWB5PLUS_FILENAME "4373A0"
 
 
 static uint8_t resource_buf[BLOCK_SIZE];
@@ -52,7 +64,7 @@ int read_file(const char *filename, off_t pos, size_t len, uint8_t *buf)
 	FILE *file;
 	size_t n;
 
-	file = fopen(filename, "r");
+	file = fopen(filename, "rb");
 	if (!file)
 		return -1;
 
@@ -73,12 +85,18 @@ static const char *host_firmware_filename(whd_driver_t whd_drv)
 {
 	uint16_t chip_id = whd_chip_get_chip_id(whd_drv);
 
-	if (chip_id == 43430)
-		return STERLING_LWB_FIRMWARE_FILENAME;
-	else if (chip_id == 43439)
-		return AW_NM512_FIRMWARE_FILENAME;
-	else
+	if (chip_id == 43430) {
+		return WIFI_FIRMWARE_FILES_DIRECTORY_PATH "/" STERLING_LWB_FILENAME FIRMWARE_FILE_EXTENSION;
+	}
+	else if (chip_id == 43439) {
+		return WIFI_FIRMWARE_FILES_DIRECTORY_PATH "/" AW_NM512_FILENAME FIRMWARE_FILE_EXTENSION;
+	}
+	else if (chip_id == 0x4373) {
+		return WIFI_FIRMWARE_FILES_DIRECTORY_PATH "/" STERLING_LWB5PLUS_FILENAME FIRMWARE_FILE_EXTENSION;
+	}
+	else {
 		return NULL;
+	}
 }
 
 
@@ -86,12 +104,18 @@ static const char *host_clm_filename(whd_driver_t whd_drv)
 {
 	uint16_t chip_id = whd_chip_get_chip_id(whd_drv);
 
-	if (chip_id == 43430)
-		return STERLING_LWB_CLM_FILENAME;
-	else if (chip_id == 43439)
-		return AW_NM512_CLM_FILENAME;
-	else
+	if (chip_id == 43430) {
+		return WIFI_FIRMWARE_FILES_DIRECTORY_PATH "/" STERLING_LWB_FILENAME CLM_FILE_EXTENSION;
+	}
+	else if (chip_id == 43439) {
+		return WIFI_FIRMWARE_FILES_DIRECTORY_PATH "/" AW_NM512_FILENAME CLM_FILE_EXTENSION;
+	}
+	else if (chip_id == 0x4373) {
+		return WIFI_FIRMWARE_FILES_DIRECTORY_PATH "/" STERLING_LWB5PLUS_FILENAME CLM_FILE_EXTENSION;
+	}
+	else {
 		return NULL;
+	}
 }
 
 
@@ -99,12 +123,18 @@ static const char *host_nvram_image(whd_driver_t whd_drv)
 {
 	uint16_t chip_id = whd_chip_get_chip_id(whd_drv);
 
-	if (chip_id == 43430)
+	if (chip_id == 43430) {
 		return sterling_lwb_wifi_nvram_image;
-	else if (chip_id == 43439)
+	}
+	else if (chip_id == 43439) {
 		return aw_nm512_wifi_nvram_image;
-	else
+	}
+	else if (chip_id == 0x4373) {
+		return sterling_lwb5plus_wifi_nvram_image;
+	}
+	else {
 		return NULL;
+	}
 }
 
 
@@ -112,12 +142,18 @@ static ssize_t host_nvram_size(whd_driver_t whd_drv)
 {
 	uint16_t chip_id = whd_chip_get_chip_id(whd_drv);
 
-	if (chip_id == 43430)
+	if (chip_id == 43430) {
 		return sizeof(sterling_lwb_wifi_nvram_image);
-	else if (chip_id == 43439)
+	}
+	else if (chip_id == 43439) {
 		return sizeof(aw_nm512_wifi_nvram_image);
-	else
+	}
+	else if (chip_id == 0x4373) {
+		return sizeof(sterling_lwb5plus_wifi_nvram_image);
+	}
+	else {
 		return -1;
+	}
 }
 
 
@@ -231,9 +267,72 @@ uint32_t host_get_resource_block(whd_driver_t whd_drv, whd_resource_type_t type,
 }
 
 
+uint32_t host_resource_read(whd_driver_t whd_drv, whd_resource_type_t type, uint32_t offset, uint32_t size, uint32_t *size_out, void *buffer)
+{
+	const char *filename, *image;
+	uint32_t result, resource_size;
+
+	result = host_resource_size(whd_drv, type, &resource_size);
+	if (result != WHD_SUCCESS) {
+		return result;
+	}
+
+	if (offset >= resource_size) {
+		return WHD_BADARG;
+	}
+
+	if (offset + size >= resource_size) {
+		size = resource_size - offset;
+	}
+
+	memset(buffer, 0, size);
+
+	switch (type) {
+		case WHD_RESOURCE_WLAN_FIRMWARE:
+			filename = host_firmware_filename(whd_drv);
+			if (filename == NULL) {
+				return WHD_HAL_ERROR;
+			}
+
+			if (read_file(filename, offset, size, buffer) < 0) {
+				return WHD_HAL_ERROR;
+			}
+			break;
+
+		case WHD_RESOURCE_WLAN_NVRAM:
+			image = host_nvram_image(whd_drv);
+			if (image == NULL) {
+				return WHD_HAL_ERROR;
+			}
+
+			memcpy(buffer, image + offset, size);
+			break;
+
+		case WHD_RESOURCE_WLAN_CLM:
+			filename = host_clm_filename(whd_drv);
+			if (filename == NULL) {
+				return WHD_HAL_ERROR;
+			}
+
+			if (read_file(filename, offset, size, buffer) < 0) {
+				return WHD_HAL_ERROR;
+			}
+			break;
+
+		default:
+			return WHD_BADARG;
+	}
+
+	*size_out = size;
+
+	return WHD_SUCCESS;
+}
+
+
 whd_resource_source_t resource_ops = {
 	.whd_resource_size = host_resource_size,
 	.whd_get_resource_block_size = host_get_resource_block_size,
 	.whd_get_resource_no_of_blocks = host_get_resource_no_of_blocks,
-	.whd_get_resource_block = host_get_resource_block
+	.whd_get_resource_block = host_get_resource_block,
+	.whd_resource_read = host_resource_read,
 };
