@@ -41,7 +41,7 @@ enum {
 	EPHY_COMMON_0F_GBESR = 0x0F, /* 1000Base-T Ext Status */
 };
 
-/* MMD access common regisers */
+/* MMD access common registers */
 enum {
 	EPHY_MMD_0D_MACR = 0x0D, /* MMD Access Ctrl */
 	EPHY_MMD_0E_MAADR,       /* MMD Access Addr Data */
