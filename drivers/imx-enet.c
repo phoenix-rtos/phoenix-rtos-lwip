@@ -921,9 +921,9 @@ static int enet_clockEnable(enet_state_t *state)
 #elif defined(__CPU_IMXRT117X)
 
 	const platformctl_t pctl_enet_clock[] = {
-		// ENET
-		// mux: 0: OSC RC48DIV2, 1: OSC24M, 4: SYS PLL1DIV2
+		/* mux: 4: SYS PLL1DIV2	*/
 		{ pctl_set, pctl_devclock, .devclock = { .dev = pctl_clk_enet1, .mux = 4, .div = 9, .state = 1 } },
+		{ pctl_set, pctl_iogpr, .iogpr = { .field = 4, .val = (1 << 1) } } /* ENET1 RMII TX clk output enable */
 	};
 	const platformctl_t pctl_enet_1g_clock[] = {
 		/* mux: 4: SYS PLL1DIV2 */

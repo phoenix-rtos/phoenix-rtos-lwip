@@ -705,9 +705,9 @@ static inline int ephy_ksz8081rnx_init(eth_phy_state_t *phy, uint8_t board_rev)
 
 static inline void ephy_rtl8201fi_init(eth_phy_state_t *phy)
 {
-	/* RMII mode, TXC output, default tx/rx offset */
+	/* RMII mode, TXC input, default tx/rx offset */
 	ephy_regWrite(phy, EPHY_RTL_1F_PAGESEL, 7);
-	ephy_regWrite(phy, EPHY_RTL8201_PAGE07_10_RMSR, (0xff << 4) | (1 << 3));
+	ephy_regWrite(phy, EPHY_RTL8201_PAGE07_10_RMSR, (1 << 12) | (0xff << 4) | (1 << 3));
 	ephy_regWrite(phy, EPHY_RTL_1F_PAGESEL, 0);
 }
 
