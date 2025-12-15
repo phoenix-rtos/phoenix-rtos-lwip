@@ -696,10 +696,8 @@ int ephy_enableLoopback(const eth_phy_state_t *phy, bool enable)
  *     0 if no alternative config with this ID
  *   < 0 if alternative config setting has failed
  */
-static int ephy_setAltConfig(eth_phy_state_t *phy, int cfg_id)
+static int ephy_ksz8081rnx_setAltConfig(eth_phy_state_t *phy, int cfg_id)
 {
-	/* NOTE: assuming KSZ8081 RNA/RND/RNB PHY! */
-
 	/* CFG id:
 	 * 0: KSZ8081 RND with 50 MHz RMII input clock (PHY_CTRL2[7] = 0)
 	 * 1: KSZ8081 RNA/RNB with 50 MHz RMII input clock (PHY_CTRL2[7] = 1)
@@ -740,10 +738,10 @@ static inline int ephy_ksz8081rnx_init(eth_phy_state_t *phy, uint8_t board_rev)
 	switch (phy->model) {
 		case ephy_ksz8081rna:
 		case ephy_ksz8081rnb:
-			err = ephy_setAltConfig(phy, 1);
+			err = ephy_ksz8081rnx_setAltConfig(phy, 1);
 			break;
 		case ephy_ksz8081rnd:
-			err = ephy_setAltConfig(phy, 0);
+			err = ephy_ksz8081rnx_setAltConfig(phy, 0);
 			break;
 		default:
 			/* unreachable */
