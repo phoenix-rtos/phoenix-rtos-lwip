@@ -96,15 +96,17 @@ err_t netpacket_sendto(struct netpacket_pcb *pcb, struct pbuf *p, u8_t *dst_addr
 	switch (pcb->type) {
 		case SOCK_RAW:
 			LWIP_ASSERT("netpacket_sendto: dst_addr must be NULL in SOCK_RAW connection", dst_addr == NULL);
-
 			/* data in given buffer contains full ethernet frame - do nothing */
 			packet = p;
 			break;
-		case SOCK_DGRAM: {
+		case SOCK_DGRAM:
 			LWIP_ASSERT("netpacket_sendto: dst_addr cannot be NULL in SOCK_DGRAM connection", dst_addr != NULL);
 
 			/* prefix data in given buffer with ethernet header */
 			packet = pbuf_alloc(PBUF_RAW, sizeof(struct eth_hdr), PBUF_POOL);
+			if (packet == NULL) {
+				return ERR_MEM;
+			}
 			pbuf_chain(packet, p);
 
 			struct eth_hdr *header = (struct eth_hdr *)packet->payload;
@@ -112,7 +114,8 @@ err_t netpacket_sendto(struct netpacket_pcb *pcb, struct pbuf *p, u8_t *dst_addr
 			SMEMCPY(&header->src, pcb->netif->hwaddr, pcb->netif->hwaddr_len);
 			header->type = ntohs(pcb->protocol);
 			break;
-		}
+		default:
+			break;
 	}
 
 	netpacket_linkoutput_full(pcb->netif, packet, pcb);
