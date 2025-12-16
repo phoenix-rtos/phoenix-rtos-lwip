@@ -745,7 +745,7 @@ int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb
 		case ephy_ksz8081rnb:
 		case ephy_ksz8081rnd:
 			phy->reset_hold_time_us = 500 /* us */;
-			phy->reset_release_time_us = 100 /* us */;
+			phy->reset_release_time_us = 10 * 1000 /* 10ms */;
 			break;
 		case ephy_rtl8201fi:
 			phy->reset_hold_time_us = 10 * 1000 /* 10ms */;
