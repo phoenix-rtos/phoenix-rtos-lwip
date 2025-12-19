@@ -78,7 +78,7 @@ static int gpio_set_val(unsigned int gpio, unsigned int pin, unsigned int val)
 
 /* NOTE: pin, direction, drvMode, initVal are ignored - pin configuration is hardcoded */
 cy_rslt_t cyhal_gpio_init(cyhal_gpio_t pin, cyhal_gpio_direction_t direction, cyhal_gpio_drive_mode_t drvMode,
-	bool initVal)
+		bool initVal)
 {
 	cy_log_msg(CYLF_GPIO, CY_LOG_DEBUG, "cyhal_gpio_init\n");
 
@@ -156,7 +156,7 @@ void cyhal_gpio_write(cyhal_gpio_t pin, bool value)
 
 /* NOTE: currently not used */
 void cyhal_gpio_register_irq(cyhal_gpio_t pin, uint8_t intrPriority, cyhal_gpio_irq_handler_t handler,
-	void *handler_arg)
+		void *handler_arg)
 {
 	cy_log_msg(CYLF_GPIO, CY_LOG_ERR, "cyhal_gpio_register_irq - not implemented!\n");
 }
