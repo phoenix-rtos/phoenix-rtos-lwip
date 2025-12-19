@@ -20,11 +20,11 @@
 
 
 cy_rslt_t cy_rtos_create_thread(cy_thread_t *thread, cy_thread_entry_fn_t entry_function,
-	const char *name, void *stack, uint32_t stack_size,
-	cy_thread_priority_t priority, cy_thread_arg_t arg)
+		const char *name, void *stack, uint32_t stack_size,
+		cy_thread_priority_t priority, cy_thread_arg_t arg)
 {
 	cy_log_msg(CYLF_RTOS, CY_LOG_DEBUG, "cy_rtos_create_thread (thread=%p name=%s stack=%p stack_size=%u priority=%d)\n",
-		thread, name, stack, stack_size, priority);
+			thread, name, stack, stack_size, priority);
 
 	if (thread == NULL)
 		return CY_RTOS_BAD_PARAM;
@@ -142,7 +142,7 @@ cy_rslt_t cy_rtos_deinit_mutex(cy_mutex_t *mutex)
 cy_rslt_t cy_rtos_init_semaphore(cy_semaphore_t *semaphore, uint32_t maxcount, uint32_t initcount)
 {
 	cy_log_msg(CYLF_RTOS, CY_LOG_DEBUG, "cy_rtos_init_semaphore (semaphore=%p maxcount=%u initcount=%u)\n",
-		semaphore, maxcount, initcount);
+			semaphore, maxcount, initcount);
 
 	if (semaphore == NULL)
 		return CY_RTOS_BAD_PARAM;

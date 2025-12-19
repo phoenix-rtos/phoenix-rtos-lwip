@@ -26,7 +26,8 @@
 
 #define DMA_BUFFER_SIZE 2048  // should be large enough to hold whole Wi-Fi frame
 
-enum { ds_addr = 0,
+enum {
+	ds_addr = 0,
 	blk_att,
 	cmd_arg,
 	cmd_xfer_typ,
@@ -54,7 +55,8 @@ enum { ds_addr = 0,
 	vend_spec = 48,
 	mmc_boot,
 	vend_spec2,
-	tuning_ctrl };
+	tuning_ctrl,
+};
 
 
 static struct {
@@ -339,32 +341,32 @@ cy_rslt_t cyhal_sdio_init(cyhal_sdio_t *obj)
 			break;
 		}
 
-		if ((cyhal_utils_set_iomux(pctl_mux_csi_vsync, 1) < 0) || /* USDHC2_CLK */
-			(cyhal_utils_set_iomux(pctl_mux_csi_hsync, 1) < 0) || /* USDHC2_CMD */
-			(cyhal_utils_set_iomux(pctl_mux_csi_d0, 1) < 0) ||    /* USDHC2_DATA0 */
-			(cyhal_utils_set_iomux(pctl_mux_csi_d1, 1) < 0) ||    /* USDHC2_DATA1 */
-			(cyhal_utils_set_iomux(pctl_mux_csi_d2, 1) < 0) ||    /* USDHC2_DATA2 */
-			(cyhal_utils_set_iomux(pctl_mux_csi_d3, 1) < 0)) {    /* USDHC2_DATA3 */
+		if ((cyhal_utils_set_iomux(pctl_mux_csi_vsync, 1) < 0) ||     /* USDHC2_CLK */
+				(cyhal_utils_set_iomux(pctl_mux_csi_hsync, 1) < 0) || /* USDHC2_CMD */
+				(cyhal_utils_set_iomux(pctl_mux_csi_d0, 1) < 0) ||    /* USDHC2_DATA0 */
+				(cyhal_utils_set_iomux(pctl_mux_csi_d1, 1) < 0) ||    /* USDHC2_DATA1 */
+				(cyhal_utils_set_iomux(pctl_mux_csi_d2, 1) < 0) ||    /* USDHC2_DATA2 */
+				(cyhal_utils_set_iomux(pctl_mux_csi_d3, 1) < 0)) {    /* USDHC2_DATA3 */
 			cy_log_msg(CYLF_SDIO, CY_LOG_ERR, "can't configure SDIO pins iomux\n");
 			break;
 		}
 
-		if ((cyhal_utils_set_iosel(pctl_isel_usdhc2_clk, 0) < 0) || /* CSI_VSYNC_ALT1 */
-			(cyhal_utils_set_iosel(pctl_isel_usdhc2_cmd, 0) < 0) || /* CSI_HSYNC_ALT1 */
-			(cyhal_utils_set_iosel(pctl_isel_usdhc2_d0, 0) < 0) ||  /* CSI_DATA00_ALT1 */
-			(cyhal_utils_set_iosel(pctl_isel_usdhc2_d1, 0) < 0) ||  /* CSI_DATA01_ALT1 */
-			(cyhal_utils_set_iosel(pctl_isel_usdhc2_d2, 2) < 0) ||  /* CSI_DATA02_ALT1 */
-			(cyhal_utils_set_iosel(pctl_isel_usdhc2_d3, 0) < 0)) {  /* CSI_DATA03_ALT1 */
+		if ((cyhal_utils_set_iosel(pctl_isel_usdhc2_clk, 0) < 0) ||     /* CSI_VSYNC_ALT1 */
+				(cyhal_utils_set_iosel(pctl_isel_usdhc2_cmd, 0) < 0) || /* CSI_HSYNC_ALT1 */
+				(cyhal_utils_set_iosel(pctl_isel_usdhc2_d0, 0) < 0) ||  /* CSI_DATA00_ALT1 */
+				(cyhal_utils_set_iosel(pctl_isel_usdhc2_d1, 0) < 0) ||  /* CSI_DATA01_ALT1 */
+				(cyhal_utils_set_iosel(pctl_isel_usdhc2_d2, 2) < 0) ||  /* CSI_DATA02_ALT1 */
+				(cyhal_utils_set_iosel(pctl_isel_usdhc2_d3, 0) < 0)) {  /* CSI_DATA03_ALT1 */
 			cy_log_msg(CYLF_SDIO, CY_LOG_ERR, "can't configure SDIO pins iosel\n");
 			break;
 		}
 
 		if ((cyhal_utils_set_iopad(pctl_pad_csi_vsync, 0, 0, 0, 0, 0, 2, 1, 0) < 0) ||
-			(cyhal_utils_set_iopad(pctl_pad_csi_hsync, 0, 2, 1, 1, 0, 2, 1, 0) < 0) || /* 100K Ohm Pull up */
-			(cyhal_utils_set_iopad(pctl_pad_csi_d0, 0, 2, 1, 1, 0, 2, 1, 0) < 0) ||    /* 100K Ohm Pull up */
-			(cyhal_utils_set_iopad(pctl_pad_csi_d1, 0, 2, 1, 1, 0, 2, 1, 0) < 0) ||    /* 100K Ohm Pull up */
-			(cyhal_utils_set_iopad(pctl_pad_csi_d2, 0, 2, 1, 1, 0, 2, 1, 0) < 0) ||    /* 100K Ohm Pull up */
-			(cyhal_utils_set_iopad(pctl_pad_csi_d3, 0, 2, 1, 1, 0, 2, 1, 0) < 0)) {    /* 100K Ohm Pull up */
+				(cyhal_utils_set_iopad(pctl_pad_csi_hsync, 0, 2, 1, 1, 0, 2, 1, 0) < 0) || /* 100K Ohm Pull up */
+				(cyhal_utils_set_iopad(pctl_pad_csi_d0, 0, 2, 1, 1, 0, 2, 1, 0) < 0) ||    /* 100K Ohm Pull up */
+				(cyhal_utils_set_iopad(pctl_pad_csi_d1, 0, 2, 1, 1, 0, 2, 1, 0) < 0) ||    /* 100K Ohm Pull up */
+				(cyhal_utils_set_iopad(pctl_pad_csi_d2, 0, 2, 1, 1, 0, 2, 1, 0) < 0) ||    /* 100K Ohm Pull up */
+				(cyhal_utils_set_iopad(pctl_pad_csi_d3, 0, 2, 1, 1, 0, 2, 1, 0) < 0)) {    /* 100K Ohm Pull up */
 			cy_log_msg(CYLF_SDIO, CY_LOG_ERR, "can't configure SDIO pins iopad\n");
 			break;
 		}
@@ -601,7 +603,7 @@ static cy_rslt_t cyhal_sdio_send_cmd_internal(cyhal_transfer_t direction, cyhal_
 
 /* NOTE: obj is ignored - state is kept in sdio_common */
 cy_rslt_t cyhal_sdio_send_cmd(const cyhal_sdio_t *obj, cyhal_transfer_t direction,
-	cyhal_sdio_command_t command, uint32_t argument, uint32_t *response)
+		cyhal_sdio_command_t command, uint32_t argument, uint32_t *response)
 {
 	cy_rslt_t res;
 
@@ -704,7 +706,7 @@ static cy_rslt_t cyhal_sdio_bulk_transfer_internal(cyhal_transfer_t direction, u
 
 /* NOTE: obj is ignored - state is kept in sdio_common */
 cy_rslt_t cyhal_sdio_bulk_transfer(cyhal_sdio_t *obj, cyhal_transfer_t direction, uint32_t argument,
-	uint32_t *data, uint16_t length, uint32_t *response)
+		uint32_t *data, uint16_t length, uint32_t *response)
 {
 	cy_rslt_t res;
 
