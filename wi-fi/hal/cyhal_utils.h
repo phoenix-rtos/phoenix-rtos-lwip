@@ -15,6 +15,9 @@
 #include <sys/platform.h>
 #include <phoenix/arch/armv7a/imx6ull/imx6ull.h>
 
+#define XCAT2(a, b) a##b
+#define PCTL(x)     XCAT2(pctl_, x)
+
 
 int cyhal_utils_set_iomux(int mux, char mode);
 
