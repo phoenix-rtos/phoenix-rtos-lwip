@@ -1,0 +1,7 @@
+# This file lists revisions that should be ignored by 'git blame'.
+# Each line is a commit hash. Comments are allowed after a '#'.
+# We suggest to put the commit title next to the hash for easier navigation.
+
+5c23fe00f6d8f11f1fe35a118b5345adc47f7dc0 # devices/greth-regs.h: change desc. of a file
+2058bc772d0a83b7d27ae5567105236f9b43ec26 # devices/ephy.c: change unsigned suffix to uppercase
+25acb1432d51afff0c0ed5d4d751cbca98051f7e # devices/ephy.c: fix typo
