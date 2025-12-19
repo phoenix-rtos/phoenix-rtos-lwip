@@ -20,6 +20,9 @@
 #include <sys/mman.h>
 #include <sys/interrupt.h>
 
+#include <board_config.h>
+#include "cyhal_sdio_def.h"
+
 
 #define USDHC2_ADDR 0x2194000
 #define USDHC2_IRQ  (32 + 23)
@@ -58,6 +61,22 @@ enum {
 	tuning_ctrl,
 };
 
+
+static const struct cyhal_sdio_pad {
+	int isel;
+	int iomux;
+	int iopad;
+	char mux_setting;
+	bool do_pull_up;
+	char daisy;
+} cyhal_sdio_pads[] = {
+	{ pctl_isel_usdhc2_clk, PCTL(CONFIG_USDHC2_CLK_MUX_PAD), PCTL(CONFIG_USDHC2_CLK_PAD), CONFIG_USDHC2_CLK_MUX_VAL, false, CONFIG_USDHC2_CLK_ISEL },
+	{ pctl_isel_usdhc2_cmd, PCTL(CONFIG_USDHC2_CMD_MUX_PAD), PCTL(CONFIG_USDHC2_CMD_PAD), CONFIG_USDHC2_CMD_MUX_VAL, true, CONFIG_USDHC2_CMD_ISEL },
+	{ pctl_isel_usdhc2_d0, PCTL(CONFIG_USDHC2_D0_MUX_PAD), PCTL(CONFIG_USDHC2_D0_PAD), CONFIG_USDHC2_D0_MUX_VAL, true, CONFIG_USDHC2_D0_ISEL },
+	{ pctl_isel_usdhc2_d1, PCTL(CONFIG_USDHC2_D1_MUX_PAD), PCTL(CONFIG_USDHC2_D1_PAD), CONFIG_USDHC2_D1_MUX_VAL, true, CONFIG_USDHC2_D1_ISEL },
+	{ pctl_isel_usdhc2_d2, PCTL(CONFIG_USDHC2_D2_MUX_PAD), PCTL(CONFIG_USDHC2_D2_PAD), CONFIG_USDHC2_D2_MUX_VAL, true, CONFIG_USDHC2_D2_ISEL },
+	{ pctl_isel_usdhc2_d3, PCTL(CONFIG_USDHC2_D3_MUX_PAD), PCTL(CONFIG_USDHC2_D3_PAD), CONFIG_USDHC2_D3_MUX_VAL, true, CONFIG_USDHC2_D3_ISEL },
+};
 
 static struct {
 	volatile uint32_t *base;
@@ -304,6 +323,38 @@ cy_rslt_t cyhal_sdio_start_irq_thread(cyhal_sdio_t *obj)
 }
 
 
+static int cyhal_sdio_pad_init(void)
+{
+	int ret = 0;
+	for (size_t i = 0; i < sizeof(cyhal_sdio_pads) / sizeof(cyhal_sdio_pads[0]); i++) {
+		const struct cyhal_sdio_pad *p = &cyhal_sdio_pads[i];
+		ret = cyhal_utils_set_iomux(p->iomux, p->mux_setting);
+		if (ret < 0) {
+			cy_log_msg(CYLF_SDIO, CY_LOG_ERR, "can't configure SDIO pins iomux\n");
+			return ret;
+		}
+
+		/* 100K Ohm Pull up */
+		char pus = p->do_pull_up ? 2 : 0;
+		char pue = p->do_pull_up ? 1 : 0;
+		char pke = p->do_pull_up ? 1 : 0;
+		ret = cyhal_utils_set_iopad(p->iopad, 0, pus, pue, pke, 0, 2, 1, 0);
+		if (ret < 0) {
+			cy_log_msg(CYLF_SDIO, CY_LOG_ERR, "can't configure SDIO pins iopad\n");
+			return ret;
+		}
+
+		ret = cyhal_utils_set_iosel(p->isel, p->daisy);
+		if (ret < 0) {
+			cy_log_msg(CYLF_SDIO, CY_LOG_ERR, "can't configure SDIO pins iosel\n");
+			return ret;
+		}
+	}
+
+	return ret;
+}
+
+
 /* NOTE: obj is ignored - state is kept in sdio_common */
 cy_rslt_t cyhal_sdio_init(cyhal_sdio_t *obj)
 {
@@ -341,33 +392,8 @@ cy_rslt_t cyhal_sdio_init(cyhal_sdio_t *obj)
 			break;
 		}
 
-		if ((cyhal_utils_set_iomux(pctl_mux_csi_vsync, 1) < 0) ||     /* USDHC2_CLK */
-				(cyhal_utils_set_iomux(pctl_mux_csi_hsync, 1) < 0) || /* USDHC2_CMD */
-				(cyhal_utils_set_iomux(pctl_mux_csi_d0, 1) < 0) ||    /* USDHC2_DATA0 */
-				(cyhal_utils_set_iomux(pctl_mux_csi_d1, 1) < 0) ||    /* USDHC2_DATA1 */
-				(cyhal_utils_set_iomux(pctl_mux_csi_d2, 1) < 0) ||    /* USDHC2_DATA2 */
-				(cyhal_utils_set_iomux(pctl_mux_csi_d3, 1) < 0)) {    /* USDHC2_DATA3 */
-			cy_log_msg(CYLF_SDIO, CY_LOG_ERR, "can't configure SDIO pins iomux\n");
-			break;
-		}
-
-		if ((cyhal_utils_set_iosel(pctl_isel_usdhc2_clk, 0) < 0) ||     /* CSI_VSYNC_ALT1 */
-				(cyhal_utils_set_iosel(pctl_isel_usdhc2_cmd, 0) < 0) || /* CSI_HSYNC_ALT1 */
-				(cyhal_utils_set_iosel(pctl_isel_usdhc2_d0, 0) < 0) ||  /* CSI_DATA00_ALT1 */
-				(cyhal_utils_set_iosel(pctl_isel_usdhc2_d1, 0) < 0) ||  /* CSI_DATA01_ALT1 */
-				(cyhal_utils_set_iosel(pctl_isel_usdhc2_d2, 2) < 0) ||  /* CSI_DATA02_ALT1 */
-				(cyhal_utils_set_iosel(pctl_isel_usdhc2_d3, 0) < 0)) {  /* CSI_DATA03_ALT1 */
-			cy_log_msg(CYLF_SDIO, CY_LOG_ERR, "can't configure SDIO pins iosel\n");
-			break;
-		}
-
-		if ((cyhal_utils_set_iopad(pctl_pad_csi_vsync, 0, 0, 0, 0, 0, 2, 1, 0) < 0) ||
-				(cyhal_utils_set_iopad(pctl_pad_csi_hsync, 0, 2, 1, 1, 0, 2, 1, 0) < 0) || /* 100K Ohm Pull up */
-				(cyhal_utils_set_iopad(pctl_pad_csi_d0, 0, 2, 1, 1, 0, 2, 1, 0) < 0) ||    /* 100K Ohm Pull up */
-				(cyhal_utils_set_iopad(pctl_pad_csi_d1, 0, 2, 1, 1, 0, 2, 1, 0) < 0) ||    /* 100K Ohm Pull up */
-				(cyhal_utils_set_iopad(pctl_pad_csi_d2, 0, 2, 1, 1, 0, 2, 1, 0) < 0) ||    /* 100K Ohm Pull up */
-				(cyhal_utils_set_iopad(pctl_pad_csi_d3, 0, 2, 1, 1, 0, 2, 1, 0) < 0)) {    /* 100K Ohm Pull up */
-			cy_log_msg(CYLF_SDIO, CY_LOG_ERR, "can't configure SDIO pins iopad\n");
+		if (cyhal_sdio_pad_init() < 0) {
+			/* A log message was already printed by cyhal_sdio_pad_init */
 			break;
 		}
 
