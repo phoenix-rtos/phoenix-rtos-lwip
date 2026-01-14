@@ -1,5 +1,5 @@
 /*
- * Copyright 2021, Cypress Semiconductor Corporation (an Infineon company)
+ * Copyright 2024, Cypress Semiconductor Corporation (an Infineon company)
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,17 +15,18 @@
  * limitations under the License.
  */
 
-#include <stdio.h>
-#include <stdio.h>
-#include <string.h>
-#include "whd.h"
-#include "cy_log.h"
-
 #ifndef INCLUDED_WHD_DEBUG_H
 #define INCLUDED_WHD_DEBUG_H
 
+#include <stdio.h>
+#include <string.h>
+
+#include "cy_log.h"
+#include "whd.h"
+
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 
 /******************************************************
@@ -39,25 +40,19 @@ extern "C" {
 /*#define WHD_LOGGING_BUFFER_ENABLE*/
 
 #if defined(__GNUC__)
-#define WHD_TRIGGER_BREAKPOINT() \
-	do { \
-		__asm__("bkpt"); \
-	} while (0)
+#define WHD_TRIGGER_BREAKPOINT() do { __asm__ volatile("bkpt"); } while (0)
 
-#elif defined(__IAR_SYSTEMS_ICC__)
-#define WHD_TRIGGER_BREAKPOINT() \
-	do { \
-		__asm("bkpt 0"); \
-	} while (0)
+#elif defined (__IAR_SYSTEMS_ICC__)
+#define WHD_TRIGGER_BREAKPOINT( ) do { __asm("bkpt 0"); } while (0)
 
 #else
-#define WHD_TRIGGER_BREAKPOINT()
+#define WHD_TRIGGER_BREAKPOINT( )
 #endif
 
 #ifdef WPRINT_ENABLE_ERROR
 #define WPRINT_ERROR(args) \
 	do { \
-		WPRINT_MACRO(args); \
+		WPRINT_ERROR(args); \
 	} while (0)
 #define whd_assert(error_string, assertion) \
 	do { \
@@ -66,17 +61,17 @@ extern "C" {
 		} \
 	} while (0)
 #define whd_minor_assert(error_string, \
-	assertion) \
+		assertion) \
 	do { \
 		if (!(assertion)) \
-			WPRINT_MACRO((error_string)); \
+			WPRINT_ERROR((error_string)); \
 	} while (0)
 #else
 #define whd_assert(error_string, \
-	assertion) \
+		assertion) \
 	do { \
 		if (!(assertion)) { \
-			WPRINT_MACRO((error_string)); \
+			WPRINT_ERROR((error_string)); \
 		} \
 	} while (0)
 #define whd_minor_assert(error_string, assertion) \
@@ -96,39 +91,33 @@ extern "C" {
 #define WPRINT_MACRO(args)
 #else
 #if defined(WHD_LOGGING_BUFFER_ENABLE)
-#define WPRINT_MACRO(args) \
-	do { \
-		whd_buffer_printf args; \
-	} while (0 == 1)
+#define WPRINT_MACRO(args) do { whd_buffer_printf args; } while (0 == 1)
 #else
 #define WLOG_INFO(fmt, ...) \
 	do { \
 		cy_log_msg(CYLF_DEF, CY_LOG_INFO, fmt, ##__VA_ARGS__); \
-	} while (0 == 1)
+	} while (0)
 #define WLOG_DEBUG(fmt, ...) \
 	do { \
 		cy_log_msg(CYLF_DEF, CY_LOG_DEBUG, fmt, ##__VA_ARGS__); \
-	} while (0 == 1)
+	} while (0)
 #define WLOG_ERROR(fmt, ...) \
 	do { \
 		cy_log_msg(CYLF_DEF, CY_LOG_ERR, fmt, ##__VA_ARGS__); \
-	} while (0 == 1)
+	} while (0)
+
 #define WPRINT_INFO(args) \
 	do { \
 		WLOG_INFO args; \
-	} while (0 == 1)
+	} while (0)
 #define WPRINT_DEBUG(args) \
 	do { \
 		WLOG_DEBUG args; \
-	} while (0 == 1)
+	} while (0)
 #define WPRINT_ERROR(args) \
 	do { \
 		WLOG_ERROR args; \
-	} while (0 == 1)
-#define WPRINT_MACRO(args) \
-	do { \
-		WLOG_INFO args; \
-	} while (0 == 1)
+	} while (0)
 #endif
 #endif
 
@@ -153,24 +142,18 @@ extern "C" {
 #endif
 
 #ifdef WPRINT_ENABLE_WHD_DATA_LOG
-#define WPRINT_WHD_DATA_LOG(args) WPRINT_MACRO(args)
+#define WPRINT_WHD_DATA_LOG(args) WPRINT_INFO(args)
 #else
 #define WPRINT_WHD_DATA_LOG(args)
 #endif
 
 #define WHD_STATS_INCREMENT_VARIABLE(whd_driver, var) \
-	do { \
-		whd_driver->whd_stats.var++; \
-	} while (0)
+    do { whd_driver->whd_stats.var++; } while (0)
 
 #define WHD_STATS_CONDITIONAL_INCREMENT_VARIABLE(whd_driver, condition, var) \
-	do { \
-		if (condition) { \
-			whd_driver->whd_stats.var++; \
-		} \
-	} while (0)
+    do { if (condition){ whd_driver->whd_stats.var++; }} while (0)
 
-#if (defined(__GNUC__) && (__GNUC__ >= 6))
+#if (defined(__GNUC__) && (__GNUC__ >= 6) )
 #define __FUNCTION__ __func__
 #endif
 
@@ -185,20 +168,20 @@ int whd_buffer_printf(const char *format, ...);
 
 typedef struct
 {
-	uint32_t buffer_write;
-	uint32_t buffer_read;
-	char buffer[LOGGING_BUFFER_SIZE + 1];
-	whd_bool_t roll_over;
-	whd_bool_t over_write;
+    uint32_t buffer_write;
+    uint32_t buffer_read;
+    char buffer[LOGGING_BUFFER_SIZE + 1];
+    whd_bool_t roll_over;
+    whd_bool_t over_write;
 } whd_logging_t;
 #else
 #define whd_print_logbuffer()
 #endif /* WHD_LOGGING_BUFFER_ENABLE */
 
 #ifdef WHD_IOCTL_LOG_ENABLE
-#define WHD_IOCTL_LOG_ADD(x, y, z)          whd_ioctl_log_add(x, y, z)
+#define WHD_IOCTL_LOG_ADD(x, y, z) whd_ioctl_log_add(x, y, z)
 #define WHD_IOCTL_LOG_ADD_EVENT(w, x, y, z) whd_ioctl_log_add_event(w, x, y, z)
-#define WHD_IOCTL_PRINT(x)                  whd_ioctl_print(x)
+#define WHD_IOCTL_PRINT(x) whd_ioctl_print(x)
 #else
 #define WHD_IOCTL_LOG_ADD(x, y, z)
 #define WHD_IOCTL_LOG_ADD_EVENT(w, x, y, z)

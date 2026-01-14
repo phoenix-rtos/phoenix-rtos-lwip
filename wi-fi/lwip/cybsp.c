@@ -25,14 +25,15 @@
 * limitations under the License.
 *******************************************************************************/
 
-#include <stdlib.h>
 #include "cybsp.h"
 
 #if defined(__cplusplus)
 extern "C" {
 #endif
 
+#if (CYBSP_WIFI_INTERFACE_TYPE == CYBSP_SDIO_INTERFACE)
 static cyhal_sdio_t sdio_obj;
+
 
 //--------------------------------------------------------------------------------------------------
 // cybsp_get_wifi_sdio_obj
@@ -41,6 +42,7 @@ cyhal_sdio_t *cybsp_get_wifi_sdio_obj(void)
 {
 	return &sdio_obj;
 }
+#endif
 
 
 //--------------------------------------------------------------------------------------------------
@@ -50,6 +52,7 @@ cy_rslt_t cybsp_init(void)
 {
 	cy_rslt_t result = CY_RSLT_SUCCESS;
 
+#if (CYBSP_WIFI_INTERFACE_TYPE == CYBSP_SDIO_INTERFACE)
 	// Initialize SDIO interface. This must be done before other HAL API calls as some SDIO
 	// implementations require specific peripheral instances.
 	// NOTE: The full WiFi interface still needs to be initialized via cybsp_wifi_init_primary().
@@ -58,7 +61,12 @@ cy_rslt_t cybsp_init(void)
 		// Reserves: CYBSP_WIFI_SDIO, CYBSP_WIFI_SDIO_D0, CYBSP_WIFI_SDIO_D1, CYBSP_WIFI_SDIO_D2,
 		// CYBSP_WIFI_SDIO_D3, CYBSP_WIFI_SDIO_CMD and CYBSP_WIFI_SDIO_CLK.
 		result = cyhal_sdio_init(&sdio_obj);
+
+		if (result == CY_RSLT_SUCCESS) {
+			result = cyhal_sdio_start_irq_thread(cybsp_get_wifi_sdio_obj());
+		}
 	}
+#endif
 
 	// CYHAL_HWMGR_RSLT_ERR_INUSE error code could be returned if any needed for BSP resource was
 	// reserved by user previously. Please review the Device Configurator (design.modus) and the BSP
@@ -69,7 +77,10 @@ cy_rslt_t cybsp_init(void)
 
 void cybsp_free(void)
 {
+#if (CYBSP_WIFI_INTERFACE_TYPE == CYBSP_SDIO_INTERFACE)
+	cyhal_sdio_stop_irq_thread(cybsp_get_wifi_sdio_obj());
 	cyhal_sdio_free(&sdio_obj);
+#endif
 }
 
 
