@@ -11,6 +11,7 @@
 #include "arch/cc.h"
 #include "lwip/etharp.h"
 #include "netif-driver.h"
+#include "physelftest.h"
 #include "physmmap.h"
 #include "bdring.h"
 #include "pci.h"
@@ -27,6 +28,8 @@
 
 
 #include <errno.h>
+#include <phoenix/ethtool.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -41,6 +44,9 @@
 #define RTL_RX_RING_SIZE	64
 #define RTL_TX_RING_SIZE	64
 #define DEBUG_RINGS	0
+
+#define RTL_DEBUG    0
+#define RTL_SELFTEST 1
 
 typedef struct
 {
@@ -393,11 +399,165 @@ static int rtl_netifInit(struct netif *netif, char *cfg)
 }
 
 
+static int rtl_getLoopback(rtl_priv_t *state)
+{
+	uint32_t tcr = state->mmio->TCR;
+
+	switch ((tcr >> 17) & 0x3) {
+		case 0x0:
+			return ETH_PHY_LOOPBACK_DISABLED;
+
+		case 0x3:
+			return ETH_PHY_LOOPBACK_ENABLED;
+
+		default:
+			return -EIO;
+	}
+}
+
+
+static int rtl_setLoopback(rtl_priv_t *state, bool enable)
+{
+	uint32_t tcr = state->mmio->TCR;
+
+	if (enable) {
+		tcr |= (0x3 << 17);
+	}
+	else {
+		tcr &= ~(0x3 << 17);
+	}
+
+	state->mmio->TCR = tcr;
+
+	if (state->mmio->TCR != tcr) {
+		return -1;
+	}
+
+	return 0;
+}
+
+
+#if RTL_SELFTEST
+static uint32_t old_rcr;
+
+
+static int rtl_selftestSetup(void *arg)
+{
+	rtl_priv_t *state = arg;
+
+	if (rtl_setLoopback(state, true) < 0) {
+		(void)rtl_setLoopback(state, false);
+		return -1;
+	}
+
+	old_rcr = state->mmio->RCR;
+	/* accept faulty frames */
+	state->mmio->RCR |= (1u << 16) | 0x3f;
+
+	return 0;
+}
+
+
+static int rtl_selftestTeardown(void *arg)
+{
+	rtl_priv_t *state = arg;
+
+	state->mmio->RCR = old_rcr;
+
+	return rtl_setLoopback(state, false);
+}
+#endif
+
+
+static int rtl_ethtoolIoctl(struct netif *netif, void *data)
+{
+	int err;
+	rtl_priv_t *state = netif->state;
+	uint32_t cmd = *(uint32_t *)data;
+
+	switch (cmd) {
+		case ETHTOOL_GSSET_INFO: {
+			struct ethtool_sset_info *info = data;
+			uint64_t outmask = 0;
+
+			if ((info->sset_mask & (1ull << ETH_SS_TEST)) != 0) {
+				info->data[ETH_SS_TEST] = 0; /* number_of_strings * ETH_GSTRING_LEN */
+				outmask |= 1ull << ETH_SS_TEST;
+			}
+
+			info->sset_mask = outmask;
+
+			return EOK;
+		}
+
+		case ETHTOOL_GSTRINGS: {
+			struct ethtool_gstrings *strings = data;
+
+			switch (strings->string_set) {
+				case ETH_SS_TEST:
+					strings->len = 0;
+					break;
+
+				default:
+					return -EINVAL;
+			}
+
+			return EOK;
+		}
+
+		case ETHTOOL_TEST: {
+#if RTL_SELFTEST
+			struct ethtool_test *test = data;
+			if ((test->flags & ETH_TEST_FL_OFFLINE) != 0) {
+				const struct selftest_params params = {
+					.module = "rtl",
+					.netif = netif,
+					.crcStripped = false,
+					.verbose = RTL_DEBUG != 0,
+					.setup = rtl_selftestSetup,
+					.teardown = rtl_selftestTeardown,
+				};
+				err = physelftest(&params);
+				if (err < 0) {
+					test->flags |= ETH_TEST_FL_FAILED;
+				}
+				return EOK;
+			}
+#endif
+			return -EOPNOTSUPP;
+		}
+
+		case ETHTOOL_GLOOPBACK: {
+			struct ethtool_value *value = data;
+			err = rtl_getLoopback(state);
+			if (err < 0) {
+				return err;
+			}
+			value->data = err;
+			return EOK;
+		}
+
+		case ETHTOOL_SLOOPBACK: {
+			struct ethtool_value *value = data;
+			err = rtl_setLoopback(state, value->data);
+			if (err < 0) {
+				value->data = ETH_PHY_LOOPBACK_SET_FAILED;
+			}
+			return EOK;
+		}
+
+		default:
+			return -EOPNOTSUPP;
+	}
+}
+
+
 static netif_driver_t rtl_drv = {
 	.init = rtl_netifInit,
 	.state_sz = sizeof(rtl_priv_t),
 	.state_align = _Alignof(rtl_priv_t),
 	.name = "rtl",
+	.do_ethtool_ioctl = rtl_ethtoolIoctl
 };
 
 
