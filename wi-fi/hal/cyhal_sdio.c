@@ -121,6 +121,12 @@ static void dump_registers(void)
 #endif
 
 
+static inline void dataMemoryBarrier(void)
+{
+	__asm__ volatile("dmb sy");
+}
+
+
 static int alloc_dma_buffer(void)
 {
 	size_t size = DMA_BUFFER_SIZE;
@@ -146,11 +152,9 @@ static int wait_for_cmd(uint32_t flags, uint32_t wait_us, uint32_t max_cnt)
 {
 	uint32_t i, val;
 
-	// FIXME: ???
-	usleep(10);
-
 	for (i = 0; i < max_cnt; ++i) {
 		val = *(sdio_common.base + int_status);
+		dataMemoryBarrier();
 
 		/* check for errors */
 		if (val & 0x107f0000) {
@@ -192,14 +196,14 @@ static int reset_all(uint8_t sdclkfs, uint8_t dvs)
 	cy_log_msg(CYLF_SDIO, CY_LOG_DEBUG, "reset SDIO\n");
 
 	*(sdio_common.base + sys_ctrl) = (1 << 24) | (sdclkfs << 8) | (dvs << 4) | 0xf; /* RSTA=1 */
-
-	// FIXME: ???
-	usleep(10);
+	dataMemoryBarrier();
 
 	for (i = 0; i < 10; ++i) {
 		val = *(sdio_common.base + sys_ctrl) & (1 << 24);
-		if (val == 0)
+		if (val == 0) {
+			dataMemoryBarrier();
 			return 0;
+		}
 		usleep(10);
 	}
 
@@ -218,14 +222,14 @@ static int reset_cmd_block(void)
 	val = *(sdio_common.base + sys_ctrl);
 	val |= 1 << 25; /* RSTC=1 */
 	*(sdio_common.base + sys_ctrl) = val;
-
-	// FIXME: ???
-	usleep(10);
+	dataMemoryBarrier();
 
 	for (i = 0; i < 10; ++i) {
 		val = *(sdio_common.base + sys_ctrl) & (1 << 25);
-		if (val == 0)
+		if (val == 0) {
+			dataMemoryBarrier();
 			return 0;
+		}
 		usleep(10);
 	}
 
@@ -244,14 +248,14 @@ static int reset_data_block(void)
 	val = *(sdio_common.base + sys_ctrl);
 	val |= 1 << 26; /* RSTD=1 */
 	*(sdio_common.base + sys_ctrl) = val;
-
-	// FIXME: ???
-	usleep(10);
+	dataMemoryBarrier();
 
 	for (i = 0; i < 10; ++i) {
 		val = *(sdio_common.base + sys_ctrl) & (1 << 26);
-		if (val == 0)
+		if (val == 0) {
+			dataMemoryBarrier();
 			return 0;
+		}
 		usleep(10);
 	}
 
@@ -586,7 +590,9 @@ static cy_rslt_t cyhal_sdio_send_cmd_internal(cyhal_transfer_t direction, cyhal_
 	*(sdio_common.base + mix_ctrl) = 1U << 31;
 	*(sdio_common.base + blk_att) = 0;
 	*(sdio_common.base + cmd_arg) = argument;
+	dataMemoryBarrier();
 	*(sdio_common.base + cmd_xfer_typ) = cmd;
+	dataMemoryBarrier();
 
 	/* wait 1 ms max */
 	if (wait_for_cmd(0x1, 10, 100) < 0) {
@@ -707,7 +713,9 @@ static cy_rslt_t cyhal_sdio_bulk_transfer_internal(cyhal_transfer_t direction, u
 	*(sdio_common.base + blk_att) = blk;
 	*(sdio_common.base + ds_addr) = sdio_common.dmaphys;
 	*(sdio_common.base + cmd_arg) = argument;
+	dataMemoryBarrier();
 	*(sdio_common.base + cmd_xfer_typ) = cmd;
+	dataMemoryBarrier();
 
 	/* wait 1 ms max */
 	if (wait_for_cmd(0xb, 10, 100) < 0) {
