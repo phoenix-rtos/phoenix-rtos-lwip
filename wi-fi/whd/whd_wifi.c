@@ -77,14 +77,7 @@ whd_result_t whd_wifi_set_mac_address(whd_interface_t ifp, whd_mac_t mac)
         whd_mac_t ap_mac_address;
 
         memcpy(&ap_mac_address, &mac, sizeof(whd_mac_t) );
-        if (ap_mac_address.octet[0] & MAC_ADDRESS_LOCALLY_ADMINISTERED_BIT)
-        {
-            ap_mac_address.octet[0] &= (uint8_t) ~(MAC_ADDRESS_LOCALLY_ADMINISTERED_BIT);
-        }
-        else
-        {
-            ap_mac_address.octet[0] |= MAC_ADDRESS_LOCALLY_ADMINISTERED_BIT;
-        }
+        ap_mac_address.octet[0] ^= MAC_ADDRESS_LOCALLY_ADMINISTERED_BIT;
 
         data = (uint32_t *)whd_proto_get_iovar_buffer(whd_driver, &buffer, sizeof(whd_mac_t), IOVAR_STR_CUR_ETHERADDR);
         CHECK_IOCTL_BUFFER(data);
@@ -96,9 +89,9 @@ whd_result_t whd_wifi_set_mac_address(whd_interface_t ifp, whd_mac_t mac)
             WPRINT_WHD_INFO( (" STA MAC address : %02x:%02x:%02x:%02x:%02x:%02x \n"
                               " AP  MAC address : %02x:%02x:%02x:%02x:%02x:%02x \n",
                               mac.octet[0], mac.octet[1], mac.octet[2],
-                              mac.octet[3], mac.octet[4], mac.octet[3],
+                              mac.octet[3], mac.octet[4], mac.octet[5],
                               ap_mac_address.octet[0], ap_mac_address.octet[1], ap_mac_address.octet[2],
-                              ap_mac_address.octet[3], ap_mac_address.octet[4], ap_mac_address.octet[3]) );
+                              ap_mac_address.octet[3], ap_mac_address.octet[4], ap_mac_address.octet[5]) );
         }
     }
     else
