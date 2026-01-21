@@ -162,7 +162,7 @@ typedef struct
 static const uint8_t *find_option(const dhcp_header_t *request, uint8_t option_num);
 static bool get_client_ip_address_from_cache(const cy_lwip_mac_addr_t *client_mac_address, cy_lwip_ip_address_t *client_ip_address);
 static cy_rslt_t add_client_to_cache(const cy_lwip_mac_addr_t *client_mac_address, const cy_lwip_ip_address_t *client_ip_address);
-static void ipv4_to_string(char *buffer, uint32_t ipv4_address);
+static void ipv4_to_string(char buffer[16], uint32_t ipv4_address);
 static void cy_dhcp_thread_func(cy_thread_arg_t thread_input);
 static cy_rslt_t udp_create_socket(cy_lwip_udp_socket_t *socket, uint16_t port, cy_lwip_nw_interface_role_t interface);
 static cy_rslt_t udp_delete_socket(cy_lwip_udp_socket_t *socket);
