@@ -29,6 +29,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "lwipopts.h"
 
 #ifndef WIFI_FIRMWARE_FILES_DIRECTORY_PATH
 #define WIFI_FIRMWARE_FILES_DIRECTORY_PATH "/firmware"
@@ -46,8 +47,9 @@
 #define NVRAM_FILE_EXTENSION ".nvram_blob"
 #endif
 
-#define AW_NM512_FILENAME     "43439A0"
-#define STERLING_LWB_FILENAME "brcmfmac43430-sdio-prod"
+#define AW_NM512_FILENAME          "43439A0"
+#define STERLING_LWB_FILENAME      "brcmfmac43430-sdio-prod"
+#define STERLING_LWB5PLUS_FILENAME "4373A0"
 
 
 static uint8_t resource_buf[BLOCK_SIZE];
@@ -99,6 +101,26 @@ static const struct chip_lookup {
 				.mem_size = 0,
 			},
 		},
+	},
+	{
+		.chip_id = 0x4373,
+		.rsrc = {
+			[WHD_RESOURCE_WLAN_FIRMWARE] = {
+				.path = WIFI_FIRMWARE_FILES_DIRECTORY_PATH "/" STERLING_LWB5PLUS_FILENAME FIRMWARE_FILE_EXTENSION,
+				.mem_image = NULL,
+				.mem_size = 0,
+			},
+			[WHD_RESOURCE_WLAN_NVRAM] = {
+				.path = WIFI_FIRMWARE_FILES_DIRECTORY_PATH "/" STERLING_LWB5PLUS_FILENAME NVRAM_FILE_EXTENSION,
+				.mem_image = sterling_lwb5plus_wifi_nvram_image,
+				.mem_size = sizeof(sterling_lwb5plus_wifi_nvram_image),
+			},
+			[WHD_RESOURCE_WLAN_CLM] = {
+				.path = WIFI_FIRMWARE_FILES_DIRECTORY_PATH "/" STERLING_LWB5PLUS_FILENAME CLM_FILE_EXTENSION,
+				.mem_image = NULL,
+				.mem_size = 0,
+			},
+		}
 	},
 };
 
