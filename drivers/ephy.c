@@ -13,6 +13,7 @@
 #include "netif-driver.h"
 
 #include <errno.h>
+#include <phoenix/ethtool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdbool.h>
@@ -236,10 +237,27 @@ static uint32_t ephy_readPhyId(const eth_phy_state_t *phy)
 }
 
 
+static inline const char *ephy_duplexToString(int duplex)
+{
+	switch (duplex) {
+		case DUPLEX_HALF:
+			return "Half";
+
+		case DUPLEX_FULL:
+			return "Full";
+
+		case DUPLEX_UNKNOWN:
+		default:
+			return "unknown";
+	}
+}
+
+
 static void ephy_setLinkState(const eth_phy_state_t *phy)
 {
 	uint16_t bctl, bstat, adv, lpa, pc1, pc2;
-	int speed, full_duplex = 0;
+	int speed, duplex = 0;
+	char linkstatus_str[32] = { 0 };
 
 	bctl = ephy_regRead(phy, EPHY_COMMON_00_BMCR);
 	/*
@@ -252,9 +270,15 @@ static void ephy_setLinkState(const eth_phy_state_t *phy)
 	adv = ephy_regRead(phy, EPHY_COMMON_04_ANAR);
 	lpa = ephy_regRead(phy, EPHY_COMMON_05_ANLPAR);
 
-	speed = ephy_linkSpeed(phy, &full_duplex);
+	bool linkup = (bstat & (1U << 2)) != 0;
+	speed = ephy_linkSpeed(phy, &duplex);
 
-	int linkup = (bstat & (1U << 2)) != 0;
+	if (linkup) {
+		snprintf(linkstatus_str, sizeof(linkstatus_str), "link is UP   %d/%s", speed, ephy_duplexToString(duplex));
+	}
+	else {
+		snprintf(linkstatus_str, sizeof(linkstatus_str), "link is DOWN");
+	}
 
 	if (phy->link_state_callback != NULL) {
 		phy->link_state_callback(phy->link_state_callback_arg, linkup);
@@ -266,20 +290,20 @@ static void ephy_setLinkState(const eth_phy_state_t *phy)
 		case ephy_ksz8081rnd:
 			pc1 = ephy_regRead(phy, EPHY_KSZ8081_1E_PHYCR1);
 			pc2 = ephy_regRead(phy, EPHY_KSZ8081_1F_PHYCR2);
-			ephy_printf(phy, "link is %s %uMbps/%s (ctl %04x, status %04x, adv %04x, lpa %04x, pctl %04x,%04x)",
-					(linkup != 0) ? "UP  " : "DOWN", speed, (full_duplex != 0) ? "Full" : "Half", bctl, bstat, adv, lpa, pc1, pc2);
+			ephy_printf(phy, "%s (ctl %04x, status %04x, adv %04x, lpa %04x, pctl %04x,%04x)",
+					linkstatus_str, bctl, bstat, adv, lpa, pc1, pc2);
 			break;
 		case ephy_ksz9031mnx:
 		case ephy_dp83867is:
 		case ephy_rtl8201fi:
-			ephy_printf(phy, "link is %s %uMbps/%s (ctl %04x, status %04x, adv %04x, lpa %04x)",
-					(linkup != 0) ? "UP  " : "DOWN", speed, (full_duplex != 0) ? "Full" : "Half", bctl, bstat, adv, lpa);
+			ephy_printf(phy, "%s (ctl %04x, status %04x, adv %04x, lpa %04x)",
+					linkstatus_str, bctl, bstat, adv, lpa);
 			break;
 		case ephy_rtl8211fdi:
 			pc1 = ephy_regRead(phy, EPHY_RTL8211_18_PHYCR1);
 			pc2 = ephy_regRead(phy, EPHY_RTL8211_19_PHYCR2);
-			ephy_printf(phy, "link is %s %uMbps/%s (ctl %04x, status %04x, adv %04x, lpa %04x, pctl %04x,%04x)",
-					linkup ? "UP  " : "DOWN", speed, full_duplex ? "Full" : "Half", bctl, bstat, adv, lpa, pc1, pc2);
+			ephy_printf(phy, "%s (ctl %04x, status %04x, adv %04x, lpa %04x, pctl %04x,%04x)",
+					linkstatus_str, bctl, bstat, adv, lpa, pc1, pc2);
 			break;
 		default:
 			/* unreachable */
@@ -288,51 +312,57 @@ static void ephy_setLinkState(const eth_phy_state_t *phy)
 }
 
 
-static inline int ephy_ksz8081rnx_linkSpeed(const eth_phy_state_t *phy, int *full_duplex)
+static inline int ephy_ksz8081rnx_linkSpeed(const eth_phy_state_t *phy, int *duplex)
 {
 	uint16_t pc1 = ephy_regRead(phy, EPHY_KSZ8081_1E_PHYCR1);
 
 	if ((pc1 & 0x7) == 0) { /* PHY still in auto-negotiation */
-		return 0;
+		if (duplex != NULL) {
+			*duplex = DUPLEX_UNKNOWN;
+		}
+		return SPEED_UNKNOWN;
 	}
 
-	if (full_duplex != NULL) {
-		*full_duplex = ((pc1 & (1U << 2)) != 0) ? 1 : 0;
+	if (duplex != NULL) {
+		*duplex = ((pc1 & (1U << 2)) != 0) ? DUPLEX_FULL : DUPLEX_HALF;
 	}
 
-	return ((pc1 & 0x1) != 0) ? 10 : 100;
+	return ((pc1 & 0x1) != 0) ? SPEED_10 : SPEED_100;
 }
 
 
-static inline int ephy_ksz9031mnx_linkSpeed(const eth_phy_state_t *phy, int *full_duplex)
+static inline int ephy_ksz9031mnx_linkSpeed(const eth_phy_state_t *phy, int *duplex)
 {
 	uint16_t st = ephy_regRead(phy, EPHY_COMMON_01_BMSR);
-	/* PHY still in auto-negotiation */
-	if ((st & (1U << 5)) == 0) {
-		return 0;
+
+	if ((st & (1U << 5)) == 0) { /* PHY still in auto-negotiation */
+		if (duplex != NULL) {
+			*duplex = DUPLEX_UNKNOWN;
+		}
+		return SPEED_UNKNOWN;
 	}
 
 	uint16_t pc = ephy_regRead(phy, EPHY_KSZ9031_1F_PHYCR);
-	if (full_duplex != NULL) {
-		*full_duplex = ((pc & (1U << 3)) != 0) ? 1 : 0;
+	if (duplex != NULL) {
+		*duplex = ((pc & (1U << 3)) != 0) ? DUPLEX_FULL : DUPLEX_HALF;
 	}
 
 	if ((pc & (1U << 4)) != 0) {
-		return 10;
+		return SPEED_10;
 	}
 	else if ((pc & (1U << 5)) != 0) {
-		return 100;
+		return SPEED_100;
 	}
 	else if ((pc & (1U << 6)) != 0) {
-		return 1000;
+		return SPEED_1000;
 	}
 	else {
-		return 0;
+		return SPEED_UNKNOWN;
 	}
 }
 
 
-static inline int ephy_dp83867is_linkSpeed(const eth_phy_state_t *phy, int *full_duplex)
+static inline int ephy_dp83867is_linkSpeed(const eth_phy_state_t *phy, int *duplex)
 {
 	uint16_t st = ephy_regRead(phy, EPHY_COMMON_01_BMSR);
 	uint16_t sts = ephy_regRead(phy, EPHY_DP83867IS_11_PHYSTS);
@@ -340,78 +370,81 @@ static inline int ephy_dp83867is_linkSpeed(const eth_phy_state_t *phy, int *full
 
 	/* PHY still in auto-negotiation */
 	if ((st & (1U << 5)) == 0) {
-		return 0;
+		if (duplex != NULL) {
+			*duplex = DUPLEX_UNKNOWN;
+		}
+		return SPEED_UNKNOWN;
 	}
 
-	if (full_duplex != NULL) {
-		*full_duplex = ((sts & (1U << 13)) != 0) ? 1 : 0;
+	if (duplex != NULL) {
+		*duplex = ((sts & (1U << 13)) != 0) ? DUPLEX_FULL : DUPLEX_HALF;
 	}
 
 	speed = (sts >> 14) & 0x3;
 	switch (speed) {
 		case 0x0:
-			return 10;
+			return SPEED_10;
 		case 0x1:
-			return 100;
+			return SPEED_100;
 		case 0x2:
-			return 1000;
+			return SPEED_1000;
 		default:
-			return 0;
+			return SPEED_UNKNOWN;
 	}
 }
 
 
-static inline int ephy_rtl8201fi_linkSpeed(const eth_phy_state_t *phy, int *full_duplex)
+static inline int ephy_rtl8201fi_linkSpeed(const eth_phy_state_t *phy, int *duplex)
 {
 	uint16_t bmcr = ephy_regRead(phy, EPHY_COMMON_00_BMCR);
 
-	if (full_duplex != NULL) {
-		*full_duplex = ((bmcr & (1U << 8)) != 0) ? 1 : 0;
+	if (duplex != NULL) {
+		*duplex = ((bmcr & (1U << 8)) != 0) ? DUPLEX_FULL : DUPLEX_HALF;
 	}
 
-	return ((bmcr & (1U << 13)) == 0) ? 10 : 100;
+	return ((bmcr & (1U << 13)) == 0) ? SPEED_10 : SPEED_100;
 }
 
 
-static inline int ephy_rtl8211fdi_linkSpeed(const eth_phy_state_t *phy, int *full_duplex)
+static inline int ephy_rtl8211fdi_linkSpeed(const eth_phy_state_t *phy, int *duplex)
 {
 	uint16_t physr = ephy_regRead(phy, EPHY_RTL8211_1A_PHYSR);
 	uint16_t speed;
 
-	if (full_duplex != NULL) {
-		*full_duplex = ((physr & (1U << 3)) != 0) ? 1 : 0;
+	if (duplex != NULL) {
+		*duplex = ((physr & (1U << 3)) != 0) ? DUPLEX_FULL : DUPLEX_HALF;
 	}
 
 	speed = (physr >> 4) & 0x3;
 
 	switch (speed) {
 		case 0x0:
-			return 10;
+			return SPEED_10;
 		case 0x1:
-			return 100;
+			return SPEED_100;
 		case 0x2:
-			return 1000;
+			return SPEED_1000;
 		default:
-			return 0;
+			return SPEED_UNKNOWN;
 	}
 }
 
 
-int ephy_linkSpeed(const eth_phy_state_t *phy, int *full_duplex)
+int ephy_linkSpeed(const eth_phy_state_t *phy, int *duplex)
 {
 	switch (phy->model) {
 		case ephy_ksz8081rna:
 		case ephy_ksz8081rnb:
 		case ephy_ksz8081rnd:
-			return ephy_ksz8081rnx_linkSpeed(phy, full_duplex);
+			return ephy_ksz8081rnx_linkSpeed(phy, duplex);
 		case ephy_ksz9031mnx:
-			return ephy_ksz9031mnx_linkSpeed(phy, full_duplex);
+			return ephy_ksz9031mnx_linkSpeed(phy, duplex);
 		case ephy_dp83867is:
-			return ephy_dp83867is_linkSpeed(phy, full_duplex);
+			return ephy_dp83867is_linkSpeed(phy, duplex);
 		case ephy_rtl8201fi:
-			return ephy_rtl8201fi_linkSpeed(phy, full_duplex);
+			return ephy_rtl8201fi_linkSpeed(phy, duplex);
 		case ephy_rtl8211fdi:
-			return ephy_rtl8211fdi_linkSpeed(phy, full_duplex);
+			return ephy_rtl8211fdi_linkSpeed(phy, duplex);
 		default:
 			/* unreachable */
 			return 0;
@@ -641,11 +674,17 @@ static int ephy_config(eth_phy_state_t *phy, char *cfg)
 }
 
 
-int ephy_enableLoopback(const eth_phy_state_t *phy, bool enable)
+int ephy_getLoopback(const eth_phy_state_t *phy)
+{
+	return (ephy_regRead(phy, EPHY_COMMON_00_BMCR) >> 14) & 0x1;
+}
+
+
+/* toggle MACPHY internal loopback for test mode */
+int ephy_setLoopback(const eth_phy_state_t *phy, bool enable)
 {
 	uint16_t bmcr = ephy_regRead(phy, EPHY_COMMON_00_BMCR);
-	bool loopback_enabled = bmcr & (1U << 14);
-
+	bool loopback_enabled = (bmcr & (1U << 14)) != 0;
 	if (loopback_enabled == enable) {
 		return 0;
 	}
@@ -656,7 +695,14 @@ int ephy_enableLoopback(const eth_phy_state_t *phy, bool enable)
 		/* full-duplex */
 		bmcr |= 1U << 8;
 		bmcr |= ephy_bmcrMaxSpeedMask(phy);
+		/* loopback */
+		bmcr |= 1U << 14;
 	}
+	else {
+		bmcr &= ~(1U << 14);
+	}
+
+	ephy_regWrite(phy, EPHY_COMMON_00_BMCR, bmcr);
 
 	switch (phy->model) {
 		case ephy_ksz8081rna:
@@ -671,15 +717,15 @@ int ephy_enableLoopback(const eth_phy_state_t *phy, bool enable)
 			ephy_regWrite(phy, EPHY_KSZ8081_1F_PHYCR2, phycr2);
 			break;
 		}
+		case ephy_rtl8201fi:
+		case ephy_rtl8211fdi:
+			if (enable) {
+				usleep(phy->reset_release_time_us);
+			}
+			break;
 		default:
 			break;
 	}
-
-	/* loopback */
-	bmcr = enable ?
-			(bmcr | (1U << 14)) :
-			(bmcr & ~(1U << 14));
-	ephy_regWrite(phy, EPHY_COMMON_00_BMCR, bmcr);
 
 	if (!enable) {
 		ephy_restartAN(phy);
@@ -687,6 +733,27 @@ int ephy_enableLoopback(const eth_phy_state_t *phy, bool enable)
 
 	ephy_debug_printf(phy, "loopback %s", enable ? "enabled" : "disabled");
 	return 0;
+}
+
+
+int ephy_getAN(const eth_phy_state_t *phy)
+{
+	int autoneg = (ephy_regRead(phy, EPHY_COMMON_00_BMCR) >> 12) & 0x1;
+	return (autoneg != 0) ? AUTONEG_ENABLE : AUTONEG_DISABLE;
+}
+
+
+#define EPHY_ADVERTISED_SPEEDS     (ADVERTISED_10baseT_Half | ADVERTISED_10baseT_Full | ADVERTISED_100baseT_Half | ADVERTISED_100baseT_Full)
+#define EPHY_ADVERTISED_INTERFACES (ADVERTISED_Autoneg)
+#define EPHY_ADVERTISED_FEATURES   (ADVERTISED_MII)
+#define EPHY_ADVERTISED            (EPHY_ADVERTISED_SPEEDS | EPHY_ADVERTISED_INTERFACES | EPHY_ADVERTISED_FEATURES)
+int ephy_getAdv(const eth_phy_state_t *phy)
+{
+	int adv = EPHY_ADVERTISED_SPEEDS | EPHY_ADVERTISED_INTERFACES | EPHY_ADVERTISED_FEATURES;
+	if (phy->model == ephy_rtl8211fdi || phy->model == ephy_ksz9031mnx || phy->model == ephy_dp83867is) {
+		adv |= ADVERTISED_1000baseT_Full;
+	}
+	return adv;
 }
 
 

@@ -14,10 +14,12 @@
 #include "netif-driver.h"
 #include "bdring.h"
 #include "ephy.h"
+#include "physelftest.h"
 #include "physmmap.h"
 #include "res-create.h"
 #include "imx-enet-regs.h"
 
+#include <phoenix/ethtool.h>
 #include <sys/interrupt.h>
 #include <sys/platform.h>
 #include <sys/threads.h>
@@ -31,9 +33,10 @@
 #include <string.h>
 #include <unistd.h>
 
-#define ENET_DEBUG    0
-#define MDIO_DEBUG    0
-#define ENET_SELFTEST 0
+#define ENET_DEBUG 0
+#define MDIO_DEBUG 0
+
+#define ENET_SELFTEST 1
 
 #define ENET_MAX_PKT_SZ               1984 /* DMA aligned */
 #define ENET_USE_ENHANCED_DESCRIPTORS 0
@@ -64,6 +67,10 @@
 #define ENET_RX_RING_SIZE 8
 #define ENET_TX_RING_SIZE 8
 
+#define ENET_SUPPORTED_SPEEDS ( \
+		SUPPORTED_10baseT_Half | SUPPORTED_10baseT_Full | \
+		SUPPORTED_100baseT_Half | SUPPORTED_100baseT_Full)
+
 #elif defined(__CPU_IMXRT117X)
 
 #include <phoenix/arch/armv7m/imxrt/11xx/imxrt1170.h>
@@ -85,6 +92,11 @@
 #define ENET_RX_RING_SIZE 4
 #define ENET_TX_RING_SIZE 4
 
+#define ENET_SUPPORTED_SPEEDS ( \
+		SUPPORTED_10baseT_Half | SUPPORTED_10baseT_Full | \
+		SUPPORTED_100baseT_Half | SUPPORTED_100baseT_Full | \
+		SUPPORTED_1000baseT_Half | SUPPORTED_1000baseT_Full)
+
 #elif defined(__CPU_IMX6ULL)
 
 #include <phoenix/arch/armv7a/imx6ull/imx6ull.h>
@@ -105,9 +117,21 @@
 #define ENET_RX_RING_SIZE 64
 #define ENET_TX_RING_SIZE 64
 
+#define ENET_SUPPORTED_SPEEDS ( \
+		SUPPORTED_10baseT_Half | SUPPORTED_10baseT_Full | \
+		SUPPORTED_100baseT_Half | SUPPORTED_100baseT_Full)
+
 #else
 #error "Unsupported TARGET"
 #endif
+
+
+#define ENET_SUPPORTED_INTERFACES   (SUPPORTED_MII)
+#define ENET_SUPPORTED_FEATURES     (SUPPORTED_Autoneg)
+#define ENET_SUPPORTED              (ENET_SUPPORTED_SPEEDS | ENET_SUPPORTED_INTERFACES | ENET_SUPPORTED_FEATURES)
+#define ENET_PORT                   (PORT_MII)
+#define ENET_MDIO_SUPPORTED(addr)   ((((addr & NETDEV_MDIO_CLAUSE45) != 0) ? ETH_MDIO_SUPPORTS_C45 : 0) | ETH_MDIO_SUPPORTS_C22)
+#define ENET_LINK_MODE_MASKS_NWORDS (1)
 
 #if ENET_USE_ENHANCED_DESCRIPTORS
 typedef enet_enhanced_desc_t enet_buf_desc_t;
@@ -137,15 +161,6 @@ typedef struct {
 	uint32_t mscr;
 
 	eth_phy_state_t phy;
-
-#if ENET_SELFTEST
-	struct {
-#define SELFTEST_RESOURCES(s) &(s)->selfTest.rx_lock, 2, ~0x1
-		handle_t rx_lock;
-		handle_t rx_cond;
-		unsigned int rx_valid; /* -1: received invalid packet, 0: no packet received, 1: received valid packet */
-	} selfTest;
-#endif
 
 	uint32_t irq_stack[1024] __attribute__((aligned(16)));
 } enet_state_t;
@@ -1408,168 +1423,6 @@ static void enet_setLinkState(void *arg, int state)
 }
 
 
-#if ENET_SELFTEST
-#define _TP_DST     "dddddd"
-#define _TP_SRC     "ssssss"
-#define _TP_ETHTYPE "\x05\xDD" /* eth frame type 0x05DD is undefined */
-#define _TP_10DIG   "0123456789"
-#define TEST_PACKET _TP_DST _TP_SRC _TP_ETHTYPE \
-		_TP_10DIG _TP_10DIG _TP_10DIG _TP_10DIG _TP_10DIG _TP_10DIG _TP_10DIG
-#define TEST_PACKET_LEN (sizeof((TEST_PACKET)) - 1)
-
-
-/* self-test RX input function */
-static err_t enet_testNetifInput(struct pbuf *p, struct netif *netif)
-{
-	uint8_t buf[TEST_PACKET_LEN]; /* used only if pbuf is fragmented (should not happen) */
-	enet_state_t *state = netif->state;
-
-	bool is_valid_pkt = true;
-
-	/* verify contents */
-	if (p->len != (TEST_PACKET_LEN + ETH_PAD_SIZE)) {
-		enet_debug_printf(state, "self-test RX: invalid packet length");
-		enet_debug_printf(state, "expected: %uB", (TEST_PACKET_LEN + ETH_PAD_SIZE));
-		enet_debug_printf(state, "actual:   %uB", p->len);
-		is_valid_pkt = false;
-	}
-	uint8_t *data = pbuf_get_contiguous(p, buf, sizeof(buf), TEST_PACKET_LEN, ETH_PAD_SIZE);
-	if (data == NULL || memcmp(TEST_PACKET, data, TEST_PACKET_LEN) != 0) {
-#if ENET_DEBUG
-		if (data == NULL) {
-			data = p->payload;
-		}
-		enet_printf(state, "self-test RX: invalid packet contents");
-
-		enet_printf(state, "expected:");
-		for (int i = 0; i < TEST_PACKET_LEN; i++) {
-			if (i != 0 && i % 16 == 0) {
-				printf("\n");
-			}
-			printf("%02x ", TEST_PACKET[i]);
-		}
-		printf("\n");
-
-		enet_printf(state, "actual:");
-		for (int i = 0; i < p->len; i++) {
-			if (i != 0 && i % 16 == 0) {
-				printf("\n");
-			}
-			printf("%02x ", data[i]);
-		}
-		printf("\n");
-#endif
-		is_valid_pkt = false;
-	}
-	pbuf_free(p);
-
-	mutexLock(state->selfTest.rx_lock);
-	state->selfTest.rx_valid = is_valid_pkt ? 1 : -1;
-	mutexUnlock(state->selfTest.rx_lock);
-	condBroadcast(state->selfTest.rx_cond);
-
-	return ERR_OK;
-}
-
-
-/* MACPHY self-test procedure (internal loopback) */
-static int enet_phySelfTest(struct netif *netif)
-{
-	enet_state_t *state = netif->state;
-	int err;
-	bool was_addins_set;
-
-	enet_printf(state, "Start enet phy tx/rx selftest");
-
-	err = create_mutexcond_bulk(SELFTEST_RESOURCES(state));
-	if (err != 0) {
-		return err;
-	}
-
-	/* setup self-test (local loopback mode & force linkup) */
-	if (ephy_enableLoopback(&state->phy, true) < 0) {
-		ephy_enableLoopback(&state->phy, false);
-		resourceDestroy(state->selfTest.rx_cond);
-		resourceDestroy(state->selfTest.rx_lock);
-		return -1;
-	}
-
-	/* enable promisicious mode to allow invalid MAC in pseudo-ETH test packet */
-	state->mmio->RCR |= ENET_RCR_PROM;
-
-	/* disable MAC address addition on TX */
-	was_addins_set = (state->mmio->TCR & ENET_TCR_ADDINS) != 0;
-	state->mmio->TCR &= ~ENET_TCR_ADDINS;
-
-	/* enable MIB counters (mmio->stats) + clear stats */
-	state->mmio->MIBC = 0;
-	state->mmio->MIBC |= ENET_MIBC_MIB_CLEAR;
-	state->mmio->MIBC &= ~ENET_MIBC_MIB_CLEAR;
-
-	/* override netif->input */
-	netif_input_fn old_input = netif->input;
-	netif->input = &enet_testNetifInput;
-
-	int ret = 0;
-	do {
-		struct pbuf *p = pbuf_alloc(PBUF_RAW, TEST_PACKET_LEN + ETH_PAD_SIZE, PBUF_RAM);
-		memset(p->payload, 0, ETH_PAD_SIZE);
-		pbuf_take_at(p, TEST_PACKET, TEST_PACKET_LEN, ETH_PAD_SIZE);
-
-		/* try to send and receive packets */
-		mutexLock(state->selfTest.rx_lock);
-		state->selfTest.rx_valid = 0;
-		if (enet_netifOutput(netif, p) != ERR_OK) { /* frees pbuf internally */
-			enet_printf(state, "failed to send test packet");
-			ret = -1;
-			mutexUnlock(state->selfTest.rx_lock);
-			break;
-		}
-
-		err = 0;
-		while ((err != -ETIME) && (state->selfTest.rx_valid == 0)) {
-			/* TX -> RX takes ~4ms, wait for 100ms just to be sure */
-			err = condWait(state->selfTest.rx_cond, state->selfTest.rx_lock, 100 * 1000);
-		}
-		mutexUnlock(state->selfTest.rx_lock);
-
-		enet_debug_printf(state, "stats: TX: PACKETS=%u CRC_ALIGN=%u OK=%u",
-				state->mmio->stats.RMON_T_PACKETS,
-				state->mmio->stats.RMON_T_CRC_ALIGN,
-				state->mmio->stats.IEEE_T_FRAME_OK);
-
-		enet_debug_printf(state, "stats: RX: PACKETS=%u CRC_ALIGN=%u OK=%u",
-				state->mmio->stats.RMON_R_PACKETS,
-				state->mmio->stats.RMON_R_CRC_ALIGN,
-				state->mmio->stats.IEEE_R_FRAME_OK);
-
-		if ((err < 0) || (state->selfTest.rx_valid != 1)) {
-			enet_debug_printf(state, "Test failed: state->selfTest.rx_valid=%d, %s (%d)",
-					state->selfTest.rx_valid, strerror(-err), err);
-			ret = -1;
-		}
-
-		/* successfully received */
-	} while (0);
-
-	/* restore normal mode */
-	netif->input = old_input;
-	state->mmio->RCR &= ~ENET_RCR_PROM;
-	if (was_addins_set) {
-		state->mmio->TCR |= ENET_TCR_ADDINS;
-	}
-	state->mmio->MIBC = ENET_MIBC_MIB_DIS;
-	ephy_enableLoopback(&state->phy, false);
-
-	/* destroy selftest resources */
-	resourceDestroy(state->selfTest.rx_cond);
-	resourceDestroy(state->selfTest.rx_lock);
-
-	return ret;
-}
-#endif
-
-
 /* ARGS: enet:base:irq[:no-mdio][:PHY:[model:][bus.]addr[:config]] */
 static int enet_netifInit(struct netif *netif, char *cfg)
 {
@@ -1645,16 +1498,6 @@ static int enet_netifInit(struct netif *netif, char *cfg)
 			physunmap(ocotp_mem, 0x1000);
 			return err;
 		}
-
-#if ENET_SELFTEST
-		err = enet_phySelfTest(netif);
-		if (err < 0) {
-			enet_printf(state, "WARN: PHY autotest failed");
-		}
-		else {
-			enet_printf(state, "PHY selftest passed successfully");
-		}
-#endif
 	}
 
 	physunmap(ocotp_mem, 0x1000);
@@ -1663,40 +1506,234 @@ static int enet_netifInit(struct netif *netif, char *cfg)
 }
 
 
-const char *enet_media(struct netif *netif)
+static const char *enet_media(struct netif *netif)
 {
-	int full_duplex, speed;
+	int duplex, speed;
 	enet_state_t *state;
 	state = netif->state;
 
-	speed = ephy_linkSpeed(&state->phy, &full_duplex);
+	speed = ephy_linkSpeed(&state->phy, &duplex);
 
 	switch (speed) {
-		case 0:
+		case SPEED_UNKNOWN:
 			return "unspecified";
-		case 10:
-			if (full_duplex != 0) {
-				return "10Mbps/full-duplex";
+		case SPEED_10:
+			switch (duplex) {
+				case DUPLEX_HALF:
+					return "10Mbps/half-duplex";
+				case DUPLEX_FULL:
+					return "10Mbps/full-duplex";
+				default:
+					return "unrecognized";
 			}
-			else {
-				return "10Mbps/half-duplex";
+		case SPEED_100:
+			switch (duplex) {
+				case DUPLEX_HALF:
+					return "100Mbps/half-duplex";
+				case DUPLEX_FULL:
+					return "100Mbps/full-duplex";
+				default:
+					return "unrecognized";
 			}
-		case 100:
-			if (full_duplex != 0) {
-				return "100Mbps/full-duplex";
-			}
-			else {
-				return "100Mbps/half-duplex";
-			}
-		case 1000:
-			if (full_duplex != 0) {
-				return "1000Mbps/full-duplex";
-			}
-			else {
-				return "1000Mbps/half-duplex";
+		case SPEED_1000:
+			switch (duplex) {
+				case DUPLEX_HALF:
+					return "1000Mbps/half-duplex";
+				case DUPLEX_FULL:
+					return "1000Mbps/full-duplex";
+				default:
+					return "unrecognized";
 			}
 		default:
 			return "unrecognized";
+	}
+}
+
+
+#if ENET_SELFTEST
+static bool was_addins_set;
+
+
+static int enet_selftestSetup(void *arg)
+{
+	enet_state_t *state = arg;
+
+	/* setup self-test (local loopback mode & force linkup) */
+	if (ephy_setLoopback(&state->phy, true) < 0) {
+		ephy_setLoopback(&state->phy, false);
+		return -1;
+	}
+
+	/* enable promisicious mode to allow invalid MAC in pseudo-ETH test packet */
+	state->mmio->RCR |= ENET_RCR_PROM;
+
+	/* disable MAC address addition on TX */
+	was_addins_set = (state->mmio->TCR & ENET_TCR_ADDINS) != 0;
+	state->mmio->TCR &= ~ENET_TCR_ADDINS;
+
+	/* enable MIB counters (mmio->stats) + clear stats */
+	state->mmio->MIBC = 0;
+	state->mmio->MIBC |= ENET_MIBC_MIB_CLEAR;
+	state->mmio->MIBC &= ~ENET_MIBC_MIB_CLEAR;
+
+	return 0;
+}
+
+
+static int enet_selftestTeardown(void *arg)
+{
+	enet_state_t *state = arg;
+
+	enet_debug_printf(state, "stats: TX: PACKETS=%u CRC_ALIGN=%u OK=%u",
+			state->mmio->stats.RMON_T_PACKETS,
+			state->mmio->stats.RMON_T_CRC_ALIGN,
+			state->mmio->stats.IEEE_T_FRAME_OK);
+	enet_debug_printf(state, "stats: RX: PACKETS=%u CRC_ALIGN=%u OK=%u",
+			state->mmio->stats.RMON_R_PACKETS,
+			state->mmio->stats.RMON_R_CRC_ALIGN,
+			state->mmio->stats.IEEE_R_FRAME_OK);
+
+	state->mmio->RCR &= ~ENET_RCR_PROM;
+	if (was_addins_set) {
+		state->mmio->TCR |= ENET_TCR_ADDINS;
+	}
+	state->mmio->MIBC = ENET_MIBC_MIB_DIS;
+	(void)ephy_setLoopback(&state->phy, false);
+
+	return 0;
+}
+#endif
+
+
+static int enet_ethtoolIoctl(struct netif *netif, void *data)
+{
+	enet_state_t *state = netif->state;
+	uint32_t cmd = *((uint32_t *)data);
+	int err;
+
+	switch (cmd) {
+		case ETHTOOL_GSET: {
+			struct ethtool_cmd *ecmd = data;
+			int duplex;
+			int speed = ephy_linkSpeed(&state->phy, &duplex);
+
+			memset(ecmd, 0, sizeof(*ecmd));
+			ecmd->supported = ENET_SUPPORTED;
+			ecmd->advertising = ephy_getAdv(&state->phy);
+			ecmd->speed = speed;
+			ecmd->duplex = duplex;
+			ecmd->port = ENET_PORT;
+			ecmd->phy_address = state->phy.addr;
+			ecmd->autoneg = ephy_getAN(&state->phy);
+			ecmd->mdio_support = ENET_MDIO_SUPPORTED(state->phy.addr);
+			/* FIXME: MDI info */
+
+			return EOK;
+		}
+
+		case ETHTOOL_GSSET_INFO: {
+			struct ethtool_sset_info *info = data;
+			uint64_t outmask = 0;
+
+			if ((info->sset_mask & (1ull << ETH_SS_TEST)) != 0) {
+				info->data[ETH_SS_TEST] = 0; /* number_of_strings * ETH_GSTRING_LEN */
+				outmask |= 1ull << ETH_SS_TEST;
+			}
+
+			info->sset_mask = outmask;
+
+			return EOK;
+		}
+
+		case ETHTOOL_GSTRINGS: {
+			struct ethtool_gstrings *strings = data;
+
+			switch (strings->string_set) {
+				case ETH_SS_TEST:
+					strings->len = 0;
+					break;
+
+				default:
+					return -EINVAL;
+			}
+
+			return EOK;
+		}
+
+		case ETHTOOL_TEST: {
+			struct ethtool_test *test_params = data;
+#if ENET_SELFTEST
+			if ((test_params->flags & ETH_TEST_FL_OFFLINE) != 0) {
+				const struct selftest_params params = {
+					.module = "enet",
+					.netif = netif,
+					.crcStripped = true,
+					.verbose = ENET_DEBUG != 0,
+					.setup = enet_selftestSetup,
+					.teardown = enet_selftestTeardown
+				};
+				err = physelftest(&params);
+				if (err < 0) {
+					test_params->flags |= ETH_TEST_FL_FAILED;
+				}
+				return EOK;
+			}
+#endif
+			return -EOPNOTSUPP;
+		}
+
+		case ETHTOOL_GLOOPBACK: {
+			struct ethtool_value *value = data;
+
+			value->data = ephy_getLoopback(&state->phy);
+
+			return EOK;
+		}
+
+		case ETHTOOL_SLOOPBACK: {
+			struct ethtool_value *value = data;
+
+			int err = ephy_setLoopback(&state->phy, value->data);
+			if (err < 0) {
+				value->data = ETH_PHY_LOOPBACK_SET_FAILED;
+			}
+
+			return EOK;
+		}
+
+		case ETHTOOL_GLINKSETTINGS: {
+			struct ethtool_link_settings *link_settings = data;
+
+			/* the caller expects us to return the real value */
+			if (link_settings->link_mode_masks_nwords != ENET_LINK_MODE_MASKS_NWORDS) {
+				link_settings->link_mode_masks_nwords = -ENET_LINK_MODE_MASKS_NWORDS;
+				return EOK;
+			}
+
+			int duplex;
+			uint64_t speed = ephy_linkSpeed(&state->phy, &duplex);
+
+			link_settings->speed = speed & 0xffffffff;
+			link_settings->duplex = duplex;
+			link_settings->port = ENET_PORT;
+			link_settings->phy_address = state->phy.addr;
+			link_settings->autoneg = ephy_getAN(&state->phy);
+			link_settings->mdio_support = ENET_MDIO_SUPPORTED(state->phy.addr);
+			/* FIXME: MDI info */
+
+			/* layout of link_mode_masks:
+			 * uint32_t map_supported[link_mode_masks_nwords];
+			 * uint32_t map_advertising[link_mode_masks_nwords];
+			 * uint32_t map_lp_advertising[link_mode_masks_nwords];
+			 */
+			link_settings->link_mode_masks[0] = ENET_SUPPORTED;
+			link_settings->link_mode_masks[1] = ephy_getAdv(&state->phy);
+
+			return EOK;
+		}
+
+		default:
+			return -EOPNOTSUPP;
 	}
 }
 
@@ -1707,6 +1744,7 @@ static netif_driver_t enet_drv = {
 	.state_align = _Alignof(enet_state_t),
 	.name = "enet",
 	.media = enet_media,
+	.do_ethtool_ioctl = enet_ethtoolIoctl,
 };
 
 

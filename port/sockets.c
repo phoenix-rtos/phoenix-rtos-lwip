@@ -42,6 +42,7 @@
 #endif
 
 #include "netif.h"
+#include "netif-driver.h"
 #include "route.h"
 #include "ipsec-api.h"
 
@@ -583,35 +584,41 @@ static int socket_ioctl(int sock, unsigned long request, const void *in_data, vo
 			return -EOPNOTSUPP;
 
 		case SIOCGIFCONF: {
-			struct ifconf *ifconf = (struct ifconf *)out_data;
-			int maxlen = ifconf->ifc_len;
-			struct ifreq *ifreq = ifconf->ifc_req;
+			struct ifconf *ifconf = out_data;
+			struct ifreq *ifreq = NULL;
 			struct netif *netif;
+			const int maxlen = (ifconf->ifc_buf != NULL) ? ifconf->ifc_len : 0;
 
-			ifconf->ifc_len = 0;
-			if (ifreq == NULL) {
-				/* WARN: it is legal to pass NULL here (we should return the length sufficient for whole response) */
-				return -EFAULT;
+			if (maxlen != 0) {
+				int err = IOC_GET_PTR_FIELD(request, (void **)&ifreq, ifconf, ifc_req);
+				if (err < 0) {
+					return err;
+				}
 			}
 
-			memset(ifreq, 0, maxlen);
+			ifconf->ifc_len = 0;
 
 			for (netif = netif_list; netif != NULL; netif = netif->next) {
-				if (ifconf->ifc_len + sizeof(struct ifreq) > maxlen) {
+				if (maxlen != 0 && ifconf->ifc_len + sizeof(struct ifreq) > maxlen) {
 					break;
 				}
+				struct ifreq current_ifr = { 0 };
 				/* LWiP name is only 2 chars, we have to manually add the number */
-				snprintf(ifreq->ifr_name, IFNAMSIZ, "%c%c%d", netif->name[0], netif->name[1], netif->num);
+				snprintf(current_ifr.ifr_name, IFNAMSIZ, "%c%c%d", netif->name[0], netif->name[1], netif->num);
 
-				struct sockaddr_in *sin = (struct sockaddr_in *)&ifreq->ifr_addr;
+				struct sockaddr_in *sin = (struct sockaddr_in *)&current_ifr.ifr_addr;
 				inet_addr_from_ip4addr(&sin->sin_addr, netif_ip4_addr(netif));
 
 				ifconf->ifc_len += sizeof(struct ifreq);
-				ifreq += 1;
+				if (ifreq != NULL) {
+					memcpy(ifreq, &current_ifr, sizeof(struct ifreq));
+					ifreq += 1;
+				}
 			}
 
 			return EOK;
 		}
+
 		/** ROUTING
 		 * net and host routing is supported and multiple gateways with ethernet interfaces
 		 * TODO: support metric
@@ -623,29 +630,61 @@ static int socket_ioctl(int sock, unsigned long request, const void *in_data, vo
 				return -EFAULT;
 			}
 
-			struct netif *interface = netif_find(rt->rt_dev);
-			int ret = EOK;
+			char *rt_dev;
+			int err = IOC_GET_PTR_FIELD(request, (void **)&rt_dev, rt, rt_dev);
+			if (err < 0) {
+				return err;
+			}
+			if (rt_dev == NULL) {
+				return -EINVAL;
+			}
 
+			struct netif *interface = netif_find(rt_dev);
+			int ret = EOK;
 			if (interface == NULL) {
-				free(rt->rt_dev);
-				free(rt);
 				return -ENXIO;
 			}
 
 			switch (request) {
-
 				case SIOCADDRT:
 					ret = route_add(interface, rt);
 					break;
+
 				case SIOCDELRT:
 					ret = route_del(interface, rt);
 					break;
+
+				default:
+					break;
 			}
 
-			free(rt->rt_dev);
-			free(rt);
-
 			return ret;
+		}
+
+		case SIOCETHTOOL: {
+			struct ifreq *ifr = out_data;
+			void *data;
+			int err = IOC_GET_PTR_FIELD(request, (void **)&data, ifr, ifr_data);
+			if (err < 0) {
+				return err;
+			}
+
+			if (strncmp(ifr->ifr_name, "lo", 2) == 0) {
+				/* loopback doesn't have driver */
+				return -EOPNOTSUPP;
+			}
+
+			struct netif *interface = netif_find(ifr->ifr_name);
+			if (interface == NULL) {
+				return -ENXIO;
+			}
+
+			netif_driver_t *drv = netif_driver(interface);
+			if (drv == NULL || drv->do_ethtool_ioctl == NULL) {
+				return -EOPNOTSUPP;
+			}
+
+			return drv->do_ethtool_ioctl(interface, data);
 		}
 
 #if LWIP_IPV6

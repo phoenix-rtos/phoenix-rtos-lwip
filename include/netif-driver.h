@@ -34,6 +34,7 @@ typedef struct netif_driver_ {
 	size_t state_sz, state_align;
 	const char *name;
 	const char *(*media)(struct netif *netif);
+	int (*do_ethtool_ioctl)(struct netif *netif, void *data);
 } netif_driver_t;
 
 

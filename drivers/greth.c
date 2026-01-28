@@ -35,12 +35,27 @@
 #include <unistd.h>
 #include <sys/interrupt.h>
 
+#include "physelftest.h"
+
 #define greth_printf(state, fmt, ...) printf("lwip: greth@%p: " fmt "\n", (void *)state->dev_phys_addr, ##__VA_ARGS__)
 
 #define GRETH_MAC_IAB      UINT64_C(0x0050C275A000) /* Gaisler research AB */
 #define GRETH_RX_RING_SIZE 8
 #define GRETH_TX_RING_SIZE 8
 #define GRETH_MAX_PKT_SZ   1514
+
+#define GRETH_SELFTEST 1
+
+#define GRETH_SUPPORTED_SPEEDS ( \
+		SUPPORTED_10baseT_Half | SUPPORTED_10baseT_Full | \
+		SUPPORTED_100baseT_Half | SUPPORTED_100baseT_Full | \
+		SUPPORTED_1000baseT_Full)
+#define GRETH_SUPPORTED_INTERFACES   (SUPPORTED_MII)
+#define GRETH_SUPPORTED_FEATURES     (SUPPORTED_Autoneg)
+#define GRETH_SUPPORTED              (GRETH_SUPPORTED_SPEEDS | GRETH_SUPPORTED_INTERFACES | GRETH_SUPPORTED_FEATURES)
+#define GRETH_PORT                   (PORT_MII)
+#define GRETH_MDIO_SUPPORTED(addr)   ((((addr & NETDEV_MDIO_CLAUSE45) != 0) ? ETH_MDIO_SUPPORTS_C45 : 0) | ETH_MDIO_SUPPORTS_C22)
+#define GRETH_LINK_MODE_MASKS_NWORDS (1)
 
 #ifndef GRETH_EDCL
 #define GRETH_EDCL 0
@@ -626,12 +641,177 @@ const char *greth_media(struct netif *netif)
 }
 
 
+#if GRETH_SELFTEST
+static int greth_selftestSetup(void *arg)
+{
+	greth_state_t *state = arg;
+
+	/* setup self-test (local loopback mode & force linkup) */
+	if (ephy_setLoopback(&state->phy, true) < 0) {
+		ephy_setLoopback(&state->phy, false);
+		return -1;
+	}
+
+	/* enable promisicious mode to allow invalid MAC in pseudo-ETH test packet */
+	state->mmio->CTRL |= GRETH_CTRL_PM;
+
+	return 0;
+}
+
+
+static int greth_selftestTeardown(void *arg)
+{
+	greth_state_t *state = arg;
+
+	state->mmio->CTRL &= ~GRETH_CTRL_PM;
+
+	(void)ephy_setLoopback(&state->phy, false);
+
+	return 0;
+}
+#endif
+
+
+static int greth_ethtoolIoctl(struct netif *netif, void *data)
+{
+	greth_state_t *state = netif->state;
+	uint32_t cmd = *((uint32_t *)data);
+	int err;
+
+	switch (cmd) {
+		case ETHTOOL_GSET: {
+			struct ethtool_cmd *ecmd = data;
+			int duplex;
+			int speed = ephy_linkSpeed(&state->phy, &duplex);
+
+			memset(ecmd, 0, sizeof(*ecmd));
+			ecmd->supported = GRETH_SUPPORTED;
+			ecmd->advertising = ephy_getAdv(&state->phy);
+			ecmd->speed = speed;
+			ecmd->duplex = duplex;
+			ecmd->port = GRETH_PORT;
+			ecmd->phy_address = state->phy.addr;
+			ecmd->autoneg = ephy_getAN(&state->phy);
+			ecmd->mdio_support = GRETH_MDIO_SUPPORTED(state->phy.addr);
+			/* FIXME: MDI info */
+
+			return EOK;
+		}
+
+		case ETHTOOL_GSSET_INFO: {
+			struct ethtool_sset_info *info = data;
+			uint64_t outmask = 0;
+
+			if ((info->sset_mask & (1ull << ETH_SS_TEST)) != 0) {
+				info->data[ETH_SS_TEST] = 0; /* number_of_strings * ETH_GSTRING_LEN */
+				outmask |= 1ull << ETH_SS_TEST;
+			}
+
+			info->sset_mask = outmask;
+
+			return EOK;
+		}
+
+		case ETHTOOL_GSTRINGS: {
+			struct ethtool_gstrings *strings = data;
+
+			switch (strings->string_set) {
+				case ETH_SS_TEST:
+					strings->len = 0;
+					break;
+
+				default:
+					return -EINVAL;
+			}
+
+			return EOK;
+		}
+
+		case ETHTOOL_TEST: {
+			struct ethtool_test *test_params = data;
+#if GRETH_SELFTEST
+			if ((test_params->flags & ETH_TEST_FL_OFFLINE) != 0) {
+				const struct selftest_params params = {
+					.module = "greth",
+					.netif = netif,
+					.crcStripped = true,
+					.verbose = GRETH_DEBUG != 0,
+					.setup = greth_selftestSetup,
+					.teardown = greth_selftestTeardown
+				};
+				err = physelftest(&params);
+				if (err < 0) {
+					test_params->flags |= ETH_TEST_FL_FAILED;
+				}
+				return EOK;
+			}
+#endif
+			return -EOPNOTSUPP;
+		}
+
+		case ETHTOOL_GLOOPBACK: {
+			struct ethtool_value *value = data;
+
+			value->data = ephy_getLoopback(&state->phy);
+
+			return EOK;
+		}
+
+		case ETHTOOL_SLOOPBACK: {
+			struct ethtool_value *value = data;
+
+			int err = ephy_setLoopback(&state->phy, value->data);
+			if (err < 0) {
+				value->data = ETH_PHY_LOOPBACK_SET_FAILED;
+			}
+
+			return EOK;
+		}
+
+		case ETHTOOL_GLINKSETTINGS: {
+			struct ethtool_link_settings *link_settings = data;
+
+			/* the caller expects us to return the real value */
+			if (link_settings->link_mode_masks_nwords != GRETH_LINK_MODE_MASKS_NWORDS) {
+				link_settings->link_mode_masks_nwords = -GRETH_LINK_MODE_MASKS_NWORDS;
+				return EOK;
+			}
+
+			int duplex;
+			uint64_t speed = ephy_linkSpeed(&state->phy, &duplex);
+
+			link_settings->speed = speed & 0xffffffff;
+			link_settings->duplex = duplex;
+			link_settings->port = GRETH_PORT;
+			link_settings->phy_address = state->phy.addr;
+			link_settings->autoneg = ephy_getAN(&state->phy);
+			link_settings->mdio_support = GRETH_MDIO_SUPPORTED(state->phy.addr);
+			/* FIXME: MDI info */
+
+			/* layout of link_mode_masks:
+			 * uint32_t map_supported[link_mode_masks_nwords];
+			 * uint32_t map_advertising[link_mode_masks_nwords];
+			 * uint32_t map_lp_advertising[link_mode_masks_nwords];
+			 */
+			link_settings->link_mode_masks[0] = GRETH_SUPPORTED;
+			link_settings->link_mode_masks[1] = ephy_getAdv(&state->phy);
+
+			return EOK;
+		}
+
+		default:
+			return -EOPNOTSUPP;
+	}
+}
+
+
 static netif_driver_t greth_drv = {
 	.init = greth_netifInit,
 	.state_sz = sizeof(greth_state_t),
 	.state_align = _Alignof(greth_state_t),
 	.name = "greth",
 	.media = greth_media,
+	.do_ethtool_ioctl = greth_ethtoolIoctl,
 };
 
 
