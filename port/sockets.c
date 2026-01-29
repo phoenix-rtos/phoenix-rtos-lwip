@@ -590,7 +590,7 @@ static int socket_ioctl(int sock, unsigned long request, const void *in_data, vo
 			const int maxlen = (ifconf->ifc_buf != NULL) ? ifconf->ifc_len : 0;
 
 			if (maxlen != 0) {
-				int err = IOC_GET_PTR_FIELD(request, (void **)&ifreq, ifconf, ifc_req);
+				int err = IOC_NESTED_GET_PTR_FIELD(request, (void **)&ifreq, ifconf, ifc_req);
 				if (err < 0) {
 					return err;
 				}
@@ -630,8 +630,8 @@ static int socket_ioctl(int sock, unsigned long request, const void *in_data, vo
 				return -EFAULT;
 			}
 
-			char *rt_dev;
-			int err = IOC_GET_PTR_FIELD(request, (void **)&rt_dev, rt, rt_dev);
+			const char *rt_dev;
+			int err = IOC_NESTED_GET_PTR_FIELD(request, (void **)&rt_dev, rt, rt_dev);
 			if (err < 0) {
 				return err;
 			}
