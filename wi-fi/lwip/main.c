@@ -92,7 +92,7 @@ struct wifi_device {
 
 	bool busy;
 	int len;
-	char buf[128];
+	char buf[192];
 	cy_lwip_nw_interface_t iface;
 
 	union {
@@ -664,12 +664,19 @@ static int wifi_dev_open(id_t id, int flags)
 			else {
 				SNPRINTF_APPEND(overflow, buf, size, "current=%.*s\n", ssid.length, ssid.value);
 			}
+			struct netif *netif = cy_lwip_get_interface(wifi_common.dev[id].iface.role);
+			SNPRINTF_APPEND(overflow, buf, size, "ipaddr=%s\n", netif != NULL ? ipaddr_ntoa(&netif->ip_addr) : "unknown");
+			SNPRINTF_APPEND(overflow, buf, size, "netmask=%s\n", netif != NULL ? ipaddr_ntoa(&netif->netmask) : "unknown");
+			SNPRINTF_APPEND(overflow, buf, size, "gateway=%s\n", netif != NULL ? ipaddr_ntoa(&netif->gw) : "unknown");
 		}
 		SNPRINTF_APPEND(overflow, buf, size, "running=%u\n", state == wifi_running ? 1U : 0U);
 	}
 	else if (id == AP_DEV_ID) {
 		SNPRINTF_APPEND(overflow, buf, size, "timeout=%u\n", wifi_common.ap.apPriv.timeout);
 		SNPRINTF_APPEND(overflow, buf, size, "ssid=%.*s\n", wifi_common.ap.ssid.length, wifi_common.ap.ssid.value);
+		SNPRINTF_APPEND(overflow, buf, size, "ipaddr=%s\n", ipaddr_ntoa(&wifi_common.ap.apPriv.addr.addr));
+		SNPRINTF_APPEND(overflow, buf, size, "netmask=%s\n", ipaddr_ntoa(&wifi_common.ap.apPriv.addr.netmask));
+		SNPRINTF_APPEND(overflow, buf, size, "gateway=%s\n", ipaddr_ntoa(&wifi_common.ap.apPriv.addr.gateway));
 		SNPRINTF_APPEND(overflow, buf, size, "running=%u\n", wifi_common.ap.apPriv.tid != 0);
 	}
 	else {
@@ -715,6 +722,27 @@ static int wifi_dev_read(id_t id, char *data, size_t size, off_t offset)
 }
 
 
+static int wifi_set_addr(ip_addr_t *addr, const char *data, size_t size)
+{
+	char addrStr[sizeof("255.255.255.255")] = { 0 };
+	if (size > sizeof(addrStr) - 1) {
+		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "IP too long: %.*s\n", size, data);
+		return -1;
+	}
+
+	size = min(size, sizeof(addrStr) - 1);
+	memcpy(addrStr, data, size);
+
+	if (ip4addr_aton(addrStr, addr) != 0) {
+		return 0;
+	}
+	else {
+		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "bad IP address: %.*s\n", size, data);
+		return -1;
+	}
+}
+
+
 static int wifi_dev_write(id_t id, const char *data, size_t size)
 {
 	const size_t inputSize = size;
@@ -740,6 +768,15 @@ static int wifi_dev_write(id_t id, const char *data, size_t size)
 	}
 	else if (id == AP_DEV_ID && size == CONST_STRLEN("stop") && strncmp("stop", data, size) == 0) {
 		wifi_ap_stop();
+	}
+	else if (id == AP_DEV_ID && size >= CONST_STRLEN("ipaddr ") && strncmp("ipaddr ", data, 7) == 0) {
+		wifi_set_addr(&wifi_common.ap.apPriv.addr.addr, data + 7, size - 7);
+	}
+	else if (id == AP_DEV_ID && size >= CONST_STRLEN("netmask ") && strncmp("netmask ", data, 8) == 0) {
+		wifi_set_addr(&wifi_common.ap.apPriv.addr.netmask, data + 8, size - 8);
+	}
+	else if (id == AP_DEV_ID && size >= CONST_STRLEN("gateway ") && strncmp("gateway ", data, 8) == 0) {
+		wifi_set_addr(&wifi_common.ap.apPriv.addr.gateway, data + 8, size - 8);
 	}
 	else {
 		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "got unknown Wi-Fi command: %.*s\n", (int)size, data);
