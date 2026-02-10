@@ -25,6 +25,7 @@
 #include "cy_lwip_log.h"
 #include "cy_log.h"
 
+#include "netif.h"
 #include "lwipopts.h"
 #include "lwip/sys.h"
 
@@ -700,6 +701,10 @@ static int wifi_dev_open(id_t id, int flags)
 	}
 	else {
 		/* nothing */
+	}
+	if (wifi_common.dev[id].tid != 0) {
+		struct netif *netif = cy_lwip_get_interface(wifi_common.dev[id].iface.role);
+		SNPRINTF_APPEND(overflow, buf, size, "ip=%s\n", netif != NULL ? ipaddr_ntoa(&netif->ip_addr) : "unknown");
 	}
 
 	mutexUnlock(wifi_common.dev[id].lock);
