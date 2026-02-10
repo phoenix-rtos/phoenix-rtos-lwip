@@ -25,6 +25,7 @@
 #include "cy_lwip_log.h"
 #include "cy_log.h"
 
+#include "netif.h"
 #include "lwipopts.h"
 #include "lwip/sys.h"
 
@@ -91,7 +92,7 @@ struct wifi_device {
 
 	bool busy;
 	int len;
-	char buf[128];
+	char buf[192];
 	cy_lwip_nw_interface_t iface;
 };
 
@@ -194,8 +195,6 @@ static int wifi_set_timeout(id_t id, const char *data, size_t len)
 
 static int wifi_set_ssid(id_t id, const char *ssid, size_t len)
 {
-	ssid = trim(ssid, &len);
-
 	if (len > SSID_NAME_SIZE) {
 		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't set Wi-Fi SSID (max length is %u)\n", SSID_NAME_SIZE);
 		return -1;
@@ -212,8 +211,6 @@ static int wifi_set_ssid(id_t id, const char *ssid, size_t len)
 
 static int wifi_set_key(id_t id, const char *key, size_t len)
 {
-	key = trim(key, &len);
-
 	if (len < WSEC_MIN_PSK_LEN) {
 		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't set Wi-Fi key (min length is %u)\n", WSEC_MIN_PSK_LEN);
 		return -1;
@@ -282,7 +279,7 @@ static enum wifi_state wifi_ap_state(void)
 }
 
 
-static bool wifi_sta_state(whd_ssid_t *ssid)
+static enum wifi_state wifi_sta_state(whd_ssid_t *ssid)
 {
 	if (wifi_common.sta.iface.whd_iface == NULL) {
 		return wifi_busFailed;
@@ -714,11 +711,18 @@ static int wifi_dev_open(id_t id, int flags)
 		whd_ssid_t ssid;
 		enum wifi_state state = wifi_sta_state(&ssid);
 		if (state == wifi_running) {
+			struct netif *netif = cy_lwip_get_interface(wifi_common.dev[id].iface.role);
 			SNPRINTF_APPEND(overflow, buf, size, "connected_to=%.*s\n", ssid.length, ssid.value);
+			SNPRINTF_APPEND(overflow, buf, size, "ip_addr=%s\n", netif != NULL ? ipaddr_ntoa(&netif->ip_addr) : "unknown");
+			SNPRINTF_APPEND(overflow, buf, size, "netmask=%s\n", netif != NULL ? ipaddr_ntoa(&netif->netmask) : "unknown");
+			SNPRINTF_APPEND(overflow, buf, size, "gateway=%s\n", netif != NULL ? ipaddr_ntoa(&netif->gw) : "unknown");
 		}
 	}
 	else if (id == AP_DEV_ID) {
 		SNPRINTF_APPEND(overflow, buf, size, "ssid=%.*s\n", wifi_common.ap.ssid.length, wifi_common.ap.ssid.value);
+		SNPRINTF_APPEND(overflow, buf, size, "ip_addr=%s\n", ipaddr_ntoa(&wifi_common.apAddr.addr));
+		SNPRINTF_APPEND(overflow, buf, size, "netmask=%s\n", ipaddr_ntoa(&wifi_common.apAddr.netmask));
+		SNPRINTF_APPEND(overflow, buf, size, "gateway=%s\n", ipaddr_ntoa(&wifi_common.apAddr.gateway));
 		SNPRINTF_APPEND(overflow, buf, size, "running=%u\n", wifi_common.ap.tid != 0);
 	}
 	else {
@@ -763,6 +767,26 @@ static int wifi_dev_read(id_t id, char *data, size_t size, off_t offset)
 }
 
 
+static int wifi_set_addr(ip_addr_t *addr, const char *data, size_t size)
+{
+	char addrStr[sizeof("255.255.255.255")] = { 0 };
+	if (size > sizeof(addrStr) - 1) {
+		return -EINVAL;
+	}
+
+	size = min(size, sizeof(addrStr) - 1);
+	memcpy(addrStr, data, size);
+
+	if (ip4addr_aton(addrStr, addr) != 0) {
+		return size;
+	}
+	else {
+		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "bad IP address: %.*s\n", size, data);
+		return -EINVAL;
+	}
+}
+
+
 static int wifi_dev_write(id_t id, const char *data, size_t size)
 {
 	data = trim(data, &size);
@@ -792,6 +816,15 @@ static int wifi_dev_write(id_t id, const char *data, size_t size)
 	}
 	else if (id == AP_DEV_ID && size == CONST_STRLEN("stop") && strncmp("stop", data, size) == 0) {
 		wifi_dev_stop(&wifi_common.ap);
+	}
+	else if (id == AP_DEV_ID && size >= CONST_STRLEN("ip_addr ") && strncmp("ip_addr ", data, 8) == 0) {
+		return wifi_set_addr(&wifi_common.apAddr.addr, data + 8, size - 8);
+	}
+	else if (id == AP_DEV_ID && size >= CONST_STRLEN("netmask ") && strncmp("netmask ", data, 8) == 0) {
+		return wifi_set_addr(&wifi_common.apAddr.netmask, data + 8, size - 8);
+	}
+	else if (id == AP_DEV_ID && size >= CONST_STRLEN("gateway ") && strncmp("gateway ", data, 8) == 0) {
+		return wifi_set_addr(&wifi_common.apAddr.gateway, data + 8, size - 8);
 	}
 	else {
 		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "got unknown Wi-Fi command: %.*s\n", (int)size, data);
@@ -974,9 +1007,7 @@ static int wifi_handle_ctrl(unsigned int port, msg_t *msg)
 			if (wifi_common.ctrl.busy) {
 				return -EBUSY;
 			}
-			mutexLock(wifi_common.lock);
 			int bytes = snprintf(wifi_common.ctrl.buf, sizeof(wifi_common.ctrl.buf), "running=%d\n", wifi_common.initialized ? 1 : 0);
-			mutexUnlock(wifi_common.lock);
 			wifi_common.ctrl.len = bytes;
 			wifi_common.ctrl.busy = true;
 			return EOK;
