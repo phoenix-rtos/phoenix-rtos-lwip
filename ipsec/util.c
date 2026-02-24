@@ -76,7 +76,7 @@ void ipsec_dump_buffer(char *prefix, unsigned char *data, int offs, int length)
 {
 #define HEXFMT_1  " %02x"
 #define HEXFMT_4  HEXFMT_1 HEXFMT_1 HEXFMT_1 HEXFMT_1
-#define HEXFMT_16 HEXFMT_4 HEXFMT_4 HEXFMT_1 HEXFMT_1
+#define HEXFMT_16 HEXFMT_4 HEXFMT_4 HEXFMT_4 HEXFMT_4
 #define TXTFMT_1  " %c"
 #define TXTFMT_4  TXTFMT_1 TXTFMT_1 TXTFMT_1 TXTFMT_1
 #define TXTFMT_16 TXTFMT_4 TXTFMT_4 TXTFMT_4 TXTFMT_4
