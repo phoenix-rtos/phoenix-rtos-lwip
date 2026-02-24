@@ -554,7 +554,7 @@ static int sadb_register(const struct sadb_msg *msg, struct sadb_msg *reply)
 			break;
 
 		default:
-			IPSEC_LOG_MSG("%s(): skipped registration of satype %d", msg->sadb_msg_satype);
+			IPSEC_LOG_MSG("skipped registration of satype %d", msg->sadb_msg_satype);
 			algs = NULL;
 			algs_size = 0;
 			ext_type = -1;
