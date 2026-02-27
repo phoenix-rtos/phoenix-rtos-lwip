@@ -30,6 +30,8 @@
 #include "cybsp_types.h"
 #include "cyhal_sdio.h"
 
+#include "lwipopts.h"
+
 #if defined(__cplusplus)
 extern "C" {
 #endif
@@ -58,14 +60,18 @@ cy_rslt_t cybsp_init(void);
 
 void cybsp_free(void);
 
+#ifndef CYBSP_WIFI_INTERFACE_TYPE
 #define CYBSP_WIFI_INTERFACE_TYPE CYBSP_SDIO_INTERFACE
+#endif /* CYBSP_WIFI_INTERFACE_TYPE */
 
+#if (CYBSP_WIFI_INTERFACE_TYPE == CYBSP_SDIO_INTERFACE)
 /**
  * \brief Get the initialized sdio object used for communicating with the WiFi Chip.
  * \note This function should only be called after cybsp_init();
  * \returns The initialized sdio object.
  */
 cyhal_sdio_t *cybsp_get_wifi_sdio_obj(void);
+#endif
 
 /** \} group_bsp_functions */
 

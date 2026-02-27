@@ -53,7 +53,7 @@ whd_result_t cy_buffer_pool_init(void *tx_packet_pool, void *rx_packet_pool)
 // cy_host_buffer_get
 //--------------------------------------------------------------------------------------------------
 whd_result_t cy_host_buffer_get(whd_buffer_t *buffer, whd_buffer_dir_t direction,
-	unsigned short size, unsigned long timeout_ms)
+		unsigned short size, uint32_t timeout_ms)
 {
 	struct pbuf *p = NULL;
 	uint32_t counter = 0;

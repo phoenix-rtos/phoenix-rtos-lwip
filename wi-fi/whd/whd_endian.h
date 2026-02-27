@@ -1,5 +1,5 @@
 /*
- * Copyright 2021, Cypress Semiconductor Corporation (an Infineon company)
+ * Copyright 2024, Cypress Semiconductor Corporation (an Infineon company)
  * SPDX-License-Identifier: Apache-2.0
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,20 +25,21 @@
 #define INCLUDED_WHD_ENDIAN_H
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
+{
 #endif
 
 /* Reverse the bytes in a 16-bit value */
 #define SWAP16(val) \
-	((uint16_t)((((uint16_t)(val) & (uint16_t)0x00ffU) << 8) | \
-		(((uint16_t)(val) & (uint16_t)0xff00U) >> 8)))
+    ( (uint16_t)( ( ( (uint16_t)(val) & (uint16_t)0x00ffU ) << 8 ) | \
+                  ( ( (uint16_t)(val) & (uint16_t)0xff00U ) >> 8 ) ) )
 
 /* Reverse the bytes in a 32-bit value */
 #define SWAP32(val) \
-	((uint32_t)((((uint32_t)(val) & (uint32_t)0x000000ffU) << 24) | \
-		(((uint32_t)(val) & (uint32_t)0x0000ff00U) << 8) | \
-		(((uint32_t)(val) & (uint32_t)0x00ff0000U) >> 8) | \
-		(((uint32_t)(val) & (uint32_t)0xff000000U) >> 24)))
+    ( (uint32_t)( ( ( (uint32_t)(val) & (uint32_t)0x000000ffU ) << 24 ) | \
+                  ( ( (uint32_t)(val) & (uint32_t)0x0000ff00U ) <<  8 ) | \
+                  ( ( (uint32_t)(val) & (uint32_t)0x00ff0000U ) >>  8 ) | \
+                  ( ( (uint32_t)(val) & (uint32_t)0xff000000U ) >> 24 ) ) )
 
 #ifdef IL_BIGENDIAN
 #define htod32(i) SWAP32(i)

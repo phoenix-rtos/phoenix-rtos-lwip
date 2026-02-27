@@ -9,6 +9,9 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
+#include "cybsp.h"
+#if !((CYBSP_WIFI_INTERFACE_TYPE == CYBSP_M2M_INTERFACE) || (CYBSP_WIFI_INTERFACE_TYPE == CYBSP_USB_INTERFACE))
+
 #include "cyhal_gpio.h"
 #include "cyhal_utils.h"
 #include "cyabs_rtos.h"
@@ -209,3 +212,5 @@ void cyhal_gpio_irq_enable(cyhal_gpio_t pin, cyhal_gpio_irq_event_t event, bool 
 {
 	cy_log_msg(CYLF_GPIO, CY_LOG_ERR, "cyhal_gpio_irq_enable - not implemented!\n");
 }
+
+#endif /* !((CYBSP_WIFI_INTERFACE_TYPE == CYBSP_M2M_INTERFACE) || (CYBSP_WIFI_INTERFACE_TYPE == CYBSP_USB_INTERFACE)) */

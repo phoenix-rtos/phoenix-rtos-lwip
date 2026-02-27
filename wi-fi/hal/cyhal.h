@@ -78,3 +78,6 @@
 /** Macro specifying whether the SPI driver is available for the current device \def CYHAL_DRIVER_AVAILABLE_SPI 
 */
 #define CYHAL_DRIVER_AVAILABLE_SPI 0
+/** Macro specifying whether the USB Dev driver is available for the current device \def CYHAL_DRIVER_AVAILABLE_USB_DEV
+ */
+#define CYHAL_DRIVER_AVAILABLE_USB_DEV 1

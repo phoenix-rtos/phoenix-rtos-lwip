@@ -134,8 +134,11 @@ int main(int argc, char **argv)
 	}
 
 	/* printf("netsrv: %zu interface%s\n", have_intfs, have_intfs == 1 ? "" : "s"); */
-	if (!have_intfs)
+#if !LWIP_WIFI
+	if (have_intfs == 0) {
 		exit(1);
+	}
+#endif
 
 #if LWIP_IPSEC
 	ipsecdev_attach(LWIP_IPSEC_DEV);

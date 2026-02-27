@@ -17,6 +17,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <string.h>
 
 
 cy_rslt_t cy_rtos_create_thread(cy_thread_t *thread, cy_thread_entry_fn_t entry_function,
@@ -263,5 +264,107 @@ cy_rslt_t cy_rtos_delay_milliseconds(cy_time_t num_ms)
 	if (usleep(num_ms * 1000) < 0)
 		return CY_RTOS_GENERAL_ERROR;
 
+	return CY_RSLT_SUCCESS;
+}
+
+
+static inline unsigned cy_rtos_queue_increment(cy_queue_t *queue, unsigned index)
+{
+	return (index + 1) & (queue->length - 1);
+}
+
+
+static inline bool cy_rtos_queue_is_power_of_2(size_t n)
+{
+	return (n & (n - 1)) == 0;
+}
+
+
+/* preconditions:
+ * - length must be a power of 2
+ * - if queue->data != NULL, it should point to an array of at least length * itemsize bytes
+ */
+cy_rslt_t cy_rtos_queue_init(cy_queue_t *queue, size_t length, size_t itemsize)
+{
+	if (queue == NULL || !cy_rtos_queue_is_power_of_2(length) || length == 0 || itemsize == 0) {
+		return CY_RTOS_BAD_PARAM;
+	}
+
+	queue->data = malloc(length * itemsize);
+	if (queue->data == NULL) {
+		return CY_RTOS_NO_MEMORY;
+	}
+
+	queue->length = length;
+	queue->itemsz = itemsize;
+	atomic_init(&queue->head, 0);
+	atomic_init(&queue->tail, 0);
+
+	return CY_RSLT_SUCCESS;
+}
+
+
+static inline void *cy_rtos_queue_get_at(cy_queue_t *queue, unsigned int index)
+{
+	return (void *)((uintptr_t)queue->data + (index * queue->itemsz));
+}
+
+
+cy_rslt_t cy_rtos_queue_put(cy_queue_t *queue, const void *item_ptr)
+{
+	const unsigned current_head = atomic_load_explicit(&queue->head, memory_order_relaxed);
+	const unsigned next_head = cy_rtos_queue_increment(queue, current_head);
+	if (next_head == atomic_load_explicit(&queue->tail, memory_order_acquire)) {
+		return CY_RTOS_QUEUE_FULL;
+	}
+
+	(void)memcpy(cy_rtos_queue_get_at(queue, current_head), item_ptr, queue->itemsz);
+	atomic_store_explicit(&queue->head, next_head, memory_order_release);
+	return CY_RSLT_SUCCESS;
+}
+
+
+cy_rslt_t cy_rtos_queue_get(cy_queue_t *queue, void *item_ptr)
+{
+	const unsigned current_tail = atomic_load_explicit(&queue->tail, memory_order_relaxed);
+	if (current_tail == atomic_load_explicit(&queue->head, memory_order_acquire)) {
+		return CY_RTOS_QUEUE_EMPTY;
+	}
+
+	(void)memcpy(item_ptr, cy_rtos_queue_get_at(queue, current_tail), queue->itemsz);
+	atomic_store_explicit(&queue->tail, cy_rtos_queue_increment(queue, current_tail), memory_order_release);
+	return CY_RSLT_SUCCESS;
+}
+
+
+cy_rslt_t cy_rtos_queue_count(cy_queue_t *queue, size_t *num_waiting)
+{
+	*num_waiting = (atomic_load(&queue->head) - atomic_load(&queue->tail)) & (queue->length - 1);
+	return CY_RSLT_SUCCESS;
+}
+
+
+cy_rslt_t cy_rtos_queue_space(cy_queue_t *queue, size_t *num_spaces)
+{
+	size_t num_waiting;
+	/* cy_rtos_queue_count cannot error */
+	(void)cy_rtos_queue_count(queue, &num_waiting);
+	*num_spaces = (queue->length - 1) - num_waiting;
+	return CY_RSLT_SUCCESS;
+}
+
+
+cy_rslt_t cy_rtos_queue_reset(cy_queue_t *queue)
+{
+	atomic_store(&queue->head, 0);
+	atomic_store(&queue->tail, 0);
+	return CY_RSLT_SUCCESS;
+}
+
+
+cy_rslt_t cy_rtos_queue_deinit(cy_queue_t *queue)
+{
+	free(queue->data);
+	queue->data = NULL;
 	return CY_RSLT_SUCCESS;
 }
