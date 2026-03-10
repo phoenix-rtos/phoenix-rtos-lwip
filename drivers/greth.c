@@ -185,7 +185,11 @@ static uint16_t greth_mdioIO(greth_state_t *state, unsigned addr, unsigned reg, 
 
 static int greth_mdioSetup(void *arg, unsigned max_khz, unsigned min_hold_ns, unsigned opt_preamble)
 {
-	/* GR740 turn on PHY interrupts */
+	(void)max_khz;
+	(void)min_hold_ns;
+	(void)opt_preamble;
+
+	/* Greth turn on PHY interrupts */
 	greth_state_t *state = arg;
 	state->mmio->CTRL |= GRETH_CTRL_PI;
 	return 0;
