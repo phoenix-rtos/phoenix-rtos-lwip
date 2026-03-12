@@ -130,6 +130,13 @@ enum {
 	EPHY_DP83867IS_D3_SGMIICTL1 = 0xD3 /* SGMIICTL1 (via MMD access) */
 };
 
+/* 88E1111-specific registers*/
+enum {
+	EPHY_88E1111_11_PHYSR = 0x11, /* PHY Specific Status */
+	EPHY_88E1111_12_IER,          /* Interrupt Enable */
+	EPHY_88E1111_13_ISR,          /* Interrupt Status */
+};
+
 
 #define ephy_printf(phy, fmt, ...) printf("lwip: ephy%u.%u: " fmt "\n", phy->bus, phy->addr, ##__VA_ARGS__)
 
@@ -238,7 +245,7 @@ static uint32_t ephy_readPhyId(const eth_phy_state_t *phy)
 
 static void ephy_setLinkState(const eth_phy_state_t *phy)
 {
-	uint16_t bctl, bstat, adv, lpa, pc1, pc2;
+	uint16_t bctl, bstat, adv, lpa, pc1, pc2, physr;
 	int speed, full_duplex = 0;
 
 	bctl = ephy_regRead(phy, EPHY_COMMON_00_BMCR);
@@ -274,6 +281,11 @@ static void ephy_setLinkState(const eth_phy_state_t *phy)
 		case ephy_rtl8201fi:
 			ephy_printf(phy, "link is %s %uMbps/%s (ctl %04x, status %04x, adv %04x, lpa %04x)",
 					(linkup != 0) ? "UP  " : "DOWN", speed, (full_duplex != 0) ? "Full" : "Half", bctl, bstat, adv, lpa);
+			break;
+		case ephy_88e1111:
+			physr = ephy_regRead(phy, EPHY_88E1111_11_PHYSR);
+			ephy_printf(phy, "link is %s %uMbps/%s (ctl %04x, status %04x, adv %04x, lpa %04x psts %04x)",
+					(linkup != 0) ? "UP  " : "DOWN", speed, (full_duplex != 0) ? "Full" : "Half", bctl, bstat, adv, lpa, physr);
 			break;
 		case ephy_rtl8211fdi:
 			pc1 = ephy_regRead(phy, EPHY_RTL8211_18_PHYCR1);
@@ -397,6 +409,32 @@ static inline int ephy_rtl8211fdi_linkSpeed(const eth_phy_state_t *phy, int *ful
 }
 
 
+static inline int ephy_88e1111_linkSpeed(const eth_phy_state_t *phy, int *full_duplex)
+{
+	uint16_t physr = ephy_regRead(phy, EPHY_88E1111_11_PHYSR);
+	uint16_t speed;
+
+	if (full_duplex != NULL) {
+		*full_duplex = ((physr & (1U << 13)) != 0) ? 1 : 0;
+	}
+
+	speed = (physr >> 14) & 0x3U;
+
+	ephy_debug_printf(phy, "speed: %d", speed);
+
+	switch (speed) {
+		case 0x2:
+			return 1000;
+		case 0x1:
+			return 100;
+		case 0x0:
+			return 10;
+		default:
+			return 0;
+	}
+}
+
+
 int ephy_linkSpeed(const eth_phy_state_t *phy, int *full_duplex)
 {
 	switch (phy->model) {
@@ -412,6 +450,8 @@ int ephy_linkSpeed(const eth_phy_state_t *phy, int *full_duplex)
 			return ephy_rtl8201fi_linkSpeed(phy, full_duplex);
 		case ephy_rtl8211fdi:
 			return ephy_rtl8211fdi_linkSpeed(phy, full_duplex);
+		case ephy_88e1111:
+			return ephy_88e1111_linkSpeed(phy, full_duplex);
 		default:
 			/* unreachable */
 			return 0;
@@ -551,6 +591,9 @@ static __attribute__((unused)) char *ephy_parsePhyModel(eth_phy_state_t *phy, ch
 	}
 	else if (strcmp(cfg, "rtl8211fdi-cg") == 0) {
 		phy->model = ephy_rtl8211fdi;
+	}
+	else if (strcmp(cfg, "88e1111") == 0) {
+		phy->model = ephy_88e1111;
 	}
 	else {
 		printf("lwip: ephy: unsupported PHY model: \"%s\"\n", cfg);
@@ -900,6 +943,10 @@ int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb
 			phy->irq.reg = EPHY_RTL8211_1D_INSR;
 			phy->irq.mask = 0x06BD;
 			break;
+		case ephy_88e1111:
+			phy->irq.reg = EPHY_88E1111_13_ISR;
+			phy->irq.mask = 0x0400;
+			break;
 		default:
 			/* unreachable */
 			break;
@@ -942,6 +989,9 @@ int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb
 			break;
 		case ephy_rtl8211fdi:
 			ephy_regWrite(phy, EPHY_RTL8211_12_INER, (1U << 4));
+			break;
+		case ephy_88e1111:
+			ephy_regWrite(phy, EPHY_88E1111_12_IER, (1U << 10));
 			break;
 		default:
 			/* unreachable */
