@@ -9,4 +9,4 @@
 NET_DRIVERS_SUPPORTED := greth
 NET_DRIVERS ?= $(NET_DRIVERS_SUPPORTED)
 
-DRIVERS_SRCS_greth = greth.c ephy.c null-gpio.c $(DRIVERS_SRCS_UTIL)
+DRIVERS_SRCS_greth = greth.c ephy.c null-gpio.c physelftest.c $(DRIVERS_SRCS_UTIL)

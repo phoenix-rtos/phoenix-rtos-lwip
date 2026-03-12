@@ -14,4 +14,4 @@ endif
 NET_DRIVERS ?= $(NET_DRIVERS_SUPPORTED)
 PPPOS_MODEM ?= huawei
 
-DRIVERS_SRCS_enet = imx-enet.c ephy.c imxrt-gpio.c $(DRIVERS_SRCS_UTIL)
+DRIVERS_SRCS_enet = imx-enet.c ephy.c imxrt-gpio.c physelftest.c $(DRIVERS_SRCS_UTIL)

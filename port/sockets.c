@@ -42,6 +42,7 @@
 #endif
 
 #include "netif.h"
+#include "netif-driver.h"
 #include "route.h"
 #include "ipsec-api.h"
 
@@ -658,6 +659,32 @@ static int socket_ioctl(int sock, unsigned long request, const void *in_data, vo
 			}
 
 			return ret;
+		}
+
+		case SIOCETHTOOL: {
+			struct ifreq *ifr = out_data;
+			void *data;
+			int err = IOC_NESTED_GET_PTR_FIELD(request, (void **)&data, ifr, ifr_data);
+			if (err < 0) {
+				return err;
+			}
+
+			if (strncmp(ifr->ifr_name, "lo", 2) == 0) {
+				/* loopback doesn't have driver */
+				return -EOPNOTSUPP;
+			}
+
+			struct netif *interface = netif_find(ifr->ifr_name);
+			if (interface == NULL) {
+				return -ENXIO;
+			}
+
+			netif_driver_t *drv = netif_driver(interface);
+			if (drv == NULL || drv->ethtool_ioctl == NULL) {
+				return -EOPNOTSUPP;
+			}
+
+			return drv->ethtool_ioctl(interface, data);
 		}
 
 #if LWIP_IPV6
