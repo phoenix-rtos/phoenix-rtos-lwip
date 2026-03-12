@@ -25,7 +25,9 @@ typedef struct {
 		ephy_ksz9031mnx,
 		ephy_dp83867is,
 		ephy_rtl8201fi,
-		ephy_rtl8211fdi } model;
+		ephy_rtl8211fdi,
+		ephy_88e1111,
+	} model;
 	unsigned bus;
 	unsigned addr;
 	unsigned reset_hold_time_us;
