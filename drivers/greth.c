@@ -40,7 +40,7 @@
 #define GRETH_MAC_IAB      UINT64_C(0x0050C275A000) /* Gaisler research AB */
 #define GRETH_RX_RING_SIZE 8
 #define GRETH_TX_RING_SIZE 8
-#define GRETH_MAX_PKT_SZ   1514
+#define GRETH_MAX_PKT_SZ   (1514 + ETH_PAD_SIZE)
 
 #ifndef GRETH_EDCL
 #define GRETH_EDCL 0
@@ -265,7 +265,7 @@ static size_t greth_nextRxBufferSize(const net_bufdesc_ring_t *ring, size_t i)
 		printf("lwip: greth: WARNING: This message indicates a potential HW bug:\n");
 		printf("lwip: greth: HW provided invalid size: %zu. Setting size to 1\n", sz);
 	}
-	return sz;
+	return sz + ETH_PAD_SIZE;
 }
 
 
@@ -283,7 +283,7 @@ static void greth_fillRxDesc(const net_bufdesc_ring_t *ring, size_t i, addr_t pa
 	volatile greth_buf_desc_t *desc = (volatile greth_buf_desc_t *)ring->ring + i;
 	unsigned wrap = desc == (volatile greth_buf_desc_t *)ring->ring + ring->last ? GRETH_DESC_WR : 0;
 
-	desc->addr = pa;
+	desc->addr = pa + ETH_PAD_SIZE;
 
 	atomic_thread_fence(memory_order_seq_cst);
 	desc->flags = GRETH_DESC_EN | GRETH_DESC_IE | wrap;
