@@ -1,0 +1,12 @@
+#
+# Makefile for Phoenix-RTOS 3 LwIP
+#
+# Zynq Ultrascale target
+#
+# Copyright 2026 Phoenix Systems
+#
+
+NET_DRIVERS_SUPPORTED := pppos
+NET_DRIVERS ?= $(NET_DRIVERS_SUPPORTED)
+PPPOS_MODEM := quectel_rm500u
+PPPOS_DEFAULT_APN := internet
