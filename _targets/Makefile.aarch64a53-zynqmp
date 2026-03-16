@@ -1,12 +1,14 @@
 #
 # Makefile for Phoenix-RTOS LwIP
 #
-# aarch64a53-zynqmp target
+# aarch64a53-zynqmp - Zynq Ultrascale target
 #
-# Copyright 2025 Phoenix Systems
+# Copyright 2025-2026 Phoenix Systems
 #
 
-NET_DRIVERS_SUPPORTED := zynq
+NET_DRIVERS_SUPPORTED := zynq pppos
 NET_DRIVERS ?= $(NET_DRIVERS_SUPPORTED)
+PPPOS_MODEM := quectel_rm500u
+PPPOS_DEFAULT_APN := internet
 
 DRIVERS_SRCS_zynq = zynq-gem.c ephy_alaska.c null-gpio.c $(DRIVERS_SRCS_UTIL)

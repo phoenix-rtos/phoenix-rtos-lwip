@@ -28,6 +28,7 @@
 
 #include <pppos_modem.h>
 
+
 enum {
 	CONN_STATE_DISCONNECTING,
 	CONN_STATE_DISCONNECTED,
@@ -279,7 +280,7 @@ static int at_send_cmd_res(int fd, const char* cmd, int timeout_ms, char *rx_buf
 	serial_write(fd, (u8_t*)cmd, strlen(cmd));
 	end = strstr(cmd, "\r\n");
 	/* remove newlines for better result printing */
-	log_at("AT Tx: [%*s]", (end != NULL) ? end - cmd : strlen(cmd), cmd);
+	log_at("AT Tx: [%*s]", (int)((end != NULL) ? end - cmd : strlen(cmd)), cmd);
 
 	// wait for result with optional response text
 	int off = 0;
@@ -359,6 +360,7 @@ static int at_disconnect(int fd)
 	return res;
 }
 #endif
+
 
 static int at_is_responding(int fd, int timeout_ms)
 {
@@ -501,7 +503,7 @@ static void pppos_do_rx(pppos_priv_t* state)
 		len = read(state->fd, buffer + off, sizeof(buffer) - off);
 		if (len < 0) {
 			if (errno != EINTR && errno != EWOULDBLOCK) {
-				log_error("%s() : read(%d) = %d (%d -> %s)", __func__, sizeof(buffer), len, errno, strerror(errno));
+				log_error("%s() : read(%d) = %d (%d -> %s)", __func__, (int)sizeof(buffer), len, errno, strerror(errno));
 				serial_close(state->fd);
 				state->fd = -1;
 				return;
@@ -566,6 +568,7 @@ static void pppos_mainLoop(void* _state)
 		}
 
 		serial_set_non_blocking(state->fd);
+
 #if PPPOS_DISCONNECT_ON_INIT
 		if (at_disconnect(state->fd) != AT_RESULT_OK)
 			goto fail;
@@ -774,6 +777,8 @@ static char *cfg_get_next_arg(char *arg)
 
 static int pppos_netifInit(struct netif *netif, char *cfg)
 {
+	printf("pppos init - cfg: '%s'\n", cfg);
+
 	pppos_priv_t* state;
 	int retries, flags = 0;
 	char *next;
@@ -908,5 +913,6 @@ static netif_driver_t pppos_drv = {
 __constructor__(1000)
 void register_driver_pppos(void)
 {
+	printf("register_driver_pppos()\n");
 	register_netif_driver(&pppos_drv);
 }
