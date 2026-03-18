@@ -365,6 +365,15 @@ extern whd_result_t whd_wifi_external_auth_request(whd_interface_t ifp,
  */
 extern whd_result_t whd_wifi_stop_external_auth_request(whd_interface_t ifp);
 
+/** Query the chip ID with an IOCTL
+ *
+ * @param   ifp             Pointer to handle instance of whd interface
+ * @param   chipid          Pointer to variable where chip ID will be stored on success
+ *
+ * @return WHD_SUCCESS or Error code
+ */
+extern whd_result_t whd_wifi_get_chip_id(whd_interface_t ifp, uint16_t *id);
+
 /** Joins a Wi-Fi network
  *
  *  Scans for, associates and authenticates with a Wi-Fi network.
