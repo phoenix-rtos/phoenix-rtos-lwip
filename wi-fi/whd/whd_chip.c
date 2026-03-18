@@ -715,7 +715,7 @@ whd_result_t whd_ioctl_print(whd_driver_t whd_driver)
     CHECK_RETURN(cy_rtos_get_semaphore(&whd_driver->whd_log_mutex, CY_RTOS_NEVER_TIMEOUT, WHD_FALSE) );
     for (i = 0; i < WHD_IOCTL_LOG_SIZE; i++)
     {
-        char iovar[WHD_IOVAR_STRING_SIZE] = {0};
+        char iovar[WHD_IOVAR_STRING_SIZE + 1] = {0};
         data = whd_driver->whd_ioctl_log[i].data;
 
         if ( (whd_driver->whd_ioctl_log[i].ioct_log == WLC_SET_VAR) ||
@@ -728,11 +728,9 @@ whd_result_t whd_ioctl_print(whd_driver_t whd_driver)
                 data++;
             }
 
-            if (strlen( (char *)data ) <= WHD_IOVAR_STRING_SIZE)
-                strcpy(iovar, (char *)data);
+            snprintf(iovar, sizeof(iovar), "%s", data);
 
             iovar_string_size = strlen( (const char *)data );
-            iovar[iovar_string_size] = '\0';
             data += (iovar_string_size + 1);
             whd_driver->whd_ioctl_log[i].data_size -= (iovar_string_size + 1);
         }
