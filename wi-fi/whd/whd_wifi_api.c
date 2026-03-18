@@ -1539,6 +1539,18 @@ whd_result_t whd_set_wsec_info_algos(whd_interface_t ifp, uint32_t algos, uint32
         return WHD_SUCCESS;
 }
 
+whd_result_t whd_wifi_get_chip_id(whd_interface_t ifp, uint16_t *id)
+{
+    wlc_rev_info_t revinfo;
+    whd_result_t result = whd_wifi_get_ioctl_buffer(ifp, WLC_GET_REVINFO, (uint8_t *)&revinfo, sizeof(revinfo));
+    if (result != WHD_SUCCESS) {
+        return result;
+    }
+
+    *id = revinfo.chipnum;
+    return WHD_SUCCESS;
+}
+
 static whd_result_t whd_wifi_prepare_join(whd_interface_t ifp, whd_security_t auth_type,
                                       const uint8_t *security_key, uint8_t key_length,
                                       cy_semaphore_t *semaphore)
