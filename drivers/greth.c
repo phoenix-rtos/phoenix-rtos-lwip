@@ -87,7 +87,7 @@ static void greth_disableEdcl(greth_state_t *state)
 #endif
 
 
-__attribute__((section(".interrupt"), aligned(0x1000))) static int greth_irqHandler(unsigned int n, void *arg)
+__attribute__((section(".interrupt"))) static int greth_irqHandler(unsigned int n, void *arg)
 {
 	(void)n;
 	greth_state_t *state = arg;
