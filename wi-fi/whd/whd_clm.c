@@ -19,6 +19,7 @@
  *  Provides generic clm blob file download functionality
  */
 
+#include "whd_chip_constants.h"
 #include "whd_clm.h"
 #include "whd_wlioctl.h"
 #ifndef PROTO_MSGBUF
@@ -32,6 +33,7 @@
 #include "whd_types_int.h"
 #include "whd_proto.h"
 #include "whd_utils.h"
+#include "whd_wifi_api.h"
 
 /******************************************************
 * @cond       Constants
@@ -82,6 +84,14 @@ whd_result_t whd_process_clm_data(whd_interface_t ifp)
     uint32_t i, j, num_buff;
     uint32_t transfer_progress;
     whd_driver_t whd_driver = ifp->whd_driver;
+
+    if (whd_chip_get_chip_id(whd_driver) == 0) {
+        /* chip was not set by the bus, probably because firmware was already
+           downloaded - get it from the chip with IOCTL */
+        uint16_t chipid;
+        CHECK_RETURN(whd_wifi_get_chip_id(ifp, &chipid));
+        whd_chip_set_chip_id(whd_driver, chipid);
+    }
 
     /* clm file size is the initial datalen value which is decremented */
     ret = whd_resource_size(whd_driver, WHD_RESOURCE_WLAN_CLM, &clm_blob_size);
