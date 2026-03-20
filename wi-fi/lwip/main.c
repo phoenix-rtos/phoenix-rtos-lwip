@@ -9,42 +9,63 @@
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#include "lwip/sys.h"
+#include <ctype.h>
+#include <string.h>
+#include <sys/minmax.h>
+#include <sys/msg.h>
+#include <sys/stat.h>
+#include <posix/utils.h>
 
+#include "bus_protocols/whd_bus_protocol_interface.h"
 #include "whd_wifi_api.h"
 #include "whd_wlioctl.h"
 #include "cybsp.h"
 #include "cybsp_wifi.h"
 #include "cy_lwip.h"
-#include "cyabs_rtos.h"
 #include "cy_lwip_log.h"
+#include "cy_log.h"
 
-#include <string.h>
-#include <sys/minmax.h>
-#include <posix/utils.h>
+#include "netif.h"
+#include "lwipopts.h"
+#include "lwip/sys.h"
 
+#ifndef WIFI_CONCURRENT_MODE_ENABLED
+#define WIFI_CONCURRENT_MODE_ENABLED 1
+#endif
 
 #define WIFI_THREAD_PRIO    4
-#define WIFI_THREAD_STACKSZ (4 * _PAGE_SIZE)
+#define WIFI_THREAD_STACKSZ 4096
 
-#define WIFI_FLAG_STARTED (1 << 0)
-#define WIFI_FLAG_FAILED  (1 << 1)
-#define WIFI_FLAG_FINISH  (1 << 2)
+#define WIFI_FLAG_STARTED    (1U << 0)
+#define WIFI_FLAG_FAILED     (1U << 1)
+#define WIFI_FLAG_FINISH     (1U << 2)
+#define WIFI_FLAG_BUS_FAILED (1U << 3)
 
-#define WIFI_START_RETRIES 5
+#define STA_DEV_ID               0
+#define STA_DEV_NAME             "/dev/wifi/sta"
+#define STA_SCAN_TYPE            WHD_SCAN_TYPE_ACTIVE
+#define STA_BSS_TYPE             WHD_BSS_TYPE_ANY
+#define STA_N_SCANS              5
+#define STA_SCAN_TIMEOUT_SECONDS 10
 
-#define WIFI_DEV_ID   0
-#define WIFI_DEV_NAME "/dev/wifi"
-
+#define AP_DEV_ID        1
+#define AP_DEV_NAME      "/dev/wifi/ap"
+#define AP_START_RETRIES 5
 #define AP_SECURITY_MODE WHD_SECURITY_WPA2_AES_PSK
 #define AP_CHANNEL       1
 
-#define SNPRINTF_APPEND(fmt, ...) \
+#define CTRL_DEV_ID   2
+#define CTRL_DEV_NAME "/dev/wifi/ctrl"
+
+#define CONST_STRLEN(str) (sizeof(str) - 1)
+
+#define SNPRINTF_APPEND(overflow, buf, size, fmt, ...) \
 	do { \
 		if (!overflow) { \
 			int n = snprintf(buf, size, fmt, ##__VA_ARGS__); \
-			if (n >= size) \
-				overflow = 1; \
+			if (n >= size) { \
+				overflow = true; \
+			} \
 			else { \
 				size -= n; \
 				buf += n; \
@@ -53,82 +74,142 @@
 	} while (0)
 
 
-static struct {
+struct wifi_device {
 	handle_t lock;
 	handle_t cond;
 	handle_t tid;
 
-	volatile uint8_t flags;
-	uint32_t idle_timeout;
-	uint32_t idle_current;
+	uint32_t idleCurrent;
+
+	uint32_t timeout;
 	whd_ssid_t ssid;
-	uint8_t key[WSEC_MAX_PSK_LEN];
-	uint8_t key_len;
-
-	cy_lwip_nw_interface_t iface;
-
 	struct {
-		int busy;
-		char buf[128];
-		int len;
-	} dev;
-} wifi_common;
+		uint8_t value[WSEC_MAX_PSK_LEN];
+		uint8_t len;
+	} key;
 
-static ip_static_addr_t ap_addr = {
-	.addr = IPADDR4_INIT_BYTES(192, 168, 2, 1),
-	.netmask = IPADDR4_INIT_BYTES(255, 255, 255, 0),
-	.gateway = IPADDR4_INIT_BYTES(192, 168, 2, 1)
+	volatile uint8_t flags;
+
+	bool busy;
+	int len;
+	char buf[192];
+	cy_lwip_nw_interface_t iface;
 };
 
 
-static int wifi_ap_set_idle_timeout(const char *data, size_t len)
+enum wifi_state {
+	wifi_busFailed = -1,
+	wifi_idle = 0,
+	wifi_running = 1,
+};
+
+
+static struct {
+	bool initialized;
+	handle_t lock;
+	uint32_t msgport;
+
+	union {
+		struct {
+			struct wifi_device sta;
+			struct wifi_device ap;
+		};
+		struct wifi_device dev[2];
+	};
+
+	struct {
+		bool busy;
+		int len;
+		char buf[16];
+	} ctrl;
+
+	ip_static_addr_t apAddr;
+	whd_scan_result_t scanResult;
+} wifi_common = {
+	.apAddr = {
+		/* default AP address */
+		.addr = IPADDR4_INIT_BYTES(192, 168, 2, 1),
+		.netmask = IPADDR4_INIT_BYTES(255, 255, 255, 0),
+		.gateway = IPADDR4_INIT_BYTES(192, 168, 2, 1),
+	},
+};
+
+
+static const char *trim(const char *str, size_t *len)
+{
+	size_t sz = *len;
+	while (sz > 0 && !isgraph(*str)) {
+		str++;
+		sz--;
+	}
+
+	while (sz > 0 && !isgraph(str[sz - 1])) {
+		sz--;
+	}
+
+	*len = sz;
+
+	return str;
+}
+
+
+static int wifi_set_timeout(id_t id, const char *data, size_t len)
 {
 	char buf[16];
 	long int timeout;
+	char *endp;
 
 	if (len > (sizeof(buf) - 1)) {
-		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't set Wi-Fi idle timeout (max length is %u)\n", sizeof(buf) - 1);
+		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't set Wi-Fi timeout (max length is %u)\n", sizeof(buf) - 1);
 		return -1;
 	}
 
 	memcpy(buf, data, len);
 	buf[len] = '\0';
 
-	timeout = strtol(buf, NULL, 0);
-	if (timeout < 0) {
-		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't set Wi-Fi idle timeout (min value is 0)\n");
+	errno = 0;
+	timeout = strtol(buf, &endp, 0);
+	if (errno != 0 || endp == buf) {
+		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't set Wi-Fi timeout (bad timeout value)\n");
+		return -1;
+	}
+	else if (timeout < 0) {
+		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't set Wi-Fi timeout (min value is 0)\n");
 		return -1;
 	}
 	else if (timeout > UINT32_MAX) {
-		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't set Wi-Fi idle timeout (max value is %u)\n", UINT32_MAX);
+		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't set Wi-Fi timeout (max value is %u)\n", UINT32_MAX);
 		return -1;
 	}
+	else {
+		/* nothing */
+	}
 
-	mutexLock(wifi_common.lock);
-	wifi_common.idle_timeout = timeout;
-	mutexUnlock(wifi_common.lock);
+	mutexLock(wifi_common.dev[id].lock);
+	wifi_common.dev[id].timeout = timeout;
+	mutexUnlock(wifi_common.dev[id].lock);
 
 	return 0;
 }
 
 
-static int wifi_ap_set_ssid(const char *ssid, size_t len)
+static int wifi_set_ssid(id_t id, const char *ssid, size_t len)
 {
 	if (len > SSID_NAME_SIZE) {
 		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't set Wi-Fi SSID (max length is %u)\n", SSID_NAME_SIZE);
 		return -1;
 	}
 
-	mutexLock(wifi_common.lock);
-	memcpy(wifi_common.ssid.value, ssid, len);
-	wifi_common.ssid.length = len;
-	mutexUnlock(wifi_common.lock);
+	mutexLock(wifi_common.dev[id].lock);
+	memcpy(wifi_common.dev[id].ssid.value, ssid, len);
+	wifi_common.dev[id].ssid.length = len;
+	mutexUnlock(wifi_common.dev[id].lock);
 
 	return 0;
 }
 
 
-static int wifi_ap_set_key(const char *key, size_t len)
+static int wifi_set_key(id_t id, const char *key, size_t len)
 {
 	if (len < WSEC_MIN_PSK_LEN) {
 		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't set Wi-Fi key (min length is %u)\n", WSEC_MIN_PSK_LEN);
@@ -140,303 +221,613 @@ static int wifi_ap_set_key(const char *key, size_t len)
 		return -1;
 	}
 
-	mutexLock(wifi_common.lock);
-	memcpy(wifi_common.key, key, len);
-	wifi_common.key_len = len;
-	mutexUnlock(wifi_common.lock);
+	mutexLock(wifi_common.dev[id].lock);
+	memcpy(wifi_common.dev[id].key.value, key, len);
+	wifi_common.dev[id].key.len = len;
+	mutexUnlock(wifi_common.dev[id].lock);
 
 	return 0;
 }
 
 
-static int wifi_ap_is_idle(void)
+static void wifi_remove_interface(cy_lwip_nw_interface_t *interface)
+{
+	cy_lwip_network_down(interface);
+	cy_lwip_remove_interface(interface);
+}
+
+
+static int wifi_add_interface(cy_lwip_nw_interface_t *interface, ip_static_addr_t *addr)
+{
+	whd_result_t result;
+
+	result = cy_lwip_add_interface(interface, addr);
+	if (result != CY_RSLT_SUCCESS) {
+		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't add Wi-Fi interface\n");
+		return -1;
+	}
+
+	result = cy_lwip_network_up(interface);
+	if (result != CY_RSLT_SUCCESS) {
+		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't bring up Wi-Fi interface\n");
+		cy_lwip_remove_interface(interface);
+		return -1;
+	}
+
+	return 0;
+}
+
+
+static enum wifi_state wifi_ap_state(void)
 {
 	uint8_t buf[sizeof(uint32_t) + 4 * sizeof(whd_mac_t)];
 	whd_maclist_t *clients = (whd_maclist_t *)buf;
-	cy_rslt_t result;
+	whd_result_t result;
 
 	memset(buf, 0, sizeof(buf));
 	clients->count = 4;
 
-	result = whd_wifi_get_associated_client_list(wifi_common.iface.whd_iface, buf, sizeof(buf));
-	if (result == WHD_SUCCESS && clients->count == 0)
-		return 1;
+	result = whd_wifi_get_associated_client_list(wifi_common.ap.iface.whd_iface, buf, sizeof(buf));
+	if (result != WHD_SUCCESS) {
+		return wifi_busFailed;
+	}
+	if (clients->count == 0) {
+		return wifi_idle;
+	}
 
-	return 0;
+	return wifi_running;
 }
 
 
-static void wifi_ap_main_loop(void)
+static enum wifi_state wifi_sta_state(whd_ssid_t *ssid)
+{
+	if (wifi_common.sta.iface.whd_iface == NULL) {
+		return wifi_busFailed;
+	}
+
+	if (whd_wifi_is_ready_to_transceive(wifi_common.sta.iface.whd_iface) != WHD_SUCCESS) {
+		return wifi_busFailed;
+	}
+
+	whd_bss_info_t apInfo;
+	whd_security_t security;
+	whd_result_t result = whd_wifi_get_ap_info(wifi_common.sta.iface.whd_iface, &apInfo, &security);
+	if (result != WHD_SUCCESS) {
+		return wifi_idle;
+	}
+
+	if (ssid != NULL) {
+		memcpy(ssid->value, apInfo.SSID, sizeof(ssid->value));
+		ssid->length = apInfo.SSID_len;
+	}
+	return wifi_running;
+}
+
+
+static enum wifi_state wifi_get_state(struct wifi_device *dev)
+{
+	whd_mac_t mac;
+	if (whd_wifi_get_mac_address(dev->iface.whd_iface, &mac) == WHD_BUS_FAIL) {
+		/* whd has exit, so we signal exit too */
+		return wifi_busFailed;
+	}
+
+	if (dev == &wifi_common.ap) {
+		return wifi_ap_state();
+	}
+	else if (dev == &wifi_common.sta) {
+		return wifi_sta_state(NULL);
+	}
+	else {
+		return wifi_busFailed;
+	}
+}
+
+
+static void wifi_main_loop(struct wifi_device *dev)
 {
 	for (;;) {
 		bool finish = false;
-		bool update_idle = false;
-		bool check_idle = false;
-		unsigned int cond_timeout = 0;
+		bool updateIdle = false;
+		bool checkIdle = false;
+		unsigned int condTimeout = 0;
 
-		mutexLock(wifi_common.lock);
+		mutexLock(dev->lock);
 
-		if (wifi_common.flags & WIFI_FLAG_FINISH)
+		if ((dev->flags & WIFI_FLAG_FINISH) != 0) {
 			finish = true;
+		}
 
-		if (wifi_common.idle_timeout != 0) {
-			if (wifi_common.idle_current < wifi_common.idle_timeout) {
-				update_idle = true;
-				cond_timeout = 1;
+		if (dev->timeout != 0) {
+			if (dev->idleCurrent < dev->timeout) {
+				updateIdle = true;
+				condTimeout = 1;
 			}
 			else {
-				check_idle = true;
-				cond_timeout = 60;
+				checkIdle = true;
+				condTimeout = 60;
 			}
 		}
 
-		mutexUnlock(wifi_common.lock);
+		mutexUnlock(dev->lock);
 
-		if (!finish && check_idle) {
-			if (wifi_ap_is_idle())
+		if (!finish && checkIdle) {
+			enum wifi_state state = wifi_get_state(dev);
+			if (state == wifi_busFailed || state == wifi_idle) {
+				if (state == wifi_busFailed) {
+					mutexLock(dev->lock);
+					dev->flags |= WIFI_FLAG_BUS_FAILED;
+					mutexUnlock(dev->lock);
+				}
 				finish = true;
+			}
 		}
 
-		if (finish)
+		if (finish) {
 			break;
+		}
+
+		mutexLock(dev->lock);
+		condWait(dev->cond, dev->lock, condTimeout * 1000000ULL);
+
+		if (updateIdle) {
+			dev->idleCurrent += 1;
+		}
+
+		mutexUnlock(dev->lock);
+	}
+
+	mutexLock(dev->lock);
+	if (dev->flags & WIFI_FLAG_BUS_FAILED) {
+		mutexUnlock(dev->lock);
 
 		mutexLock(wifi_common.lock);
-		condWait(wifi_common.cond, wifi_common.lock, cond_timeout * 1000000ULL);
-
-		if (update_idle)
-			wifi_common.idle_current += 1;
-
+		wifi_common.initialized = false;
 		mutexUnlock(wifi_common.lock);
+
+		msg_t msg = {
+			.oid = {
+				.port = wifi_common.msgport,
+				.id = CTRL_DEV_ID,
+			},
+		};
+		(void)msgSend(wifi_common.msgport, &msg);
+
+		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "Bus failed, deinitializing Wi-Fi\n");
+		return;
 	}
+	mutexUnlock(dev->lock);
 }
 
 
 static void wifi_ap_thread(void *arg)
 {
+	(void)arg;
 	bool started = false;
 
 	do {
 		cy_rslt_t result;
 		whd_ssid_t ssid;
 		uint8_t key[WSEC_MAX_PSK_LEN];
-		uint8_t key_len;
+		uint8_t keyLen;
 
-		mutexLock(wifi_common.lock);
+		mutexLock(wifi_common.ap.lock);
 
-		ssid = wifi_common.ssid;
-		memcpy(key, wifi_common.key, sizeof(key));
-		key_len = wifi_common.key_len;
+		ssid = wifi_common.ap.ssid;
+		memcpy(key, wifi_common.ap.key.value, sizeof(key));
+		keyLen = wifi_common.ap.key.len;
 
-		mutexUnlock(wifi_common.lock);
+		mutexUnlock(wifi_common.ap.lock);
 
-		result = cybsp_init();
-		if (result != CY_RSLT_SUCCESS) {
-			wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't init Wi-Fi HW\n");
-			break;
-		}
-
-		result = cybsp_wifi_init_primary(&wifi_common.iface.whd_iface);
-		if (result != CY_RSLT_SUCCESS) {
-			wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't init Wi-Fi interface\n");
-			cybsp_free();
-			break;
-		}
-
-		wifi_common.iface.role = CY_LWIP_AP_NW_INTERFACE;
-
-		result = cy_lwip_add_interface(&wifi_common.iface, &ap_addr);
-		if (result != CY_RSLT_SUCCESS) {
-			wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't add Wi-Fi interface\n");
-			cybsp_wifi_deinit(wifi_common.iface.whd_iface);
-			cybsp_free();
-			break;
-		}
-
-		result = cy_lwip_network_up(&wifi_common.iface);
-		if (result != CY_RSLT_SUCCESS) {
-			wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't bring up Wi-Fi interface\n");
-			cy_lwip_remove_interface(&wifi_common.iface);
-			cybsp_wifi_deinit(wifi_common.iface.whd_iface);
-			cybsp_free();
-			break;
-		}
-
-		result = whd_wifi_init_ap(wifi_common.iface.whd_iface, &ssid, AP_SECURITY_MODE, key, key_len, AP_CHANNEL);
+		result = whd_wifi_init_ap(wifi_common.ap.iface.whd_iface, &ssid, AP_SECURITY_MODE, key, keyLen, AP_CHANNEL);
 		if (result != WHD_SUCCESS) {
 			wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't init Wi-Fi AP\n");
-			cy_lwip_network_down(&wifi_common.iface);
-			cy_lwip_remove_interface(&wifi_common.iface);
-			cybsp_wifi_deinit(wifi_common.iface.whd_iface);
-			cybsp_free();
 			break;
 		}
 
-		result = whd_wifi_start_ap(wifi_common.iface.whd_iface);
+		result = whd_wifi_start_ap(wifi_common.ap.iface.whd_iface);
 		if (result != WHD_SUCCESS) {
 			wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't start Wi-Fi AP\n");
-			cy_lwip_network_down(&wifi_common.iface);
-			cy_lwip_remove_interface(&wifi_common.iface);
-			cybsp_wifi_deinit(wifi_common.iface.whd_iface);
-			cybsp_free();
+			break;
+		}
+
+		if (wifi_add_interface(&wifi_common.ap.iface, &wifi_common.apAddr) < 0) {
 			break;
 		}
 
 		started = true;
 	} while (0);
 
-	mutexLock(wifi_common.lock);
-	wifi_common.flags |= started ? WIFI_FLAG_STARTED : WIFI_FLAG_FAILED;
-	condSignal(wifi_common.cond);
-	mutexUnlock(wifi_common.lock);
+	mutexLock(wifi_common.ap.lock);
+	wifi_common.ap.flags |= started ? WIFI_FLAG_STARTED : WIFI_FLAG_FAILED;
+	condSignal(wifi_common.ap.cond);
+	mutexUnlock(wifi_common.ap.lock);
 
 	if (started) {
-		wifi_ap_main_loop();
-
-		whd_wifi_stop_ap(wifi_common.iface.whd_iface);
-		cy_lwip_network_down(&wifi_common.iface);
-		cy_lwip_remove_interface(&wifi_common.iface);
-		cybsp_wifi_deinit(wifi_common.iface.whd_iface);
-		cybsp_free();
+		wifi_main_loop(&wifi_common.ap);
 	}
 
-	mutexLock(wifi_common.lock);
-	wifi_common.tid = 0;
-	mutexUnlock(wifi_common.lock);
+	whd_wifi_stop_ap(wifi_common.ap.iface.whd_iface);
+	wifi_remove_interface(&wifi_common.ap.iface);
+
+	wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_INFO, "AP: stopped\n");
+
+	mutexLock(wifi_common.ap.lock);
+	wifi_common.ap.tid = 0;
+	mutexUnlock(wifi_common.ap.lock);
 }
 
 
-static int wifi_ap_start(void)
+static void wifi_scan_result_cb(whd_scan_result_t **result_ptr, void *user_data, whd_scan_status_t status)
 {
-	uint8_t flags;
+	switch (status) {
+		case WHD_SCAN_ABORTED:
+			return;
 
-	mutexLock(wifi_common.lock);
+		case WHD_SCAN_COMPLETED_SUCCESSFULLY:
+			break;
 
-	/* reset idle timeout in any case */
-	wifi_common.idle_current = 0;
+		case WHD_SCAN_INCOMPLETE: {
+			if ((*result_ptr)->SSID.length != 0) {
+				whd_ssid_t *ssid = user_data;
+				if ((*result_ptr)->SSID.length != ssid->length || memcmp((*result_ptr)->SSID.value, ssid->value, ssid->length) != 0) {
+					return;
+				}
+			}
+			break;
+		}
 
-	if (wifi_common.tid != 0) {
-		mutexUnlock(wifi_common.lock);
-		return 0;
+		default:
+			return;
 	}
 
-	wifi_common.flags = 0;
+	mutexLock(wifi_common.sta.lock);
+	condSignal(wifi_common.sta.cond);
+	if (result_ptr != NULL) {
+		*result_ptr = NULL;
+	}
+	mutexUnlock(wifi_common.sta.lock);
+}
 
-	if (sys_thread_opt_new("wifi-ap", wifi_ap_thread, NULL, WIFI_THREAD_STACKSZ, WIFI_THREAD_PRIO, &wifi_common.tid) < 0) {
-		mutexUnlock(wifi_common.lock);
-		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't create Wi-Fi AP thread\n");
+
+static void wifi_sta_thread(void *arg)
+{
+	(void)arg;
+	whd_result_t result;
+	whd_ssid_t ssid, connectedTo;
+	uint8_t key[WSEC_MAX_PSK_LEN];
+	uint8_t keyLen;
+	time_t left;
+	bool wifiJoined = false;
+	bool ifaceAdded = false;
+#if STA_SCAN_TIMEOUT_SECONDS != 0
+	struct timespec tp;
+	time_t when, now;
+#endif
+
+	mutexLock(wifi_common.sta.lock);
+
+	ssid = wifi_common.sta.ssid;
+	memcpy(key, wifi_common.sta.key.value, sizeof(key));
+	keyLen = wifi_common.sta.key.len;
+
+	mutexUnlock(wifi_common.sta.lock);
+
+	left = STA_SCAN_TIMEOUT_SECONDS;
+
+	do {
+		/* we know STA is not running - just check if the bus didn't fail */
+		enum wifi_state state = wifi_sta_state(&connectedTo);
+		if (state == wifi_busFailed) {
+			result = WHD_BUS_FAIL;
+			break;
+		}
+
+		result = whd_wifi_set_ioctl_value(wifi_common.sta.iface.whd_iface, WLC_SET_BAND, WLC_BAND_AUTO);
+		if (result != WHD_SUCCESS) {
+			break;
+		}
+
+#if STA_SCAN_TIMEOUT_SECONDS != 0
+		if (clock_gettime(CLOCK_MONOTONIC, &tp) < 0) {
+			wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "couldn't get current time: %s (%d)\n", strerror(errno), errno);
+			break;
+		}
+		now = tp.tv_sec;
+		when = now + STA_SCAN_TIMEOUT_SECONDS;
+#endif
+
+		mutexLock(wifi_common.sta.lock);
+		wifi_common.scanResult.security = WHD_SECURITY_UNKNOWN;
+		do {
+			result = whd_wifi_scan(wifi_common.sta.iface.whd_iface, STA_SCAN_TYPE, STA_BSS_TYPE,
+					&ssid, NULL, NULL, NULL, wifi_scan_result_cb, &wifi_common.scanResult, &ssid);
+			condWait(wifi_common.sta.cond, wifi_common.sta.lock, min((STA_SCAN_TIMEOUT_SECONDS * 1000000ULL) / STA_N_SCANS, left * 1000000ULL));
+
+			(void)whd_wifi_stop_scan(wifi_common.sta.iface.whd_iface);
+
+#if STA_SCAN_TIMEOUT_SECONDS != 0
+			if (clock_gettime(CLOCK_MONOTONIC, &tp) < 0) {
+				wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "couldn't get current time: %s (%d)\n", strerror(errno), errno);
+				break;
+			}
+			now = tp.tv_sec;
+			if (now >= when) {
+				result = WHD_SCAN_ABORTED;
+				break;
+			}
+			left = when - now;
+#endif
+		} while (result == WHD_SUCCESS && wifi_common.scanResult.security == WHD_SECURITY_UNKNOWN);
+
+		if (result != WHD_SUCCESS) {
+			wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't get network's security\n");
+			mutexUnlock(wifi_common.sta.lock);
+			break;
+		}
+
+		result = whd_wifi_join_specific(wifi_common.sta.iface.whd_iface, &wifi_common.scanResult, key, keyLen);
+		if (result != WHD_SUCCESS) {
+			wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't join requested network\n");
+			mutexUnlock(wifi_common.sta.lock);
+			break;
+		}
+		mutexUnlock(wifi_common.sta.lock);
+		wifiJoined = true;
+
+		if (wifi_add_interface(&wifi_common.sta.iface, NULL) < 0) {
+			result = WHD_INTERFACE_NOT_UP;
+			break;
+		}
+		ifaceAdded = true;
+	} while (0);
+
+	mutexLock(wifi_common.sta.lock);
+	wifi_common.sta.flags = (result == WHD_SUCCESS) ? WIFI_FLAG_STARTED : WIFI_FLAG_FAILED;
+	condSignal(wifi_common.sta.cond);
+	mutexUnlock(wifi_common.sta.lock);
+
+	if (result == WHD_SUCCESS) {
+		wifi_main_loop(&wifi_common.sta);
+	}
+
+	if (ifaceAdded) {
+		wifi_remove_interface(&wifi_common.sta.iface);
+	}
+	if (wifiJoined) {
+		whd_wifi_leave(wifi_common.sta.iface.whd_iface);
+	}
+
+	wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_INFO, "STA: disconnected\n");
+
+	mutexLock(wifi_common.sta.lock);
+	wifi_common.sta.tid = 0;
+	mutexUnlock(wifi_common.sta.lock);
+}
+
+
+static int wifi_dev_start(struct wifi_device *dev)
+{
+	void (*thread)(void *);
+	const char *threadName;
+	struct wifi_device *other;
+	uint8_t flags;
+
+	if (dev == &wifi_common.ap) {
+		thread = wifi_ap_thread;
+		threadName = "wifi-ap";
+		other = &wifi_common.sta;
+	}
+	else if (dev == &wifi_common.sta) {
+		thread = wifi_sta_thread;
+		threadName = "wifi-sta";
+		other = &wifi_common.ap;
+	}
+	else {
 		return -1;
 	}
 
-	while (wifi_common.flags == 0) {
-		condWait(wifi_common.cond, wifi_common.lock, 0);
+#if !WIFI_CONCURRENT_MODE_ENABLED
+	mutexLock(other->lock);
+	if (other->tid != 0) {
+		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't enable %s: concurrent mode is disabled\n", threadName);
+		mutexUnlock(other->lock);
+		return -1;
+	}
+	mutexUnlock(other->lock);
+#else
+	(void)other;
+#endif
+
+	mutexLock(dev->lock);
+
+	/* reset idle timeout in any case */
+	dev->idleCurrent = 0;
+
+	if (dev->tid != 0) {
+		mutexUnlock(dev->lock);
+		return 0;
 	}
 
-	flags = wifi_common.flags;
+	dev->flags = 0;
 
-	mutexUnlock(wifi_common.lock);
+	if (sys_thread_opt_new(threadName, thread, dev, WIFI_THREAD_STACKSZ, WIFI_THREAD_PRIO, &dev->tid) < 0) {
+		mutexUnlock(dev->lock);
+		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't create %s thread\n", threadName);
+		return -1;
+	}
 
-	return (flags & WIFI_FLAG_STARTED ? 0 : -1);
+	while (dev->flags == 0) {
+		condWait(dev->cond, dev->lock, 0);
+	}
+
+	flags = dev->flags;
+
+	mutexUnlock(dev->lock);
+
+	return ((flags & WIFI_FLAG_STARTED) != 0) ? 0 : -1;
 }
 
 
-static void wifi_ap_stop(void)
+static void wifi_dev_stop(struct wifi_device *dev)
 {
 	handle_t tid;
 
-	mutexLock(wifi_common.lock);
+	mutexLock(dev->lock);
 
-	if (wifi_common.tid == 0) {
-		mutexUnlock(wifi_common.lock);
+	if (dev->tid == 0) {
+		mutexUnlock(dev->lock);
 		return;
 	}
 
-	tid = wifi_common.tid;
-	wifi_common.flags |= WIFI_FLAG_FINISH;
-	condSignal(wifi_common.cond);
+	tid = dev->tid;
+	dev->flags |= WIFI_FLAG_FINISH;
+	condSignal(dev->cond);
 
-	mutexUnlock(wifi_common.lock);
+	mutexUnlock(dev->lock);
 
 	sys_thread_join(tid);
 }
 
 
-static int wifi_dev_open(int flags)
+static int wifi_dev_open(id_t id, int flags)
 {
 	char *buf;
 	size_t size;
-	int overflow = 0;
+	bool overflow = false;
 
-	if (wifi_common.dev.busy)
+	if (wifi_common.dev[id].busy) {
 		return -EBUSY;
+	}
 
-	buf = wifi_common.dev.buf;
-	size = sizeof(wifi_common.dev.buf);
+	buf = wifi_common.dev[id].buf;
+	size = sizeof(wifi_common.dev[id].buf);
 
-	mutexLock(wifi_common.lock);
+	mutexLock(wifi_common.dev[id].lock);
 
-	SNPRINTF_APPEND("running=%u\n", wifi_common.tid != 0);
-	SNPRINTF_APPEND("timeout=%u\n", wifi_common.idle_timeout);
-	SNPRINTF_APPEND("ssid=%.*s\n", wifi_common.ssid.length, wifi_common.ssid.value);
+	SNPRINTF_APPEND(overflow, buf, size, "timeout=%u\n", wifi_common.dev[id].timeout);
+	if (id == STA_DEV_ID) {
+		SNPRINTF_APPEND(overflow, buf, size, "ssid=%.*s\n", wifi_common.sta.ssid.length, wifi_common.sta.ssid.value);
+		whd_ssid_t ssid;
+		enum wifi_state state = wifi_sta_state(&ssid);
+		if (state == wifi_running) {
+			struct netif *netif = cy_lwip_get_interface(wifi_common.dev[id].iface.role);
+			SNPRINTF_APPEND(overflow, buf, size, "connected_to=%.*s\n", ssid.length, ssid.value);
+			SNPRINTF_APPEND(overflow, buf, size, "ip_addr=%s\n", netif != NULL ? ipaddr_ntoa(&netif->ip_addr) : "unknown");
+			SNPRINTF_APPEND(overflow, buf, size, "netmask=%s\n", netif != NULL ? ipaddr_ntoa(&netif->netmask) : "unknown");
+			SNPRINTF_APPEND(overflow, buf, size, "gateway=%s\n", netif != NULL ? ipaddr_ntoa(&netif->gw) : "unknown");
+		}
+	}
+	else if (id == AP_DEV_ID) {
+		SNPRINTF_APPEND(overflow, buf, size, "ssid=%.*s\n", wifi_common.ap.ssid.length, wifi_common.ap.ssid.value);
+		SNPRINTF_APPEND(overflow, buf, size, "ip_addr=%s\n", ipaddr_ntoa(&wifi_common.apAddr.addr));
+		SNPRINTF_APPEND(overflow, buf, size, "netmask=%s\n", ipaddr_ntoa(&wifi_common.apAddr.netmask));
+		SNPRINTF_APPEND(overflow, buf, size, "gateway=%s\n", ipaddr_ntoa(&wifi_common.apAddr.gateway));
+		SNPRINTF_APPEND(overflow, buf, size, "running=%u\n", wifi_common.ap.tid != 0);
+	}
+	else {
+		/* nothing */
+	}
 
-	mutexUnlock(wifi_common.lock);
+	mutexUnlock(wifi_common.dev[id].lock);
 
-	if (overflow)
+	if (overflow) {
 		return -EFBIG;
+	}
 
-	wifi_common.dev.busy = 1;
-	wifi_common.dev.len = buf - wifi_common.dev.buf;
+	wifi_common.dev[id].busy = true;
+	wifi_common.dev[id].len = buf - wifi_common.dev[id].buf;
 
 	return 0;
 }
 
 
-static int wifi_dev_close(void)
+static int wifi_dev_close(id_t id)
 {
-	if (!wifi_common.dev.busy)
+	if (!wifi_common.dev[id].busy) {
 		return -EBADF;
-	wifi_common.dev.busy = 0;
+	}
+	wifi_common.dev[id].busy = false;
 	return 0;
 }
 
 
-static int wifi_dev_read(char *data, size_t size, off_t offset)
+static int wifi_dev_read(id_t id, char *data, size_t size, off_t offset)
 {
 	int cnt;
 
-	if (offset > wifi_common.dev.len)
+	if (offset > wifi_common.dev[id].len) {
 		return -ERANGE;
+	}
 
-	cnt = min(size, wifi_common.dev.len - offset);
-	memcpy(data, wifi_common.dev.buf + offset, cnt);
+	cnt = min(size, wifi_common.dev[id].len - offset);
+	memcpy(data, wifi_common.dev[id].buf + offset, cnt);
 
 	return cnt;
 }
 
 
-static int wifi_dev_write(const char *data, size_t size)
+static int wifi_set_addr(ip_addr_t *addr, const char *data, size_t size)
 {
-	if (size >= 8 && strncmp("timeout ", data, 8) == 0) {
-		wifi_ap_set_idle_timeout(data + 8, size - 8);
+	char addrStr[sizeof("255.255.255.255")] = { 0 };
+	if (size > sizeof(addrStr) - 1) {
+		return -EINVAL;
 	}
-	else if (size >= 5 && strncmp("ssid ", data, 5) == 0) {
-		wifi_ap_set_ssid(data + 5, size - 5);
-	}
-	else if (size >= 4 && strncmp("key ", data, 4) == 0) {
-		wifi_ap_set_key(data + 4, size - 4);
-	}
-	else if (strncmp("start", data, size) == 0) {
-		unsigned int retries = WIFI_START_RETRIES;
 
-		while (wifi_ap_start() < 0 && retries-- > 0) {
+	size = min(size, sizeof(addrStr) - 1);
+	memcpy(addrStr, data, size);
+
+	if (ip4addr_aton(addrStr, addr) != 0) {
+		return size;
+	}
+	else {
+		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "bad IP address: %.*s\n", size, data);
+		return -EINVAL;
+	}
+}
+
+
+static int wifi_dev_write(id_t id, const char *data, size_t size)
+{
+	data = trim(data, &size);
+
+	if (size >= CONST_STRLEN("timeout ") && strncmp("timeout ", data, 8) == 0) {
+		wifi_set_timeout(id, data + 8, size - 8);
+	}
+	else if (size >= CONST_STRLEN("ssid ") && strncmp("ssid ", data, 5) == 0) {
+		wifi_set_ssid(id, data + 5, size - 5);
+	}
+	else if (size >= CONST_STRLEN("key ") && strncmp("key ", data, 4) == 0) {
+		wifi_set_key(id, data + 4, size - 4);
+	}
+	else if (id == STA_DEV_ID && size == CONST_STRLEN("connect") && strncmp("connect", data, size) == 0) {
+		wifi_dev_start(&wifi_common.sta);
+	}
+	else if (id == STA_DEV_ID && size == CONST_STRLEN("disconnect") && strncmp("disconnect", data, size) == 0) {
+		wifi_dev_stop(&wifi_common.sta);
+	}
+	else if (id == AP_DEV_ID && size == CONST_STRLEN("start") && strncmp("start", data, size) == 0) {
+		unsigned int retries = AP_START_RETRIES;
+
+		while (wifi_dev_start(&wifi_common.ap) < 0 && retries-- > 0) {
 			/* FIXME: temporary workaround - find out why AP doesn't start */
 			wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "retrying to start Wi-Fi AP\n");
 		}
 	}
-	else if (strncmp("stop", data, size) == 0) {
-		wifi_ap_stop();
+	else if (id == AP_DEV_ID && size == CONST_STRLEN("stop") && strncmp("stop", data, size) == 0) {
+		wifi_dev_stop(&wifi_common.ap);
+	}
+	else if (id == AP_DEV_ID && size >= CONST_STRLEN("ip_addr ") && strncmp("ip_addr ", data, 8) == 0) {
+		return wifi_set_addr(&wifi_common.apAddr.addr, data + 8, size - 8);
+	}
+	else if (id == AP_DEV_ID && size >= CONST_STRLEN("netmask ") && strncmp("netmask ", data, 8) == 0) {
+		return wifi_set_addr(&wifi_common.apAddr.netmask, data + 8, size - 8);
+	}
+	else if (id == AP_DEV_ID && size >= CONST_STRLEN("gateway ") && strncmp("gateway ", data, 8) == 0) {
+		return wifi_set_addr(&wifi_common.apAddr.gateway, data + 8, size - 8);
 	}
 	else {
-		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "got unknown Wi-Fi command\n");
+		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "got unknown Wi-Fi command: %.*s\n", (int)size, data);
 		return -EINVAL;
 	}
 
@@ -444,32 +835,264 @@ static int wifi_dev_write(const char *data, size_t size)
 }
 
 
-static int wifi_dev_init(unsigned int port)
+static int wifi_init_interfaces(void)
 {
-	oid_t wifi_oid = { port, WIFI_DEV_ID };
+	cy_rslt_t result;
 
-	return create_dev(&wifi_oid, WIFI_DEV_NAME);
+	result = cybsp_init();
+	if (result != CY_RSLT_SUCCESS) {
+		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't init Wi-Fi HW\n");
+		return -1;
+	}
+
+	/* STA */
+	result = cybsp_wifi_init_primary(&wifi_common.sta.iface.whd_iface);
+	if (result != CY_RSLT_SUCCESS) {
+		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't init Wi-Fi primary interface (STA)\n");
+		cybsp_free();
+		wifi_common.sta.iface.whd_iface = NULL;
+		return -1;
+	}
+
+	wifi_common.sta.iface.role = CY_LWIP_STA_NW_INTERFACE;
+
+	/* AP */
+	result = cybsp_wifi_init_secondary(&wifi_common.ap.iface.whd_iface, NULL);
+	if (result != CY_RSLT_SUCCESS) {
+		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't init Wi-Fi secondary interface (AP)\n");
+		cybsp_wifi_deinit(wifi_common.sta.iface.whd_iface);
+		cybsp_free();
+		wifi_common.sta.iface.whd_iface = NULL;
+		wifi_common.ap.iface.whd_iface = NULL;
+		return -1;
+	}
+
+	wifi_common.ap.iface.role = CY_LWIP_AP_NW_INTERFACE;
+
+	return 0;
+}
+
+
+static void wifi_deinit_interfaces(void)
+{
+	handle_t tid;
+
+	mutexLock(wifi_common.ap.lock);
+	tid = wifi_common.ap.tid;
+	mutexUnlock(wifi_common.ap.lock);
+
+	if (tid != 0) {
+		wifi_dev_stop(&wifi_common.ap);
+	}
+
+	mutexLock(wifi_common.sta.lock);
+	tid = wifi_common.sta.tid;
+	mutexUnlock(wifi_common.sta.lock);
+
+	if (tid != 0) {
+		wifi_dev_stop(&wifi_common.sta);
+	}
+
+	/* cybsp_wifi_deinit() deinitializes both interfaces - only needs the
+	  interface pointer to get the driver pointer, so it needs to be
+	  called only once on any of the interfaces */
+	if (wifi_common.sta.iface.whd_iface != NULL) {
+		cybsp_wifi_deinit(wifi_common.sta.iface.whd_iface);
+		cybsp_free();
+	}
+	else if (wifi_common.ap.iface.whd_iface != NULL) {
+		cybsp_wifi_deinit(wifi_common.ap.iface.whd_iface);
+		cybsp_free();
+	}
+	else {
+		/* nothing */
+	}
+	wifi_common.sta.iface.whd_iface = NULL;
+	wifi_common.ap.iface.whd_iface = NULL;
+}
+
+
+static int wifi_dev_init(unsigned int port, id_t id, const char *path)
+{
+	oid_t wifi_oid = { port, id };
+
+	return create_dev(&wifi_oid, path);
+}
+
+
+static void _wifi_deinit(void)
+{
+	wifi_deinit_interfaces();
+	if (wifi_common.sta.lock != -1) {
+		resourceDestroy(wifi_common.sta.lock);
+	}
+	if (wifi_common.sta.cond != -1) {
+		resourceDestroy(wifi_common.sta.cond);
+	}
+	if (wifi_common.ap.lock != -1) {
+		resourceDestroy(wifi_common.ap.lock);
+	}
+	if (wifi_common.ap.cond != -1) {
+		resourceDestroy(wifi_common.ap.cond);
+	}
+	destroy_dev(AP_DEV_NAME);
+	destroy_dev(STA_DEV_NAME);
+}
+
+
+static int _wifi_init(unsigned int port)
+{
+	int err;
+
+	wifi_common.sta.lock = -1;
+	wifi_common.sta.cond = -1;
+	wifi_common.ap.lock = -1;
+	wifi_common.ap.cond = -1;
+
+	do {
+		err = mutexCreate(&wifi_common.sta.lock);
+		if (err < 0) {
+			wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't create STA lock\n");
+			break;
+		}
+
+		err = condCreate(&wifi_common.sta.cond);
+		if (err < 0) {
+			wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't create STA cond\n");
+			break;
+		}
+
+		err = mutexCreate(&wifi_common.ap.lock);
+		if (err < 0) {
+			wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't create AP lock\n");
+			break;
+		}
+
+		err = condCreate(&wifi_common.ap.cond);
+		if (err < 0) {
+			wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't create AP cond\n");
+			break;
+		}
+
+		err = wifi_init_interfaces();
+		if (err < 0) {
+			break;
+		}
+
+		err = wifi_dev_init(port, STA_DEV_ID, STA_DEV_NAME);
+		if (err < 0) {
+			wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't create Wi-Fi STA device\n");
+			break;
+		}
+
+		err = wifi_dev_init(port, AP_DEV_ID, AP_DEV_NAME);
+		if (err < 0) {
+			wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't create Wi-Fi AP device\n");
+			break;
+		}
+	} while (0);
+
+	if (err < 0) {
+		_wifi_deinit();
+	}
+
+	return err;
+}
+
+
+static int wifi_handle_ctrl(unsigned int port, msg_t *msg)
+{
+	switch (msg->type) {
+		case mtOpen: {
+			if (wifi_common.ctrl.busy) {
+				return -EBUSY;
+			}
+			int bytes = snprintf(wifi_common.ctrl.buf, sizeof(wifi_common.ctrl.buf), "running=%d\n", wifi_common.initialized ? 1 : 0);
+			wifi_common.ctrl.len = bytes;
+			wifi_common.ctrl.busy = true;
+			return EOK;
+		}
+
+		case mtClose:
+			wifi_common.ctrl.busy = false;
+			return EOK;
+
+		case mtRead: {
+			off_t offset = msg->i.io.offs;
+			if (offset > wifi_common.ctrl.len) {
+				return -ERANGE;
+			}
+
+			int cnt = min(msg->o.size, wifi_common.ctrl.len - offset);
+
+			memcpy(msg->o.data, wifi_common.ctrl.buf + offset, cnt);
+			return cnt;
+		}
+
+		case mtWrite: {
+			const char *data = msg->i.data;
+			size_t size = msg->i.size;
+
+			data = trim(data, &size);
+
+			if (size == CONST_STRLEN("on") && strncmp("on", data, size) == 0) {
+				oid_t oid __attribute__((unused));
+
+				mutexLock(wifi_common.lock);
+				if (wifi_common.initialized) {
+					wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "Wi-Fi is already on\n");
+					mutexUnlock(wifi_common.lock);
+					return size;
+				}
+
+				if (_wifi_init(port) >= 0) {
+					wifi_common.initialized = true;
+				}
+				mutexUnlock(wifi_common.lock);
+			}
+			else if (size == CONST_STRLEN("off") && strncmp("off", data, size) == 0) {
+				mutexLock(wifi_common.lock);
+				if (!wifi_common.initialized) {
+					wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "Wi-Fi is already off\n");
+					mutexUnlock(wifi_common.lock);
+					return size;
+				}
+
+				_wifi_deinit();
+				wifi_common.initialized = false;
+				mutexUnlock(wifi_common.lock);
+			}
+			else {
+				wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "got unknown Wi-Fi command: %.*s\n", (int)size, data);
+				return -EINVAL;
+			}
+			return size;
+		}
+
+		default:
+			return -EINVAL;
+	}
 }
 
 
 static void wifi_msg_thread(void *arg)
 {
 	cy_rslt_t result;
-	unsigned int port;
 
 	result = cy_log_init(CY_LOG_INFO);
 	if (result != CY_RSLT_SUCCESS) {
-		printf("phoenix-rtos-lwip: can't init Wi-Fi logs\n");
+		fprintf(stderr, "phoenix-rtos-lwip: can't init Wi-Fi logs\n");
 		return;
 	}
 
-	if (portCreate(&port) < 0) {
+	if (portCreate(&wifi_common.msgport) < 0) {
 		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't create Wi-Fi port\n");
 		return;
 	}
 
-	if (wifi_dev_init(port) < 0) {
-		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't create Wi-Fi device\n");
+	if (wifi_dev_init(wifi_common.msgport, CTRL_DEV_ID, CTRL_DEV_NAME) < 0) {
+		portDestroy(wifi_common.msgport);
+		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't create Wi-Fi ctrl device\n");
 		return;
 	}
 
@@ -477,24 +1100,49 @@ static void wifi_msg_thread(void *arg)
 		msg_t msg = { 0 };
 		msg_rid_t rid;
 
-		if (msgRecv(port, &msg, &rid) < 0)
+		if (msgRecv(wifi_common.msgport, &msg, &rid) < 0) {
 			continue;
+		}
+
+		if (msg.pid == getpid()) {
+			/* msg from ourselves - check if Wi-Fi is initialized and deinit if not */
+			if (!wifi_common.initialized) {
+				mutexLock(wifi_common.lock);
+				_wifi_deinit();
+				mutexUnlock(wifi_common.lock);
+			}
+			msg.o.err = EOK;
+			msgRespond(wifi_common.msgport, &msg, rid);
+			continue;
+		}
+
+		if (msg.oid.id == CTRL_DEV_ID) {
+			msg.o.err = wifi_handle_ctrl(wifi_common.msgport, &msg);
+			msgRespond(wifi_common.msgport, &msg, rid);
+			continue;
+		}
+
+		if ((msg.oid.id != STA_DEV_ID && msg.oid.id != AP_DEV_ID) || !wifi_common.initialized) {
+			msg.o.err = -ENODEV;
+			msgRespond(wifi_common.msgport, &msg, rid);
+			continue;
+		}
 
 		switch (msg.type) {
 			case mtOpen:
-				msg.o.err = wifi_dev_open(msg.i.openclose.flags);
+				msg.o.err = wifi_dev_open(msg.oid.id, msg.i.openclose.flags);
 				break;
 
 			case mtClose:
-				msg.o.err = wifi_dev_close();
+				msg.o.err = wifi_dev_close(msg.oid.id);
 				break;
 
 			case mtRead:
-				msg.o.err = wifi_dev_read(msg.o.data, msg.o.size, msg.i.io.offs);
+				msg.o.err = wifi_dev_read(msg.oid.id, msg.o.data, msg.o.size, msg.i.io.offs);
 				break;
 
 			case mtWrite:
-				msg.o.err = wifi_dev_write(msg.i.data, msg.i.size);
+				msg.o.err = wifi_dev_write(msg.oid.id, msg.i.data, msg.i.size);
 				break;
 
 			default:
@@ -502,29 +1150,21 @@ static void wifi_msg_thread(void *arg)
 				break;
 		}
 
-		msgRespond(port, &msg, rid);
+		msgRespond(wifi_common.msgport, &msg, rid);
 	}
 }
 
 
 __constructor__(1000) void init_wifi(void)
 {
-	int err;
-
-	err = mutexCreate(&wifi_common.lock);
-	if (err) {
+	int err = mutexCreate(&wifi_common.lock);
+	if (err < 0) {
 		errout(err, "mutexCreate(lock)");
 	}
 
-	err = condCreate(&wifi_common.cond);
-	if (err) {
+	err = sys_thread_opt_new("wifi-msg", wifi_msg_thread, NULL, WIFI_THREAD_STACKSZ, WIFI_THREAD_PRIO, NULL);
+	if (err < 0) {
 		resourceDestroy(wifi_common.lock);
-		errout(err, "condCreate(cond)");
-	}
-
-	if ((err = sys_thread_opt_new("wifi-msg", wifi_msg_thread, NULL, WIFI_THREAD_STACKSZ, WIFI_THREAD_PRIO, NULL))) {
-		resourceDestroy(wifi_common.lock);
-		resourceDestroy(wifi_common.cond);
 		errout(err, "thread(wifi-msg)");
 	}
 }
