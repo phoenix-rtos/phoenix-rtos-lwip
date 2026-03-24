@@ -16,6 +16,7 @@
 #include <sys/stat.h>
 #include <posix/utils.h>
 
+#include "whd_events_int.h"
 #include "whd_wifi_api.h"
 #include "whd_wlioctl.h"
 #include "cybsp.h"
@@ -840,6 +841,21 @@ static void wifi_msg_thread(void *arg)
 }
 
 
+static void *wifi_handle_error(whd_driver_t whd_driver, const uint8_t *error_type, const uint8_t *event_data, void *handler_user_data)
+{
+	if (*error_type == WLC_ERR_BUS) {
+		msg_t msg = {
+			.oid = { .id = CTRL_DEV_ID, .port = wifi_common.ctrl.port },
+			.type = mtWrite,
+			.i.data = "off",
+			.i.size = sizeof("off") - 1,
+		};
+		msgSend(wifi_common.ctrl.port, &msg);
+	}
+	return NULL;
+}
+
+
 static int wifi_init_interfaces(void)
 {
 	cy_rslt_t result;
@@ -860,6 +876,17 @@ static int wifi_init_interfaces(void)
 	}
 
 	wifi_common.sta.iface.role = CY_LWIP_STA_NW_INTERFACE;
+
+	/* error handler - deinitialize Wi-Fi on bus fail */
+	const uint8_t err = WLC_ERR_BUS;
+	uint16_t index;
+	if (whd_wifi_set_error_handler(wifi_common.sta.iface.whd_iface, &err, &wifi_handle_error, NULL, &index) != WHD_SUCCESS) {
+		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't set error handler\n");
+		cybsp_wifi_deinit(wifi_common.sta.iface.whd_iface);
+		cybsp_free();
+		wifi_common.sta.iface.whd_iface = NULL;
+		return -1;
+	}
 
 	/* AP */
 	result = cybsp_wifi_init_secondary(&wifi_common.ap.iface.whd_iface, NULL);
