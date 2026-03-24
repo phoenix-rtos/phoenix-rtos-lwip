@@ -83,6 +83,7 @@ static struct {
         cy_queue_t queue;
         cy_semaphore_t semaphore;
         cy_thread_t thread;
+        bool failed;
     } rx;
 } whd_bus_usb_common;
 
@@ -347,7 +348,9 @@ static void whd_bus_usb_rx_thread(cy_thread_arg_t arg)
             if (result != WHD_SUCCESS) {
                 whd_buffer_release(whd_driver, buffer, WHD_NETWORK_RX);
                 if (result == WHD_BUS_FAIL && !cyhal_usb_check_state(whd_bus_usb_common.config.path)) {
-                    WPRINT_WHD_ERROR(("%s: bus failed, exiting\n", __FUNCTION__));
+                    WPRINT_WHD_ERROR(("%s: bus failed - device disconnected, exiting\n", __FUNCTION__));
+                    whd_bus_usb_common.rx.failed = true;
+                    whd_thread_notify(whd_driver);
                     break;
                 }
                 cy_rtos_delay_milliseconds(10);
@@ -628,6 +631,10 @@ static whd_bool_t whd_bus_usb_wake_interrupt_present(whd_driver_t whd_driver)
  **************************************************************************************************/
 static uint32_t whd_bus_usb_packet_available_to_read(whd_driver_t whd_driver)
 {
+    if (whd_bus_usb_common.rx.failed) {
+        return WHD_BUS_FAIL;
+    }
+
     size_t count;
     (void)cy_rtos_queue_count(&whd_bus_usb_common.rx.queue, &count);
     return count;
