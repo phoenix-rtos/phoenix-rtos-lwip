@@ -427,6 +427,7 @@ static void whd_thread_func(cy_thread_arg_t thread_input)
             WPRINT_WHD_ERROR( ("%s: Error bus_fail over %d times\n", __FUNCTION__, WHD_MAX_BUS_FAIL) );
             error_type = WLC_ERR_BUS;
             whd_set_error_handler_locally(whd_driver, &error_type, NULL, NULL, NULL);
+            break;
         }
 
         /* Sleep till WLAN do something */
