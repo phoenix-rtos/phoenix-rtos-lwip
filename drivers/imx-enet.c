@@ -31,9 +31,9 @@
 #include <string.h>
 #include <unistd.h>
 
-#define ENET_DEBUG    0
+#define ENET_DEBUG    1
 #define MDIO_DEBUG    0
-#define ENET_SELFTEST 0
+#define ENET_SELFTEST 1
 
 #define ENET_MAX_PKT_SZ               1984 /* DMA aligned */
 #define ENET_USE_ENHANCED_DESCRIPTORS 0
