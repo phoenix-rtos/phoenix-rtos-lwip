@@ -23,6 +23,7 @@
 #undef IFNAMSIZ
 
 #include <errno.h>
+#include <endian.h>
 #include <poll.h>
 #include <stdint.h>
 #include <stdlib.h>
