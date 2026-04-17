@@ -36,6 +36,8 @@ cy_rslt_t cy_rtos_create_thread(cy_thread_t *thread, cy_thread_entry_fn_t entry_
 	if (stack != NULL)
 		return CY_RTOS_BAD_PARAM;
 
+	memset(thread, 0, sizeof(*thread));
+
 	if (sys_thread_opt_new(name, entry_function, arg, stack_size, 4, thread) < 0)
 		return CY_RTOS_NO_MEMORY;
 
@@ -65,8 +67,19 @@ cy_rslt_t cy_rtos_join_thread(cy_thread_t *thread)
 {
 	cy_log_msg(CYLF_RTOS, CY_LOG_DEBUG, "cy_rtos_join_thread (thread=%p)\n", thread);
 
-	if (sys_thread_join(*thread) < 0)
+	if (thread == NULL) {
+		return CY_RTOS_BAD_PARAM;
+	}
+
+	if (*thread == 0) {
+		return CY_RSLT_SUCCESS;
+	}
+
+	if (sys_thread_join(*thread) < 0) {
 		return CY_RTOS_GENERAL_ERROR;
+	}
+
+	memset(thread, 0, sizeof(*thread));
 
 	return CY_RSLT_SUCCESS;
 }
@@ -150,11 +163,14 @@ cy_rslt_t cy_rtos_init_semaphore(cy_semaphore_t *semaphore, uint32_t maxcount, u
 	if (semaphore == NULL)
 		return CY_RTOS_BAD_PARAM;
 
+	memset(semaphore, 0, sizeof(*semaphore));
+
 	if (mutexCreate(&semaphore->mutex) != EOK)
 		return CY_RTOS_NO_MEMORY;
 
 	if (condCreate(&semaphore->cond) != EOK) {
 		resourceDestroy(semaphore->mutex);
+		semaphore->mutex = 0;
 		return CY_RTOS_NO_MEMORY;
 	}
 
@@ -235,11 +251,18 @@ cy_rslt_t cy_rtos_deinit_semaphore(cy_semaphore_t *semaphore)
 {
 	cy_log_msg(CYLF_RTOS, CY_LOG_DEBUG, "cy_rtos_deinit_semaphore (semaphore=%p)\n", semaphore);
 
-	if (semaphore == NULL)
+	if (semaphore == NULL) {
 		return CY_RTOS_BAD_PARAM;
+	}
 
-	resourceDestroy(semaphore->mutex);
-	resourceDestroy(semaphore->cond);
+	if (semaphore->mutex != 0) {
+		resourceDestroy(semaphore->mutex);
+	}
+	if (semaphore->cond != 0) {
+		resourceDestroy(semaphore->cond);
+	}
+
+	memset(semaphore, 0, sizeof(*semaphore));
 
 	return CY_RSLT_SUCCESS;
 }
@@ -337,7 +360,9 @@ cy_rslt_t cy_rtos_queue_reset(cy_queue_t *queue)
 
 cy_rslt_t cy_rtos_queue_deinit(cy_queue_t *queue)
 {
-	free(queue->fifo.data);
-	queue->fifo.data = NULL;
+	if (queue->fifo.data != NULL) {
+		free(queue->fifo.data);
+	}
+	memset(queue, 0, sizeof(*queue));
 	return CY_RSLT_SUCCESS;
 }
