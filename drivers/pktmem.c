@@ -156,10 +156,10 @@ static void net_freePktBuf(void *bufp, void *pktmem_start)
 	unsigned which = ((size_t)bufp - (size_t)pktmem_start) / pktmem_opts.pkt_buf_sz;
 	unsigned old_mask;
 
+	SYS_ARCH_PROTECT(old_level);
+
 	old_mask = info->free_mask;
 	info->free_mask |= 1u << which;
-
-	SYS_ARCH_PROTECT(old_level);
 
 	++pkt_bufs_free;
 
