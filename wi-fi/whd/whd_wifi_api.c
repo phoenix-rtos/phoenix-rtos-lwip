@@ -45,6 +45,8 @@
 #include "whd_hw.h"
 #endif
 
+#include "lwipopts.h"
+
 /******************************************************
 *                   Constants
 ******************************************************/
@@ -65,7 +67,10 @@
 #define JOIN_SECURITY_FLAGS_MASK    (JOIN_SECURITY_COMPLETE | JOIN_EAPOL_KEY_M1_TIMEOUT | JOIN_EAPOL_KEY_M3_TIMEOUT | \
                                      JOIN_EAPOL_KEY_G1_TIMEOUT | JOIN_EAPOL_KEY_FAILURE)
 
-#define DEFAULT_JOIN_ATTEMPT_TIMEOUT     (9000)   /* Overall join attempt timeout in milliseconds.(FW will do "full scan"[~2.8 seconds] + "psk-to-pmk"[2.x seconds] + "join"[5 seconds timer in FW]) */
+#ifndef DEFAULT_JOIN_ATTEMPT_TIMEOUT
+#define DEFAULT_JOIN_ATTEMPT_TIMEOUT (9000)   /* Overall join attempt timeout in milliseconds.(FW will do "full scan"[~2.8 seconds] + "psk-to-pmk"[2.x seconds] + "join"[5 seconds timer in FW]) */
+#endif
+
 #define DEFAULT_EAPOL_KEY_PACKET_TIMEOUT (2500)   /* Timeout when waiting for EAPOL key packet M1 or M3 in milliseconds.*/
                                                   /* Some APs may be slow to provide M1 and 1000 ms is not long enough for edge of cell. */
 #ifndef DEFAULT_PM2_SLEEP_RET_TIME
