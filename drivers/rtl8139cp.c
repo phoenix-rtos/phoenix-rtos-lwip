@@ -320,8 +320,8 @@ static int rtl_initDevice(rtl_priv_t *state, uint16_t devnum, int irq)
 	if ((err = rtl_initRings(state)) != EOK)
 		goto err_exit;
 
-	beginthread(rtl_rx_irq_thread, 0, (void *)state->rx_stack, sizeof(state->rx_stack), state);
-	beginthread(rtl_tx_irq_thread, 0, (void *)state->tx_stack, sizeof(state->tx_stack), state);
+	beginthread(rtl_rx_irq_thread, 4, (void *)state->rx_stack, sizeof(state->rx_stack), state);
+	beginthread(rtl_tx_irq_thread, 4, (void *)state->tx_stack, sizeof(state->tx_stack), state);
 	interrupt(irq, rtl_rx_irq_handler, state, state->rx_irq_cond, &state->rx_irq_handle);
 	interrupt(irq, rtl_tx_irq_handler, state, state->tx_irq_cond, &state->tx_irq_handle);
 
