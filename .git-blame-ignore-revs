@@ -2,6 +2,9 @@
 # Each line is a commit hash. Comments are allowed after a '#'.
 # We suggest to put the commit title next to the hash for easier navigation.
 
+bd4cae1b7d462a525b777deefe45fb779f2d8b5e # wi-fi/whd: fix spelling typos
+277d0bf47f5dc47b7c85852bf84852c65d3f210b # wi-fi/whd: backport logging
+aa0bfda9b2e03ad0315c3efcda56c9ddd4de8bd0 # wi-fi/whd: keep source formatting
 5c23fe00f6d8f11f1fe35a118b5345adc47f7dc0 # devices/greth-regs.h: change desc. of a file
 2058bc772d0a83b7d27ae5567105236f9b43ec26 # devices/ephy.c: change unsigned suffix to uppercase
 25acb1432d51afff0c0ed5d4d751cbca98051f7e # devices/ephy.c: fix typo
