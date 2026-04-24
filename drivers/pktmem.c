@@ -284,12 +284,14 @@ struct pbuf *net_makeDMAPbuf(struct pbuf *p)
 		return p;
 	}
 
-	q = net_allocDMAPbuf(&pa, p->tot_len);
+	q = net_allocDMAPbuf(&pa, p->tot_len + ETH_PAD_SIZE);
 	if (q == NULL) {
 		return NULL;
 	}
 
+	pbuf_header(q, -ETH_PAD_SIZE);
 	err = pbuf_copy(q, p);
+
 	if (err == 0) {
 		return q;
 	}
