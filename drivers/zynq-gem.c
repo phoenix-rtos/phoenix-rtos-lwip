@@ -12,6 +12,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdbool.h>
 #include <sys/platform.h>
 #include <sys/threads.h>
 #include "netif-driver.h"
@@ -259,7 +260,7 @@ static size_t gem_nextRxBufferSize(const net_bufdesc_ring_t *ring, size_t i)
 }
 
 
-static int gem_pktRxFinished(const net_bufdesc_ring_t *ring, size_t i)
+static bool gem_pktRxFinished(const net_bufdesc_ring_t *ring, size_t i)
 {
 	volatile gembd_t *bd = ((volatile gembd_t *)ring->ring) + i;
 	int ret = (bd->addr & DESC_RX_CPU_OWN) > 0;
@@ -275,7 +276,7 @@ static void gem_fillRxDesc(const net_bufdesc_ring_t *ring, size_t i, addr_t pa, 
 }
 
 
-static int gem_nextTxDone(const net_bufdesc_ring_t *ring, size_t i)
+static bool gem_nextTxDone(const net_bufdesc_ring_t *ring, size_t i)
 {
 	volatile gembd_t *bd = ((volatile gembd_t *)ring->ring) + i;
 	return (bd->status & DESC_TX_CPU_OWN) > 0;
