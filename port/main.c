@@ -87,6 +87,7 @@ int main(int argc, char **argv)
 	void register_driver_tun(void);
 	void register_driver_tap(void);
 	void register_driver_g3plc(void);
+	void register_driver_zynq_gem(void);
 
 	init_lwip_tcpip();
 	init_lwip_sockets();
@@ -111,6 +112,9 @@ int main(int argc, char **argv)
 #endif
 #ifdef HAVE_DRIVER_g3plc
 	register_driver_g3plc();
+#endif
+#ifdef HAVE_DRIVER_zynq
+	register_driver_zynq_gem();
 #endif
 #endif
 
