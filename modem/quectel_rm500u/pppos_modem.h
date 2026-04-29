@@ -36,6 +36,18 @@ static const char *at_init_cmds[] = {
 	"AT+CFUN=1\r\n",                                     /* Full RF functionality */
 	"AT+CGATT=0\r\n",                                    /* detach from PDN */
 	"AT+CGDCONT=1,\"IP\",\"" PPPOS_DEFAULT_APN "\"\r\n", /* set APN */
+	"AT+CGATT=1\r\n",                                    /* attach to PDN */
+	/* Debug commands: */
+	/* "AT+CSQ\r\n", */                  /* Get signal quality */
+	/* "AT+CPIN?\r\n", */                /* Is PIN required? */
+	/* "AT+CREG?\r\n", */                /* CS Domain Network registration status */
+	/* "AT+COPS?\r\n", */                /* Selected operator */
+	/* "AT+CEREG?\r\n", */               /* EPS Network Registration Status */
+	/* "AT+CGREG?\r\n", */               /* GPRS Network Registration Status */
+	/* "AT+C5GREG?\r\n", */              /* 5GS Network Registration Status */
+	/* "AT+QNWINFO\r\n", */              /* Query Network Information */
+	/* "AT+QENG=\"servingcell\"\r\n", */ /* Query Primary Serving Cell and Neighbor Cell Information */
+	// "AT+CEER\r\n", */ /* Extended Error Report */
 	NULL,
 };
 

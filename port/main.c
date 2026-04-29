@@ -73,10 +73,6 @@ static void mainLoop(void)
 int main(int argc, char **argv)
 {
 	size_t have_intfs = 0;
-	for (int i = 0; i < 8; i++) {
-		printf("lwip: waiting to start %ds more...\n", (8 - i) * 5);
-		sleep(5);
-	}
 
 	openlog("lwip", LOG_NDELAY, LOG_DAEMON);
 
