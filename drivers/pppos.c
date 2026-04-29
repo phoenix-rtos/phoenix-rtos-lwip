@@ -89,13 +89,25 @@ static void pppos_printf(const char *format, ...)
 	printf("lwip: ppp: %s\n", buf);
 }
 #else
-
+/* clang-format off */
 #define log_debug(fmt, ...) syslog(LOG_DEBUG, fmt, ##__VA_ARGS__)
 #define log_at(fmt, ...)    syslog(LOG_INFO, fmt, ##__VA_ARGS__)
-#define log_info(fmt, ...)  syslog(LOG_INFO, fmt, ##__VA_ARGS__)
+#define log_info(fmt, ...)      do { if (1) pppos_printf(COL_CYAN fmt COL_NORMAL, ##__VA_ARGS__); } while (0)
 #define log_warn(fmt, ...)  syslog(LOG_WARNING, fmt, ##__VA_ARGS__)
 #define log_error(fmt, ...) syslog(LOG_ERR, fmt, ##__VA_ARGS__)
+/* clang-format on */
 
+static void pppos_printf(const char *format, ...)
+{
+	char buf[256];
+	va_list arg;
+
+	va_start(arg, format);
+	vsnprintf(buf, sizeof(buf), format, arg);
+	va_end(arg);
+
+	printf("lwip: ppp: %s\n", buf);
+}
 #endif
 
 /* if 1 - use blocking read with VMIN=0, VTIME=1 */
