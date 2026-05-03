@@ -29,6 +29,11 @@
 #include <pppos_modem.h>
 
 
+#define PPPOS_INIT_CMDS_FILE              "/etc/at_init_cmds.conf"
+#define PPPOS_INIT_CMDS_MAX_SIZE          64
+#define PPPOS_INIT_CMDS_MAX_NUM_FROM_FILE 24
+
+
 enum {
 	CONN_STATE_DISCONNECTING,
 	CONN_STATE_DISCONNECTED,
@@ -61,6 +66,9 @@ typedef struct
 	handle_t lock, cond;
 
 	uint32_t main_loop_stack[4096];
+
+	char init_cmds_mem[PPPOS_INIT_CMDS_MAX_NUM_FROM_FILE][PPPOS_INIT_CMDS_MAX_SIZE + 3];
+	char *at_init_cmds[PPPOS_INIT_CMDS_MAX_NUM_FROM_FILE + 1];
 } pppos_priv_t;
 
 #define COL_RED     "\033[1;31m"
@@ -502,6 +510,91 @@ static void pppos_link_status_cb(ppp_pcb *pcb, int err_code, void *ctx)
 	condSignal(state->cond);
 }
 
+
+int pppos_read_init_cmds_file(pppos_priv_t *state)
+{
+	FILE *f;
+	int line_cnt = 0;
+	size_t len;
+
+	if (state == NULL) {
+		return -1;
+	}
+
+	f = fopen(PPPOS_INIT_CMDS_FILE, "r");
+
+	if (f == NULL) {
+		return -1;
+	}
+
+	while ((line_cnt < PPPOS_INIT_CMDS_MAX_NUM_FROM_FILE) && fgets(state->init_cmds_mem[line_cnt], PPPOS_INIT_CMDS_MAX_SIZE, f)) {
+		len = strlen(state->init_cmds_mem[line_cnt]);
+
+		if (len < 4) {
+			fclose(f);
+			return -1;
+		}
+
+		if (state->init_cmds_mem[line_cnt][len - 1] == '\n') {
+			len--;
+		}
+
+		/* TODO This shouldn't be in this function. */
+		memcpy(&state->init_cmds_mem[line_cnt][len], "\r\n", sizeof("\r\n"));
+
+		line_cnt++;
+	}
+
+	/* TODO Function should return error if file has too many commands. */
+
+	fclose(f);
+	return line_cnt;
+}
+
+
+/**
+ * Returns pointer to table of modem init commands.
+ *
+ * If file with commands is available, table from state
+ * structure will be populated with commands from file. If commands
+ * file is not available (or content of that file is not valid),
+ * init commands from header file configured by build configuration
+ * will be returned.
+ *
+ * File requirements:
+ * -> every command in separate line
+ */
+static char const **pppos_get_init_cmds(pppos_priv_t *state)
+{
+	int cmds_cnt = 0;
+
+	if (state == NULL) {
+		return at_init_cmds;
+	}
+
+	memset(state->init_cmds_mem, 0, sizeof(state->init_cmds_mem));
+	memset(state->at_init_cmds, 0, sizeof(state->at_init_cmds));
+
+	cmds_cnt = pppos_read_init_cmds_file(state);
+
+	if (cmds_cnt <= 0) {
+		log_info("Failed to read AT init commands from file, return code: %d. Using default commands.", cmds_cnt);
+		return at_init_cmds;
+	}
+
+	for (int i = 0; i < cmds_cnt; i++) {
+		state->at_init_cmds[i] = state->init_cmds_mem[i];
+	}
+
+	log_info("Succesfully obtained AT init commands from file:");
+	for (int i = 0; i < cmds_cnt; i++) {
+		log_info("%d. '%s'", i, state->at_init_cmds[i]);
+	}
+
+	return (char const **)state->at_init_cmds;
+}
+
+
 static void pppos_do_rx(pppos_priv_t* state)
 {
 	int len;
@@ -560,6 +653,8 @@ static void pppos_mainLoop(void* _state)
 	pppos_priv_t* state = (pppos_priv_t*) _state;
 	int res;
 	int retries;
+	char const **at_cmd_base = pppos_get_init_cmds(state);
+	char const **at_cmd;
 
 	int running = 1;
 
@@ -596,7 +691,9 @@ static void pppos_mainLoop(void* _state)
 		if (!at_is_responding(state->fd, 1000)) {
 			goto fail;
 		}
-		const char** at_cmd = at_init_cmds;
+
+		at_cmd = at_cmd_base;
+
 		while (*at_cmd) {
 			if ((res = at_send_cmd(state->fd, *at_cmd, AT_INIT_CMDS_TIMEOUT_MS)) != AT_RESULT_OK) {
 				log_warn("failed to initialize modem (cmd=%s), res=%d, retrying", *at_cmd, res);
@@ -876,7 +973,7 @@ static int pppos_netifInit(struct netif *netif, char *cfg)
 		}
 
 		if (flags & CFG_FLAG_DEFAULT_UP) {
-			log_info("pppou netif up");
+			log_info("pppos netif up");
 			netif_set_up(netif);
 		}
 
