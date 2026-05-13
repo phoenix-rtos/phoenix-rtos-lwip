@@ -141,7 +141,9 @@ int main(int argc, char **argv)
 #endif
 
 #if LWIP_IPSEC
-	ipsecdev_attach(LWIP_IPSEC_DEV);
+	if (ipsecdev_attach(LWIP_IPSEC_DEV) < 0) {
+		printf("phoenix-rtos-lwip: can't attach IPSEC device \"%s\": %s\n", LWIP_IPSEC_DEV, strerror(errno));
+	}
 #endif
 
 	mainLoop();
