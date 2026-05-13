@@ -122,8 +122,8 @@ spd_entry_t *ipsec_spd_add(u32_t src, u32_t src_net, u32_t dst, u32_t dst_net, u
 	if (n == NULL)
 		return NULL;
 
-	IPSEC_LOG_TRC(IPSEC_TRACE_ENTER, "src=0x%08lx/0x%08lx dst=0x%08lx/0x%08lx proto=%u port=%u->%u policy=%u tunnel_dest=0x%08lx",
-		src, src_net, dst, dst_net, proto, src_port, dst_port, policy, tunnel_dest);
+	IPSEC_LOG_TRC(IPSEC_TRACE_ENTER, "src=0x%08x/0x%08x dst=0x%08x/0x%08x proto=%u port=%u->%u policy=%u tunnel_dest=0x%08x",
+			src, src_net, dst, dst_net, proto, src_port, dst_port, policy, tunnel_dest);
 
 	LIST_ELEM_INIT(n, list);
 	n->src = src;
@@ -391,12 +391,12 @@ u32_t ipsec_sad_get_spi(void *payload)
 	IPSEC_LOG_TRC(IPSEC_TRACE_ENTER, "header=%p", payload);
 
 	if (IPH_PROTO(&ptr->ip) == IP_PROTO_ESP) {
-		IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "ptr->inner_header.esp.spi = %lu", ptr->inner_header.esp.spi);
+		IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "ptr->inner_header.esp.spi = %u", ptr->inner_header.esp.spi);
 		return ptr->inner_header.esp.spi;
 	}
 
 	if (IPH_PROTO(&ptr->ip) == IP_PROTO_AH) {
-		IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "ptr->inner_header.ah.spi = %lu", ptr->inner_header.ah.spi);
+		IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "ptr->inner_header.ah.spi = %u", ptr->inner_header.ah.spi);
 		return ptr->inner_header.ah.spi;
 	}
 

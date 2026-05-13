@@ -31,7 +31,7 @@
  *  @brief IPsec network adapter for lwIP
  *
  *  @author Christian Scheurer <http://www.christianscheurer.ch> <BR>
- * 
+ *
  * Copyright (c) 2003 Niklaus Schild and Christian Scheurer, HTI Biel/Bienne<BR>
  * All rights reserved.</EM><HR>
  */
@@ -106,8 +106,8 @@ static void ipsecdev_apply_static_nat(struct ip_hdr *ip, u32_t addr, int src)
  * This function is used to process incoming IP packets.
  *
  * This function is called by the physical network driver when a new packet has been
- * received. To decide how to handle the packet, the Security Policy Database 
- * is called. ESP and AH packets are directly forwarded to ipsec_input() while other 
+ * received. To decide how to handle the packet, the Security Policy Database
+ * is called. ESP and AH packets are directly forwarded to ipsec_input() while other
  * packets must pass the SPD lookup.
  *
  * @param p      pbuf containing the received packet
@@ -157,8 +157,8 @@ static err_t ipsecdev_ip_input(struct pbuf *p, struct netif *netif)
 		retcode = ipsec_input(p->payload, p->len, &payload_offset, &payload_size, &state->db_sets);
 
 		if (proto != IP_PROTO_UDP || retcode != IPSEC_STATUS_NO_SA_FOUND)
-			IPSEC_LOG_DBG(retcode, "outer-IP src %08lx dest %08lx proto %u len %u",
-				lwip_ntohl(iph->src.addr), lwip_ntohl(iph->dest.addr), iph->_proto, p->len);
+			IPSEC_LOG_DBG(retcode, "outer-IP src %08x dest %08x proto %u len %u",
+					lwip_ntohl(iph->src.addr), lwip_ntohl(iph->dest.addr), iph->_proto, p->len);
 
 		if (retcode == IPSEC_STATUS_SUCCESS) {
 			/* remove ESP headers */
@@ -167,8 +167,8 @@ static err_t ipsecdev_ip_input(struct pbuf *p, struct netif *netif)
 			p->tot_len = payload_size;
 
 			iph = p->payload;
-			IPSEC_LOG_DBG(IPSEC_STATUS_SUCCESS, "inner-IP src %08lx dest %08lx proto %u len %u",
-				lwip_ntohl(iph->src.addr), lwip_ntohl(iph->dest.addr), iph->_proto, p->len);
+			IPSEC_LOG_DBG(IPSEC_STATUS_SUCCESS, "inner-IP src %08x dest %08x proto %u len %u",
+					lwip_ntohl(iph->src.addr), lwip_ntohl(iph->dest.addr), iph->_proto, p->len);
 
 			/* check what the policy says about IPsec traffic */
 			spd = ipsec_spd_lookup(p->payload, &state->db_sets.inbound_spd, IPSEC_MATCH_BOTH);
@@ -176,15 +176,15 @@ static err_t ipsecdev_ip_input(struct pbuf *p, struct netif *netif)
 			if (!spd || spd->policy != IPSEC_POLICY_IPSEC) {
 				retcode = IPSEC_STATUS_FAILURE;
 				IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "return = (%d) (no policy; %d+%d)",
-					retcode, payload_offset, payload_size);
+						retcode, payload_offset, payload_size);
 				pbuf_free(p);
 				return retcode;
 			}
 
 			/* change in-tunnel dst-IP if needed (Virtual IP) */
 			if (!ip_addr_isany(&(ipsecdev->ip_addr)) && ip_addr_cmp(&iph->dest, &ipsecdev->ip_addr) && !ip_addr_isany(&netif->ip_addr)) {
-				IPSEC_LOG_DBG(IPSEC_STATUS_SUCCESS, "%.2s%u: DNAT after IPsec: %08lx to %08lx",
-					netif->name, netif->num, lwip_ntohl(iph->dest.addr), lwip_ntohl(netif->ip_addr.addr));
+				IPSEC_LOG_DBG(IPSEC_STATUS_SUCCESS, "%.2s%u: DNAT after IPsec: %08x to %08x",
+						netif->name, netif->num, lwip_ntohl(iph->dest.addr), lwip_ntohl(netif->ip_addr.addr));
 				ipsecdev_apply_static_nat(iph, netif->ip_addr.addr, 0);
 			}
 
@@ -205,8 +205,8 @@ static err_t ipsecdev_ip_input(struct pbuf *p, struct netif *netif)
 	spd = ipsec_spd_lookup(p->payload, &state->db_sets.inbound_spd, IPSEC_MATCH_BOTH);
 
 	IPSEC_LOG_DBG(spd && spd->policy == IPSEC_POLICY_BYPASS ? IPSEC_STATUS_SUCCESS : IPSEC_STATUS_FAILURE,
-		"IP src %08lx dest %08lx proto %u len %u",
-		lwip_ntohl(iph->src.addr), lwip_ntohl(iph->dest.addr), iph->_proto, p->len);
+			"IP src %08x dest %08x proto %u len %u",
+			lwip_ntohl(iph->src.addr), lwip_ntohl(iph->dest.addr), iph->_proto, p->len);
 
 	if (spd == NULL) {
 		pbuf_free(p);
@@ -233,7 +233,7 @@ static err_t ipsecdev_ip_input(struct pbuf *p, struct netif *netif)
 
 	/* usually return ERR_OK as lwIP does */
 	IPSEC_LOG_TRC(IPSEC_TRACE_RETURN, "return = %d, policy %s", retcode,
-		spd->policy == IPSEC_POLICY_IPSEC ? "IPSEC" : spd->policy == IPSEC_POLICY_BYPASS ? "BYPASS" : "DISCARD");
+			spd->policy == IPSEC_POLICY_IPSEC ? "IPSEC" : (spd->policy == IPSEC_POLICY_BYPASS ? "BYPASS" : "DISCARD"));
 	return retcode;
 }
 
@@ -241,7 +241,7 @@ static err_t ipsecdev_ip_input(struct pbuf *p, struct netif *netif)
 /**
  * This function is used to send a packet out to the network device.
  *
- * IPsec processing for outbound traffic is done here before forwarding the IP packet 
+ * IPsec processing for outbound traffic is done here before forwarding the IP packet
  * to the physical network device. The SPD is queried in order to know how
  * the packet must be handled.
  *
@@ -314,14 +314,14 @@ static err_t ipsecdev_output(struct netif *netif, struct pbuf *p, const ip4_addr
 		return ERR_CONN;
 	}
 
-	IPSEC_LOG_DBG(IPSEC_STATUS_SUCCESS, "orig-IP src %08lx dest %08lx proto %u len %u policy %s",
-		lwip_ntohl(ip->src.addr), lwip_ntohl(ip->dest.addr), ip->_proto, p->len,
-		spd->policy == IPSEC_POLICY_IPSEC ? "IPSEC" : spd->policy == IPSEC_POLICY_BYPASS ? "BYPASS" : "DISCARD");
+	IPSEC_LOG_DBG(IPSEC_STATUS_SUCCESS, "orig-IP src %08x dest %08x proto %u len %u policy %s",
+			lwip_ntohl(ip->src.addr), lwip_ntohl(ip->dest.addr), ip->_proto, p->len,
+			spd->policy == IPSEC_POLICY_IPSEC ? "IPSEC" : (spd->policy == IPSEC_POLICY_BYPASS ? "BYPASS" : "DISCARD"));
 
-	/* change in-tunnle src-IP (Virtual IP) */
+	/* change in-tunnel src-IP (Virtual IP) */
 	if (spd->policy == IPSEC_POLICY_IPSEC && !ip_addr_isany(&ipsecdev->ip_addr) && !ip_addr_cmp(&ip->src, &ipsecdev->ip_addr)) {
-		IPSEC_LOG_DBG(IPSEC_STATUS_SUCCESS, "%.2s%u: SNAT before IPsec: %08lx as %08lx",
-			netif->name, netif->num, lwip_ntohl(ip->src.addr), lwip_ntohl(ipsecdev->ip_addr.addr));
+		IPSEC_LOG_DBG(IPSEC_STATUS_SUCCESS, "%.2s%u: SNAT before IPsec: %08x as %08x",
+				netif->name, netif->num, lwip_ntohl(ip->src.addr), lwip_ntohl(ipsecdev->ip_addr.addr));
 		ipsecdev_apply_static_nat(ip, ipsecdev->ip_addr.addr, 1);
 	}
 
@@ -364,8 +364,8 @@ static err_t ipsecdev_output(struct netif *netif, struct pbuf *p, const ip4_addr
 				p_cpy->tot_len = payload_size;
 
 				ip = p_cpy->payload;
-				IPSEC_LOG_DBG(IPSEC_STATUS_SUCCESS, "out-IP src %08lx dest %08lx proto %u len %u",
-					lwip_ntohl(ip->src.addr), lwip_ntohl(ip->dest.addr), ip->_proto, p_cpy->len);
+				IPSEC_LOG_DBG(IPSEC_STATUS_SUCCESS, "out-IP src %08x dest %08x proto %u len %u",
+						lwip_ntohl(ip->src.addr), lwip_ntohl(ip->dest.addr), ip->_proto, p_cpy->len);
 
 				retcode = state->hw_output(state->hw_netif, p_cpy, &sa->addr);
 				if (sa->proto == IP_PROTO_ESP)

@@ -213,8 +213,8 @@ int ipsec_ah_encapsulate(struct ip_hdr *inner_packet, int *payload_offset, int *
 	unsigned char digest[IPSEC_MAX_AUTHKEY_LEN];
 
 	IPSEC_LOG_TRC(IPSEC_TRACE_ENTER,
-		"inner_packet=%p, *payload_offset=%d, *payload_size=%d sa=%p, src=%lu, dst=%lu",
-		(void *)inner_packet, *payload_offset, *payload_size, (void *)sa, src, dst);
+			"inner_packet=%p, *payload_offset=%d, *payload_size=%d sa=%p, src=%u, dst=%u",
+			(void *)inner_packet, *payload_offset, *payload_size, (void *)sa, src, dst);
 
 	/* set new packet header pointers */
 	new_ip_header = (struct ip_hdr *)(((char *)inner_packet) - IPSEC_AH_HDR_SIZE - IPSEC_AUTH_ICV - IPSEC_MIN_IPHDR_SIZE);
