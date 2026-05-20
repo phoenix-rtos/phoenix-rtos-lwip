@@ -188,8 +188,9 @@ static void tuntap_mainLoop(void* _state)
 
 static int _tuntap_init(struct netif *netif, char *cfg)
 {
-	oid_t dev;
-	tuntap_priv_t *state = netif->state;//malloc(sizeof(tuntap_priv_t));
+	(void)cfg;
+	oid_t dev = { 0 };
+	tuntap_priv_t *state = netif->state;
 	if (state == NULL)
 		return ERR_MEM;
 
@@ -214,8 +215,15 @@ static int _tuntap_init(struct netif *netif, char *cfg)
 	state->netif = netif;
 	state->offset = 0;
 
+	char devname[16];
+	snprintf(devname, sizeof(devname), "/dev/t%c%u", netif->name[1], (unsigned int)netif->num);
+	log_info("lwip: tuntap: creating device %s\n", devname);
+
 	dev.port = state->port;
-	create_dev(&dev, cfg);
+	if (create_dev(&dev, devname) < 0) {
+		log_error("lwip: tuntap: failed to create device %s\n", devname);
+		return ERR_IF;
+	}
 
 	beginthread(tuntap_mainLoop, TUN_PRIO, state->stacks[0], sizeof(state->stacks[0]), state);
 	beginthread(tuntap_mainLoop, TUN_PRIO, state->stacks[1], sizeof(state->stacks[1]), state);
@@ -224,6 +232,7 @@ static int _tuntap_init(struct netif *netif, char *cfg)
 }
 
 
+/* ARGS: none (cfg is ignored) */
 static int tun_init(struct netif *netif, char *cfg)
 {
 	netif->name[0] = 't';
@@ -235,6 +244,7 @@ static int tun_init(struct netif *netif, char *cfg)
 }
 
 
+/* ARGS: none (cfg is ignored) */
 static int tap_init(struct netif *netif, char *cfg)
 {
 	netif->name[0] = 't';
