@@ -35,7 +35,7 @@
 
 typedef struct
 {
-	uint32_t stacks[2][4096];
+	uint32_t stacks[2][1024] __attribute__((aligned(16)));
 
 	struct netif *netif;
 	handle_t lock, cond;
