@@ -14,14 +14,14 @@
 
 #include <stddef.h>
 
-#define PPPOS_USE_AUTH            0
-#define PPPOS_DISCONNECT_ON_INIT  1
-#define AT_CONNECT_CMD            "AT+CGDATA=\"PPP\",1\r\n"
-#define AT_DISCONNECT_CMD         "ATH\r\n"
-#define AT_INIT_CMDS_TIMEOUT_MS   3000
-#define AT_CONNECT_CMD_TIMEOUT_MS 3000
+#define PPPOS_MODEM_USE_AUTH                  0
+#define PPPOS_MODEM_DISCONNECT_ON_INIT        1
+#define PPPOS_MODEM_AT_CONNECT_CMD            "AT+CGDATA=\"PPP\",1\r\n"
+#define PPPOS_MODEM_AT_DISCONNECT_CMD         "ATH\r\n"
+#define PPPOS_MODEM_AT_INIT_CMDS_TIMEOUT_MS   3000
+#define PPPOS_MODEM_AT_CONNECT_CMD_TIMEOUT_MS 3000
 
-static const char *at_init_cmds[] = {
+static const char *ppposModem_atInitCmds[] = {
 	"ATZ\r\n",                               /* reset MODEM */
 	"ATQ0 V1 E0 S0=0 &C1 &D2 +FCLASS=0\r\n", /* setup serial/message exchange */
 	"AT+WS46=29\r\n",                        /* disable LTE */

@@ -14,14 +14,14 @@
 
 #include <stddef.h>
 
-#define PPPOS_USE_AUTH            0
-#define PPPOS_DISCONNECT_ON_INIT  0
-#define AT_CONNECT_CMD            "AT+CGDATA=\"PPP\",1\r\n"
-#define AT_DISCONNECT_CMD         "ATH\r\n"
-#define AT_INIT_CMDS_TIMEOUT_MS   3000
-#define AT_CONNECT_CMD_TIMEOUT_MS 3000
+#define PPPOS_MODEM_USE_AUTH                  0
+#define PPPOS_MODEM_DISCONNECT_ON_INIT        0
+#define PPPOS_MODEM_AT_CONNECT_CMD            "AT+CGDATA=\"PPP\",1\r\n"
+#define PPPOS_MODEM_AT_DISCONNECT_CMD         "ATH\r\n"
+#define PPPOS_MODEM_AT_INIT_CMDS_TIMEOUT_MS   3000
+#define PPPOS_MODEM_AT_CONNECT_CMD_TIMEOUT_MS 3000
 
-static const char *at_init_cmds[] = {
+static const char *ppposModem_atInitCmds[] = {
 	"ATZ\r\n",                   /* reset MODEM */
 	"ATE0\r\n",                  /* disable command echo */
 	"AT+QSCLK=0\r\n",            /* disable automatic deep sleep */

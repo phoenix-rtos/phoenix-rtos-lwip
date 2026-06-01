@@ -349,7 +349,7 @@ static int at_send_cmd(int fd, const char* cmd, int timeout_ms)
 
 // NOTE: this only disconnects the AT modem from the data connection
 // Currently only used in initialisation
-#if PPPOS_DISCONNECT_ON_INIT
+#if PPPOS_MODEM_DISCONNECT_ON_INIT
 static int at_disconnect(int fd)
 {
 	int res;
@@ -360,7 +360,7 @@ static int at_disconnect(int fd)
 			serial_write(fd, (u8_t *)"+++", 3);
 			usleep(1000 * 1000);
 		}
-		res = at_send_cmd(fd, AT_DISCONNECT_CMD, 3000);
+		res = at_send_cmd(fd, PPPOS_MODEM_AT_DISCONNECT_CMD, 3000);
 	} while (res != AT_RESULT_OK && --retries);
 
 	return res;
@@ -573,7 +573,7 @@ static void pppos_mainLoop(void* _state)
 		}
 
 		serial_set_non_blocking(state->fd);
-#if PPPOS_DISCONNECT_ON_INIT
+#if PPPOS_MODEM_DISCONNECT_ON_INIT
 		if (at_disconnect(state->fd) != AT_RESULT_OK)
 			goto fail;
 #endif
@@ -588,9 +588,9 @@ static void pppos_mainLoop(void* _state)
 		if (!at_is_responding(state->fd, 1000)) {
 			goto fail;
 		}
-		const char** at_cmd = at_init_cmds;
+		const char **at_cmd = ppposModem_atInitCmds;
 		while (*at_cmd) {
-			if ((res = at_send_cmd(state->fd, *at_cmd, AT_INIT_CMDS_TIMEOUT_MS)) != AT_RESULT_OK) {
+			if ((res = at_send_cmd(state->fd, *at_cmd, PPPOS_MODEM_AT_INIT_CMDS_TIMEOUT_MS)) != AT_RESULT_OK) {
 				log_warn("failed to initialize modem (cmd=%s), res=%d, retrying", *at_cmd, res);
 				goto fail;
 			}
@@ -613,11 +613,11 @@ static void pppos_mainLoop(void* _state)
 		}
 #endif
 
-		/* Some modems hanging on AT_CONNECT_CMD, some returning error when not ready yet.
+		/* Some modems hanging on PPPOS_MODEM_AT_CONNECT_CMD, some returning error when not ready yet.
 		 * Retrying until receive AT_RESULT_CONNECT or standard timeout is reached (res < 0)
 		 */
-		retries = AT_CONNECT_CMD_TIMEOUT_MS / PPPOS_CONNECT_CMD_RETRY_MS;
-		while ((res = at_send_cmd(state->fd, AT_CONNECT_CMD, AT_CONNECT_CMD_TIMEOUT_MS)) != AT_RESULT_CONNECT) {
+		retries = PPPOS_MODEM_AT_CONNECT_CMD_TIMEOUT_MS / PPPOS_CONNECT_CMD_RETRY_MS;
+		while ((res = at_send_cmd(state->fd, PPPOS_MODEM_AT_CONNECT_CMD, PPPOS_MODEM_AT_CONNECT_CMD_TIMEOUT_MS)) != AT_RESULT_CONNECT) {
 			if (retries-- <= 0 || res < 0) {
 				log_warn("failed to dial PPP, res=%d, retrying", res);
 				goto fail;
@@ -851,8 +851,8 @@ static int pppos_netifInit(struct netif *netif, char *cfg)
 			ppp_set_usepeerdns(state->ppp, 1);
 #endif /* LWIP_DNS */
 
-#if PPPOS_USE_AUTH
-		ppp_set_auth(state->ppp, PPPOS_AUTH_TYPE, PPPOS_AUTH_USER, PPPOS_AUTH_PASSWD);
+#if PPPOS_MODEM_USE_AUTH
+		ppp_set_auth(state->ppp, PPPOS_MODEM_AUTH_TYPE, PPPOS_MODEM_AUTH_USER, PPPOS_MODEM_AUTH_PASSWD);
 #endif /* PPPOS_USE_AUTH */
 	}
 
