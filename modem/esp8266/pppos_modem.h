@@ -14,7 +14,6 @@
 
 #include <stddef.h>
 
-#define PPPOS_USE_CONFIG_FILE     0
 #define PPPOS_USE_AUTH            1
 #define PPPOS_AUTH_TYPE           PPPAUTHTYPE_CHAP
 #define PPPOS_AUTH_USER           "blank"
