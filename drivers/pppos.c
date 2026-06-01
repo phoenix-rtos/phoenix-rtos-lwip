@@ -29,6 +29,10 @@
 #include <pppos_modem.h>
 
 
+#ifndef PPPOS_USE_CONFIG_FILE
+#define PPPOS_USE_CONFIG_FILE 0
+#endif
+
 /* if 1 - use blocking read with VMIN=0, VTIME=1 */
 #ifndef PPPOS_USE_BLOCKING_READ
 #define PPPOS_USE_BLOCKING_READ 1
