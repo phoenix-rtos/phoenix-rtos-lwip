@@ -28,6 +28,24 @@
 
 #include <pppos_modem.h>
 
+
+/* if 1 - use blocking read with VMIN=0, VTIME=1 */
+#ifndef PPPOS_USE_BLOCKING_READ
+#define PPPOS_USE_BLOCKING_READ 1
+#endif
+
+#if PPPOS_USE_BLOCKING_READ == 0
+#define PPPOS_READ_DATA_TIMEOUT_STEP_MS 5 /* sleep if no data */
+#define PPPOS_READ_DATA_RETRY_MS        1 /* sleep if data was just read */
+#endif
+
+#define PPPOS_READ_AT_TIMEOUT_STEP_MS 5
+
+#define PPPOS_TRYOPEN_SERIALDEV_SEC 3
+#define PPPOS_CONNECT_RETRY_SEC     5
+#define PPPOS_CONNECT_CMD_RETRY_MS  500
+
+
 enum {
 	CONN_STATE_DISCONNECTING,
 	CONN_STATE_DISCONNECTED,
@@ -97,21 +115,6 @@ static void pppos_printf(const char *format, ...)
 
 #endif
 
-/* if 1 - use blocking read with VMIN=0, VTIME=1 */
-#ifndef PPPOS_USE_BLOCKING_READ
-#define PPPOS_USE_BLOCKING_READ 1
-#endif
-
-#define PPPOS_READ_AT_TIMEOUT_STEP_MS 5
-#if PPPOS_USE_BLOCKING_READ == 0
-#define PPPOS_READ_DATA_TIMEOUT_STEP_MS 5 /* sleep if no data */
-#define PPPOS_READ_DATA_RETRY_MS        1 /* sleep if data was just read */
-#endif
-
-
-#define PPPOS_TRYOPEN_SERIALDEV_SEC 3
-#define PPPOS_CONNECT_RETRY_SEC     5
-#define PPPOS_CONNECT_CMD_RETRY_MS  500
 
 /****** serial handling ******/
 
