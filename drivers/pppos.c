@@ -9,6 +9,12 @@
  * %LICENSE%
  */
 
+#include "lwip/opt.h"
+
+#if PPP_SUPPORT == 0 || PPPOS_SUPPORT == 0
+#warning pppos driver requires both PPP_SUPPORT and PPPOS_SUPPORT. Disabling pppos driver.
+#else
+
 #include "netif-driver.h"
 
 #include <netif/ppp/pppapi.h>
@@ -917,3 +923,5 @@ void register_driver_pppos(void)
 {
 	register_netif_driver(&pppos_drv);
 }
+
+#endif /* PPP_SUPPORT == 0 || PPPOS_SUPPORT == 0 */
