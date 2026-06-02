@@ -35,6 +35,11 @@
 #include <pppos_modem.h>
 
 
+#if PPPOS_MODEM_USE_AUTH == 1 && PPP_AUTH_SUPPORT == 0
+#error Modem configured for authentication, but no method is enabled!
+#endif
+
+
 #ifndef PPPOS_USE_CONFIG_FILE
 #define PPPOS_USE_CONFIG_FILE 0
 #endif
@@ -857,9 +862,9 @@ static int pppos_netifInit(struct netif *netif, char *cfg)
 			ppp_set_usepeerdns(state->ppp, 1);
 #endif /* LWIP_DNS */
 
-#if PPPOS_MODEM_USE_AUTH
+#if PPPOS_MODEM_USE_AUTH && PPP_AUTH_SUPPORT
 		ppp_set_auth(state->ppp, PPPOS_MODEM_AUTH_TYPE, PPPOS_MODEM_AUTH_USER, PPPOS_MODEM_AUTH_PASSWD);
-#endif /* PPPOS_USE_AUTH */
+#endif
 	}
 
 	beginthread(pppos_mainLoop, 4, (void *)state->main_loop_stack, sizeof(state->main_loop_stack), state);
