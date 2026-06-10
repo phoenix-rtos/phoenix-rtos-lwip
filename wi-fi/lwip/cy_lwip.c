@@ -690,9 +690,10 @@ cy_rslt_t cy_lwip_network_down(cy_lwip_nw_interface_t *iface)
 	}
 
 #if LWIP_IPV4
-	if (is_dhcp_client_required) {
+	if (iface->role == CY_LWIP_STA_NW_INTERFACE && is_dhcp_client_required) {
 #if LWIP_AUTOIP
-		if (netif_autoip_data(IP_HANDLE(iface->role))->state == AUTOIP_STATE_BOUND) {
+		struct autoip *autoip = netif_autoip_data(IP_HANDLE(iface->role));
+		if (autoip != NULL && autoip->state == AUTOIP_STATE_BOUND) {
 			/*
              * If LPA is enabled, invoke activity callback to resume the network stack,
              * before invoking the lwip APIs that requires TCP Core lock.
