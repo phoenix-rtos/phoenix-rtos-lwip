@@ -311,6 +311,8 @@ static int socket_ioctl(int sock, unsigned long request, const void *in_data, vo
 			res = netif_index_to_name(ifreq->ifr_ifindex, ifreq->ifr_name);
 			if (res == NULL)
 				return -ENXIO;
+
+			return EOK;
 		}
 
 		case SIOCGIFINDEX: {
