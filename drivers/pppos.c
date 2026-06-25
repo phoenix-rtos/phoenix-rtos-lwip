@@ -679,8 +679,13 @@ fail:
 static int pppos_netifUp(pppos_priv_t *state)
 {
 #if PPPOS_USE_CONFIG_FILE
+	if (state->config_path == NULL) {
+		return 1;
+	}
+
 	char lcfg[256] = { 0 };
 	int line = 0;
+
 	FILE *fcfg = fopen(state->config_path, "r");
 	char *cfgval;
 	char *eq;
@@ -774,27 +779,59 @@ static void pppos_statusCallback(struct netif *netif)
 }
 
 
-static char *cfg_get_next_arg(char *arg)
-{
-	if (arg == NULL || *arg == '\0')
-		return NULL;
+struct iter {
+	char *next;
+};
 
-	for (; *arg; arg++) {
-		if (*arg == ':') {
-			*arg++ = '\0';
-			break;
-		}
+
+static char *iterateArgs(struct iter *iter)
+{
+	if (iter->next == NULL) {
+		return NULL;
 	}
 
-	return arg;
+	char *const cur = iter->next;
+	char *curEnd = strchr(cur, ':');
+	if (curEnd != NULL) {
+		*curEnd = '\0';
+		iter->next = curEnd + 1;
+	}
+	else {
+		iter->next = NULL;
+	}
+
+	return cur;
 }
 
 
+static void initIter(struct iter *iter, char *arg)
+{
+	iter->next = arg;
+}
+
+/*
+ * Arguments:
+ * <control_device>[:<option>...]
+ *
+ * <control_device> Path to the primary control device (starts with AT, switches into PPP) (required)
+ * <option>         Zero or more optional option separated by colons (':')
+ *
+ * Supported options:
+ * st=<status_device> Status device, for retrieving media information (additional AT interface)
+ * cfg=<config_file>  Path to config file, when PPPOS_USE_CONFIG_FILE enabled
+ * up                 Bring the interface up on start
+ * nodefault          Disable default route
+ * nodns              Disable DNS
+ *
+ * Examples:
+ * /dev/usbacm0
+ * /dev/usbacm0:up:st=/dev/usbacm2
+ * /dev/usbacm0:up:nodefault:nodns:st=/dev/usbacm2
+ */
 static int pppos_netifInit(struct netif *netif, char *cfg)
 {
-	pppos_priv_t* state;
+	pppos_priv_t *state;
 	int retries, flags = 0;
-	char *next;
 
 	// NOTE: netif->state cannot be used to keep our private state as it is used by LWiP PPP implementation, pass it as *ctx to callbacks
 	state = netif->state;
@@ -802,48 +839,55 @@ static int pppos_netifInit(struct netif *netif, char *cfg)
 
 	memset(state, 0, sizeof(pppos_priv_t));
 	state->netif = netif;
-	state->serialdev_fn = cfg;
-	state->serialat_fn = "/dev/ttyacm1";
 	state->fd = -1;
 
-#if PPPOS_USE_CONFIG_FILE
-	state->config_path = cfg;
-#endif
+	struct iter iter;
+	initIter(&iter, cfg);
+	state->serialdev_fn = iterateArgs(&iter);
 
-	for (; (next = cfg_get_next_arg(cfg)); cfg = next) {
-		if (!strncmp(cfg, "/dev/", 5)) {
-			state->serialat_fn = cfg;
-			log_info("config device: %s", cfg);
-			continue;
+	if (state->serialdev_fn == NULL) {
+		return ERR_ARG;
+	}
+
+	for (char *arg = iterateArgs(&iter); arg != NULL; arg = iterateArgs(&iter)) {
+		if (strncmp(arg, "st=", 3) == 0) {
+			state->serialat_fn = arg + 3;
 		}
-
-		if (strcmp(cfg, "up") == 0) {
+#if PPPOS_USE_CONFIG_FILE
+		else if (strncmp(arg, "cfg=", 4) == 0) {
+			state->config_path = arg + 4;
+		}
+#endif
+		else if (strcmp(arg, "up") == 0) {
 			flags |= CFG_FLAG_DEFAULT_UP;
 			log_info("config up: yes");
-			continue;
 		}
-
-		if (strcmp(cfg, "nodefault") == 0) {
+		else if (strcmp(arg, "nodefault") == 0) {
 			flags |= CFG_FLAG_NO_DEFAULT_ROUTE;
 			log_info("config no default route: yes");
-			continue;
 		}
-
-		if (strcmp(cfg, "nodns") == 0) {
+		else if (strcmp(arg, "nodns") == 0) {
 			flags |= CFG_FLAG_NO_DNS;
 			log_info("config no DNS: yes");
-			continue;
+		}
+		else {
+			log_error("Not recognized argument: %s", arg);
+			return ERR_ARG;
 		}
 	}
+
+#if PPPOS_USE_CONFIG_FILE
+	if (state->config_path == NULL) {
+		log_error("Config file not provided while PPPOS_USE_CONFIG_FILE enabled");
+		return ERR_ARG;
+	}
+#endif
 
 	mutexCreate(&state->lock);
 	condCreate(&state->cond);
 
 	netif->name[0] = 'p';
 	netif->name[1] = 'p';
-
-	if (!cfg)
-		return ERR_ARG;
 
 	if (!state->ppp) {
 		state->ppp = pppapi_pppos_create(state->netif, pppos_output_cb, pppos_link_status_cb, state);
@@ -891,6 +935,11 @@ static int pppos_netifInit(struct netif *netif, char *cfg)
 const char *pppos_media(struct netif *netif)
 {
 	pppos_priv_t *state = pppos_netifState(netif);
+
+	if (state->serialat_fn == NULL) {
+		return "error/not-configured";
+	}
+
 	int fd = open(state->serialat_fn, O_RDWR | O_NONBLOCK);
 	char buffer[256];
 	int result;
