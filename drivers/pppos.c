@@ -679,6 +679,11 @@ fail:
 static int pppos_netifUp(pppos_priv_t *state)
 {
 #if PPPOS_USE_CONFIG_FILE
+	/*
+	 * FIXME: This code require verification before production use. Spotted issues:
+	 * - early success return, without setting want_connected flag and signaling cond
+	 * - waiting for state->apn[0] in mainloop which may be never set here
+	 */
 	if (state->config_path == NULL) {
 		return 1;
 	}
