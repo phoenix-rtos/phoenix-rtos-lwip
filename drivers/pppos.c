@@ -941,16 +941,19 @@ const char *pppos_media(struct netif *netif)
 	}
 
 	int fd = open(state->serialat_fn, O_RDWR | O_NONBLOCK);
-	char buffer[256];
-	int result;
 
-	if (fd < 0)
+	if (fd < 0) {
 		return "error/open";
+	}
 
-	if ((result = at_send_cmd_res(fd, "AT+COPS?\r\n", 300, buffer, sizeof(buffer))) != AT_RESULT_OK)
-		return "error/read";
+	char buffer[256];
+	int result = at_send_cmd_res(fd, "AT+COPS?\r\n", 300, buffer, sizeof(buffer));
 
 	close(fd);
+
+	if (result != AT_RESULT_OK) {
+		return "error/read";
+	}
 
 	if (strstr(buffer, "\",0") != NULL)
 		return "2G";
