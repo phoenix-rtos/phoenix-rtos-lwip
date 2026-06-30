@@ -320,9 +320,9 @@ static int socket_ioctl(int sock, unsigned long request, const void *in_data, vo
 				return -ENXIO;
 
 			ifreq->ifr_ifindex = netif_get_index(interface);
-		}
 
 			return EOK;
+		}
 
 		case SIOCGIFFLAGS: {
 			/*
