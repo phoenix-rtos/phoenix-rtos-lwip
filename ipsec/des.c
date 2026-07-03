@@ -645,6 +645,8 @@ int DES_set_key_unchecked(const_DES_cblock *key, DES_key_schedule *schedule);
 	{ \
 		c += n; \
 		l1 = l2 = 0; \
+		_Pragma("GCC diagnostic push"); \
+		_Pragma("GCC diagnostic ignored \"-Wimplicit-fallthrough\""); \
 		switch (n) { \
 			case 8: l2 = ((DES_LONG)(*(--(c)))) << 24L; \
 			case 7: l2 |= ((DES_LONG)(*(--(c)))) << 16L; \
@@ -655,6 +657,7 @@ int DES_set_key_unchecked(const_DES_cblock *key, DES_key_schedule *schedule);
 			case 2: l1 |= ((DES_LONG)(*(--(c)))) << 8L; \
 			case 1: l1 |= ((DES_LONG)(*(--(c)))); \
 		} \
+		_Pragma("GCC diagnostic pop"); \
 	}
 
 
@@ -688,6 +691,8 @@ int DES_set_key_unchecked(const_DES_cblock *key, DES_key_schedule *schedule);
 #define l2cn(l1, l2, c, n) \
 	{ \
 		c += n; \
+		_Pragma("GCC diagnostic push"); \
+		_Pragma("GCC diagnostic ignored \"-Wimplicit-fallthrough\""); \
 		switch (n) { \
 			case 8: *(--(c)) = (unsigned char)(((l2) >> 24L) & 0xff); \
 			case 7: *(--(c)) = (unsigned char)(((l2) >> 16L) & 0xff); \
@@ -698,6 +703,7 @@ int DES_set_key_unchecked(const_DES_cblock *key, DES_key_schedule *schedule);
 			case 2: *(--(c)) = (unsigned char)(((l1) >> 8L) & 0xff); \
 			case 1: *(--(c)) = (unsigned char)(((l1)) & 0xff); \
 		} \
+		_Pragma("GCC diagnostic pop"); \
 	}
 
 
