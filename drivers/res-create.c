@@ -12,26 +12,30 @@
 #include "res-create.h"
 
 
-__attribute__((cold))
-int create_mutexcond_bulk(handle_t *out, size_t n, size_t cond_mask)
+__attribute__((cold)) int create_mutexcond_bulk(handle_t *out, size_t n, uint32_t condMask)
 {
 	size_t i;
 	int err = 0;
 
-	if (n > 8 * sizeof(cond_mask))
+	if (n > (8 * sizeof(condMask))) {
 		return -EINVAL;
-
-	for (i = 0; i < n; ++i, ++out, cond_mask >>= 1) {
-		err = cond_mask & 1 ? condCreate(out) : mutexCreate(out);
-		if (err < 0)
-			break;
 	}
 
-	if (i == n)
-		return 0;
+	for (i = 0; i < n; ++i) {
+		err = ((condMask & (1U << i)) != 0) ? condCreate(&out[i]) : mutexCreate(&out[i]);
+		if (err < 0) {
+			break;
+		}
+	}
 
-	while (i--)
-		resourceDestroy(*out);
+	if (i == n) {
+		return 0;
+	}
+
+	while (i > 0) {
+		i--;
+		resourceDestroy(out[i]);
+	}
 
 	return err;
 }
