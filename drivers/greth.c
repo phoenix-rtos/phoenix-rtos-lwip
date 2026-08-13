@@ -128,7 +128,7 @@ static void greth_irqThread(void *arg)
 
 		if ((state->mmio->STAT & GRETH_STAT_PS) != 0) {
 			state->mmio->STAT = GRETH_STAT_PS;
-			ephy_macInterrupt(&state->phy);
+			ephy_handleInterrupt(&state->phy);
 		}
 
 		if ((state->mmio->STAT & (GRETH_STAT_TI | GRETH_STAT_RI | GRETH_STAT_PS)) == 0) {
@@ -217,20 +217,20 @@ static const mdio_bus_ops_t greth_mdio_ops = {
 };
 
 
-static void greth_setLinkState(void *arg, int state)
+void mac_setLinkState(struct netif *netif, bool linkState)
 {
-	struct netif *netif = arg;
-	greth_state_t *s = netif->state;
+	greth_state_t *state = netif->state;
 	int speed, full_duplex;
 	uint32_t ctrl;
 
-	if (state != 0) {
-		speed = ephy_linkSpeed(&s->phy, &full_duplex);
-		ctrl = s->mmio->CTRL & ~(GRETH_CTRL_FD | GRETH_CTRL_SP | GRETH_CTRL_GB);
+	if (linkState != 0) {
+		speed = ephy_linkSpeed(&state->phy, &full_duplex);
+		ctrl = state->mmio->CTRL & ~(GRETH_CTRL_FD | GRETH_CTRL_SP | GRETH_CTRL_GB);
 
 		if (full_duplex != 0) {
 			ctrl |= GRETH_CTRL_FD;
 		}
+
 		switch (speed) {
 			case 10:
 				break;
@@ -243,7 +243,7 @@ static void greth_setLinkState(void *arg, int state)
 			default:
 				break;
 		}
-		s->mmio->CTRL = ctrl;
+		state->mmio->CTRL = ctrl;
 		netif_set_link_up(netif);
 	}
 	else {
@@ -580,7 +580,7 @@ static int greth_netifInit(struct netif *netif, char *cfg)
 	greth_debug_printf(state, "Initialized GRETH");
 
 	if (cfg != NULL) {
-		err = ephy_init(&state->phy, cfg, 0, greth_setLinkState, (void *)state->netif);
+		err = ephy_init(&state->phy, cfg, 0, netif);
 		if (err < 0) {
 			greth_printf(state, "WARN: PHY init failed: %s (%d)", strerror(-err), err);
 			greth_cleanupResources(state);

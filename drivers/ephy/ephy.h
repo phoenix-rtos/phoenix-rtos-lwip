@@ -3,59 +3,57 @@
  *
  * Ethernet PHY common routines
  *
- * Copyright 2018 Phoenix Systems
- * Author: Michał Mirosław
+ * Copyright 2018, 2026 Phoenix Systems
+ * Author: Michal Miroslaw, Julian Uziemblo
  *
- * %LICENSE%
+ * SPDX-License-Identifier: BSD-3-Clause
  */
+
 #ifndef NET_EPHY_H_
 #define NET_EPHY_H_
 
+#include <stdbool.h>
+#include <stdint.h>
+
+#include "netif-driver.h"
+
 #include "../gpio.h"
 
-#include <stdint.h>
-#include <stdbool.h>
 
-typedef void (*link_state_cb_t)(void *arg, int state);
+struct _ephy_driver_t;
 
-typedef struct {
-	enum { ephy_ksz8081rna,
-		ephy_ksz8081rnb,
-		ephy_ksz8081rnd,
-		ephy_ksz9031mnx,
-		ephy_dp83867is,
-		ephy_rtl8201fi,
-		ephy_rtl8211fdi,
-		ephy_88e1111,
-	} model;
-	unsigned bus;
-	unsigned addr;
-	unsigned reset_hold_time_us;
-	unsigned reset_release_time_us;
 
-	struct {
-		enum { ephy_gpio_irq,
-			ephy_mac_irq } type;
-		uint16_t mask;
-		uint16_t reg;
-	} irq;
+typedef struct _eth_phy_state {
+	unsigned int bus;
+	unsigned int addr;
 
-	gpio_info_t reset, irq_gpio;
+	uint32_t phyid;
+	uint8_t boardRev;
 
-	link_state_cb_t link_state_callback;
-	void *link_state_callback_arg;
+	/* clang-format off */
+	enum { ephy_irqGpio, ephy_irqMac } irqtype;
+	/* clang-format on */
+	gpio_info_t resetGpio, irqGpio;
 
-	uint32_t th_stack[512] __attribute__((aligned(16)));
+	struct netif *netif;
+
+	const struct _ephy_driver_t *driver;
+
+	uint32_t stack[512] __attribute__((aligned(16)));
 } eth_phy_state_t;
 
 
-int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb_t cb, void *cb_arg);
-int ephy_linkSpeed(const eth_phy_state_t *phy, int *full_duplex);
+/* initialize and configure the Ethernet PHY */
+int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t boardRev, struct netif *netif);
 
-/* called by the MAC driver if it handles the PHY IRQ */
-void ephy_macInterrupt(const eth_phy_state_t *phy);
+/* get the current (set or autonegotiated) link speed and duplex settings */
+int ephy_linkSpeed(const eth_phy_state_t *phy, int *full_duplex);
 
 /* toggle MACPHY internal loopback for test mode */
 int ephy_enableLoopback(const eth_phy_state_t *phy, bool enable);
 
-#endif /* NET_EPHY_H_ */
+/* called by the MAC driver if it handles the PHY IRQ */
+void ephy_handleInterrupt(const eth_phy_state_t *phy);
+
+
+#endif
