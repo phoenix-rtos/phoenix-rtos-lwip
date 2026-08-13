@@ -15,7 +15,6 @@ ifneq ($(PPPOS_DEFAULT_APN),)
   LOCAL_CFLAGS := -DPPPOS_DEFAULT_APN=\"$(PPPOS_DEFAULT_APN)\"
 endif
 
-
 # abstract drivers available on every platform
 DRIVERS_SRCS := netif-driver.c
 DRIVERS_SRCS_UTIL := bdring.c pktmem.c physmmap.c res-create.c
@@ -27,6 +26,14 @@ DRIVERS_SRCS_g3plc := g3plc.c
 DRIVERS_SRCS += $(foreach driver,$(NET_DRIVERS),$(if $(filter $(driver),$(NET_DRIVERS_SUPPORTED)),\
 	$(DRIVERS_SRCS_$(driver)),\
 	$(error Driver '$(driver)' is not supported on target '$(TARGET)')))
+
+# PHY: compile drivers if needed
+ifneq ($(strip $(PHY_DRIVERS)),)
+  DRIVERS_SRCS += $(foreach phy,$(PHY_DRIVERS),$(if $(filter $(phy),$(PHY_DRIVERS_SUPPORTED)),\
+    $(PHY_SRCS_$(phy)),\
+    $(error PHY driver '$(phy)' not supported on target '$(TARGET)')))
+  DRIVERS_SRCS += ephy/ephy.c $(PHY_SRCS_COMMON)
+endif
 
 # PPPoS: check if we support given modem
 ifneq ($(filter pppos,$(NET_DRIVERS)),)
