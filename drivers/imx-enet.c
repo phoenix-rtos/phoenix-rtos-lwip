@@ -43,7 +43,7 @@
 #define ENET_PROMISC_MODE             0
 #define ENET_ENABLE_RX_PAD_REMOVE     1
 #define ENET_DIS_RX_ON_TX             1 /* usually: 0 in half-duplex, 1 in full-duplex */
-#define ENET_MDC_ALWAYS_ON            1 /* NOTE: should be always ON, otherwise unreliable*/
+#define ENET_MDC_ALWAYS_ON            1 /* NOTE: should be always ON, otherwise unreliable */
 
 #define MDIO_TIMEOUT 0
 
@@ -1514,6 +1514,12 @@ static int enet_phySelfTest(struct netif *netif)
 	int ret = 0;
 	do {
 		struct pbuf *p = pbuf_alloc(PBUF_RAW, TEST_PACKET_LEN + ETH_PAD_SIZE, PBUF_RAM);
+		if (p == NULL) {
+			enet_printf(state, "selftest: not enough memory");
+			ret = -1;
+			break;
+		}
+
 		memset(p->payload, 0, ETH_PAD_SIZE);
 		pbuf_take_at(p, TEST_PACKET, TEST_PACKET_LEN, ETH_PAD_SIZE);
 
