@@ -1419,30 +1419,31 @@ static err_t enet_netifOutput(struct netif *netif, struct pbuf *p)
 	return nf ? ERR_OK : ERR_BUF;
 }
 
-static void enet_setLinkState(void *arg, int state)
+
+static void enet_setLinkState(void *arg, bool linkUp)
 {
 	struct netif *netif = arg;
-	enet_state_t *priv = netif->state;
-	int speed;
+	enet_state_t *state = netif->state;
+	enum eth_linkSpeed speed;
 
-	if (state != 0) {
-		speed = ephy_linkSpeed(&priv->phy, NULL);
+	if (linkUp) {
+		speed = ephy_linkSpeed(&state->phy, NULL);
 
 #if defined(ENET_ADDR_ENET_1G)
-		if (priv->dev_phys_addr == ENET_ADDR_ENET_1G) {
-			if (speed == 1000) {
-				priv->mmio->ECR |= ENET_ECR_SPEED;
+		if (state->dev_phys_addr == ENET_ADDR_ENET_1G) {
+			if (speed == eth_linkSpeed1G) {
+				state->mmio->ECR |= ENET_ECR_SPEED;
 			}
 			else {
-				priv->mmio->ECR &= ~ENET_ECR_SPEED;
+				state->mmio->ECR &= ~ENET_ECR_SPEED;
 			}
 		}
 #endif
-		if (speed == 10) {
-			priv->mmio->RCR |= ENET_RCR_RMII_10T;
+		if (speed == eth_linkSpeed10M) {
+			state->mmio->RCR |= ENET_RCR_RMII_10T;
 		}
-		else if (speed == 100) {
-			priv->mmio->RCR &= ~ENET_RCR_RMII_10T;
+		else if (speed == eth_linkSpeed100M) {
+			state->mmio->RCR &= ~ENET_RCR_RMII_10T;
 		}
 
 		netif_set_link_up(netif);
@@ -1684,7 +1685,7 @@ static int enet_netifInit(struct netif *netif, char *cfg)
 
 		enet_debug_printf(state, "Board rev: %d (0x%x)", board_rev, board_rev);
 
-		err = ephy_init(&state->phy, cfg, board_rev, enet_setLinkState, (void *)state->netif);
+		err = ephy_init(&state->phy, cfg, board_rev, enet_setLinkState, state->netif);
 		if (err < 0) {
 			enet_printf(state, "WARN: PHY init failed: %s (%d)", strerror(-err), err);
 			physunmap(ocotp_mem, 0x1000);
@@ -1710,31 +1711,32 @@ static int enet_netifInit(struct netif *netif, char *cfg)
 
 const char *enet_media(struct netif *netif)
 {
-	int full_duplex, speed;
 	enet_state_t *state;
 	state = netif->state;
+	enum eth_linkSpeed speed;
+	enum eth_duplex duplex;
 
-	speed = ephy_linkSpeed(&state->phy, &full_duplex);
+	speed = ephy_linkSpeed(&state->phy, &duplex);
 
 	switch (speed) {
 		case 0:
 			return "unspecified";
 		case 10:
-			if (full_duplex != 0) {
+			if (duplex == eth_duplexFull) {
 				return "10Mbps/full-duplex";
 			}
 			else {
 				return "10Mbps/half-duplex";
 			}
 		case 100:
-			if (full_duplex != 0) {
+			if (duplex == eth_duplexFull) {
 				return "100Mbps/full-duplex";
 			}
 			else {
 				return "100Mbps/half-duplex";
 			}
 		case 1000:
-			if (full_duplex != 0) {
+			if (duplex == eth_duplexFull) {
 				return "1000Mbps/full-duplex";
 			}
 			else {
