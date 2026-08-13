@@ -13,7 +13,8 @@
 #include "lwip/netif.h"
 #include "netif-driver.h"
 #include "bdring.h"
-#include "ephy.h"
+#include "ephy/ephy.h"
+#include "mac.h"
 #include "physmmap.h"
 #include "res-create.h"
 #include "imx-enet-regs.h"
@@ -42,7 +43,7 @@
 #define ENET_PROMISC_MODE             0
 #define ENET_ENABLE_RX_PAD_REMOVE     1
 #define ENET_DIS_RX_ON_TX             1 /* usually: 0 in half-duplex, 1 in full-duplex */
-#define ENET_MDC_ALWAYS_ON            1 /* NOTE: should be always ON, otherwise unreliable*/
+#define ENET_MDC_ALWAYS_ON            1 /* NOTE: should be always ON, otherwise unreliable */
 
 #define MDIO_TIMEOUT 0
 
@@ -1374,30 +1375,30 @@ static err_t enet_netifOutput(struct netif *netif, struct pbuf *p)
 	return nf ? ERR_OK : ERR_BUF;
 }
 
-static void enet_setLinkState(void *arg, int state)
+
+void mac_setLinkState(struct netif *netif, bool linkState)
 {
-	struct netif *netif = arg;
-	enet_state_t *priv = netif->state;
+	enet_state_t *state = netif->state;
 	int speed;
 
-	if (state != 0) {
-		speed = ephy_linkSpeed(&priv->phy, NULL);
+	if (linkState != 0) {
+		speed = ephy_linkSpeed(&state->phy, NULL);
 
 #if defined(ENET_ADDR_ENET_1G)
-		if (priv->dev_phys_addr == ENET_ADDR_ENET_1G) {
+		if (state->dev_phys_addr == ENET_ADDR_ENET_1G) {
 			if (speed == 1000) {
-				priv->mmio->ECR |= ENET_ECR_SPEED;
+				state->mmio->ECR |= ENET_ECR_SPEED;
 			}
 			else {
-				priv->mmio->ECR &= ~ENET_ECR_SPEED;
+				state->mmio->ECR &= ~ENET_ECR_SPEED;
 			}
 		}
 #endif
 		if (speed == 10) {
-			priv->mmio->RCR |= ENET_RCR_RMII_10T;
+			state->mmio->RCR |= ENET_RCR_RMII_10T;
 		}
 		else if (speed == 100) {
-			priv->mmio->RCR &= ~ENET_RCR_RMII_10T;
+			state->mmio->RCR &= ~ENET_RCR_RMII_10T;
 		}
 
 		netif_set_link_up(netif);
@@ -1513,6 +1514,12 @@ static int enet_phySelfTest(struct netif *netif)
 	int ret = 0;
 	do {
 		struct pbuf *p = pbuf_alloc(PBUF_RAW, TEST_PACKET_LEN + ETH_PAD_SIZE, PBUF_RAM);
+		if (p == NULL) {
+			enet_printf(state, "selftest: not enough memory");
+			ret = -1;
+			break;
+		}
+
 		memset(p->payload, 0, ETH_PAD_SIZE);
 		pbuf_take_at(p, TEST_PACKET, TEST_PACKET_LEN, ETH_PAD_SIZE);
 
@@ -1639,7 +1646,7 @@ static int enet_netifInit(struct netif *netif, char *cfg)
 
 		enet_debug_printf(state, "Board rev: %d (0x%x)", board_rev, board_rev);
 
-		err = ephy_init(&state->phy, cfg, board_rev, enet_setLinkState, (void *)state->netif);
+		err = ephy_init(&state->phy, cfg, board_rev, state->netif);
 		if (err < 0) {
 			enet_printf(state, "WARN: PHY init failed: %s (%d)", strerror(-err), err);
 			physunmap(ocotp_mem, 0x1000);

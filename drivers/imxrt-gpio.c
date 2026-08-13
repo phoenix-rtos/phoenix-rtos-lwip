@@ -30,7 +30,6 @@
 
 #define GPIO_DEBUG 0
 
-
 #define gpio_printf(gp, fmt, ...) printf("lwip: gpio%02u_io%02u: " fmt "\n", gp->id - id_gpio1 + 1, gp->pin, ##__VA_ARGS__)
 
 #if GPIO_DEBUG
@@ -196,7 +195,7 @@ int gpio_wait(const gpio_info_t *gp, int active, time_t timeout)
 	}
 }
 
-/* arg like: `X:/dev/gpioY`, where:
+/* arg like: `[-]X:/dev/gpioY`, where:
  * X = GPIO pin
  * Y = GPIO port
  */
@@ -245,13 +244,11 @@ int gpio_init(gpio_info_t *gp, const char *arg, unsigned flags)
 		return -EINVAL;
 	}
 
-	if (gp->multidrv.port == 0) {
-		while (lookup(gpio_prefix, NULL, &gp->multidrv) < 0) {
-			usleep(100 * 1000);
-		}
+	while (lookup(gpio_prefix, NULL, &gp->multidrv) < 0) {
+		usleep(100 * 1000);
 	}
 
-	gpio_debug_printf(gp, "oid=%u, port=%d", multidrv.id, multidrv.port);
+	gpio_debug_printf(gp, "oid=%u, port=%d", gp->multidrv.id, gp->multidrv.port);
 	gpio_debug_printf(gp, "gp->flags=0x%08x", gp->flags);
 
 	err = gpio_setDir(gp, !!(flags & GPIO_OUTPUT));
