@@ -9,7 +9,6 @@
  * %LICENSE%
  */
 #include "ephy.h"
-#include "gpio.h"
 #include "netif-driver.h"
 
 #include <errno.h>

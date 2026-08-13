@@ -13,7 +13,7 @@
 #include "lwip/netif.h"
 #include "netif-driver.h"
 #include "bdring.h"
-#include "ephy.h"
+#include "ephy/ephy.h"
 #include "physmmap.h"
 #include "res-create.h"
 #include "imx-enet-regs.h"

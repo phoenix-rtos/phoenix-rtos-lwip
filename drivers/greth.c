@@ -10,7 +10,7 @@
  */
 
 #include "arch/cc.h"
-#include "ephy.h"
+#include "ephy/ephy.h"
 #include "lwip/err.h"
 #include "lwip/netif.h"
 #include "lwip/opt.h"

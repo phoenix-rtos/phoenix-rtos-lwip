@@ -11,7 +11,7 @@
 #ifndef NET_EPHY_H_
 #define NET_EPHY_H_
 
-#include "gpio.h"
+#include "../gpio.h"
 
 #include <stdint.h>
 #include <stdbool.h>
