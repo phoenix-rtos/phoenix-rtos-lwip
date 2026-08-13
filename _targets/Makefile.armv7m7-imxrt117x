@@ -10,4 +10,10 @@ NET_DRIVERS_SUPPORTED := pppou pppos enet
 NET_DRIVERS ?= $(NET_DRIVERS_SUPPORTED)
 PPPOS_MODEM ?= huawei
 
-DRIVERS_SRCS_enet = imx-enet.c ephy/ephy.c imxrt-gpio.c $(DRIVERS_SRCS_UTIL) hw-debug.c
+DRIVERS_SRCS_enet = imx-enet.c $(DRIVERS_SRCS_UTIL) hw-debug.c
+
+PHY_DRIVERS_SUPPORTED := rtl8201fi rtl8211fdi
+PHY_DRIVERS ?= $(PHY_DRIVERS_SUPPORTED)
+PHY_SRCS_rtl8201fi = ephy/rtl8201fi.c
+PHY_SRCS_rtl8211fdi = ephy/rtl8211fdi.c
+PHY_SRCS_COMMON = imxrt-gpio.c
