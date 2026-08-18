@@ -42,7 +42,7 @@ n = pin number
 
 /dev/gpioX = GPIO bank driver node
 
-irq:MAC = the MAC layer handles PHY IRQ. The reset option should be omitted.
+irq:MAC = the MAC layer handles PHY IRQ.
 
 (When GPIOs are used, gpiosrv must be already running.)
 
