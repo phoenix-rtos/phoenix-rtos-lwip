@@ -27,7 +27,7 @@ enum {
 };
 
 
-typedef struct gpio_info_ {
+typedef struct {
 	unsigned flags;
 	union {
 		int fd;
@@ -37,16 +37,16 @@ typedef struct gpio_info_ {
 #if defined(__CPU_IMXRT106X) || defined(__CPU_IMXRT117X)
 	oid_t multidrv;
 #endif
-} gpio_info_t;
+} net_gpioInfo_t;
 
 
-int gpio_set(const gpio_info_t *gp, int active);
-int gpio_get(const gpio_info_t *gp);
-int gpio_wait(const gpio_info_t *gp, int active, time_t timeout);
-int gpio_init(gpio_info_t *gp, const char *arg, unsigned flags);
+int net_gpioSet(const net_gpioInfo_t *gp, int active);
+int net_gpioGet(const net_gpioInfo_t *gp);
+int net_gpioWait(const net_gpioInfo_t *gp, int active, time_t timeout);
+int net_gpioInit(net_gpioInfo_t *gp, const char *arg, unsigned flags);
 
 
-static inline bool gpio_valid(const gpio_info_t *gp)
+static inline bool net_gpioValid(const net_gpioInfo_t *gp)
 {
 	return !!(gp->flags & GPIO_INITIALIZED);
 }

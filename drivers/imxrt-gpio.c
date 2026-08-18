@@ -44,7 +44,7 @@
 #define GPIO_PORT_PREFIX_LEN (sizeof(GPIO_PORT_PREFIX) - 1)
 
 
-static int gpio_getPin(const gpio_info_t *gp, uint32_t *res)
+static int gpio_getPin(const net_gpioInfo_t *gp, uint32_t *res)
 {
 	int err;
 	msg_t msg = {
@@ -72,7 +72,7 @@ static int gpio_getPin(const gpio_info_t *gp, uint32_t *res)
 }
 
 
-static int gpio_setPin(const gpio_info_t *gp, int state)
+static int gpio_setPin(const net_gpioInfo_t *gp, int state)
 {
 	int err;
 	msg_t msg = {
@@ -100,7 +100,7 @@ static int gpio_setPin(const gpio_info_t *gp, int state)
 }
 
 
-static int gpio_setDir(const gpio_info_t *gp, int dir)
+static int gpio_setDir(const net_gpioInfo_t *gp, int dir)
 {
 	int err;
 	msg_t msg = {
@@ -127,9 +127,9 @@ static int gpio_setDir(const gpio_info_t *gp, int dir)
 	return 0;
 }
 
-int gpio_set(const gpio_info_t *gp, int active)
+int net_gpioSet(const net_gpioInfo_t *gp, int active)
 {
-	if (!gpio_valid(gp)) {
+	if (!net_gpioValid(gp)) {
 		return -EINVAL;
 	}
 
@@ -141,9 +141,9 @@ int gpio_set(const gpio_info_t *gp, int active)
 }
 
 
-int gpio_get(const gpio_info_t *gp)
+int net_gpioGet(const net_gpioInfo_t *gp)
 {
-	if (!gpio_valid(gp)) {
+	if (!net_gpioValid(gp)) {
 		return -EINVAL;
 	}
 
@@ -160,12 +160,12 @@ int gpio_get(const gpio_info_t *gp)
 	return !!(ret & (1u << gp->pin));
 }
 
-int gpio_wait(const gpio_info_t *gp, int active, time_t timeout)
+int net_gpioWait(const net_gpioInfo_t *gp, int active, time_t timeout)
 {
 	time_t when, now;
 	int val;
 
-	if (!gpio_valid(gp)) {
+	if (!net_gpioValid(gp)) {
 		return -EINVAL;
 	}
 
@@ -175,20 +175,20 @@ int gpio_wait(const gpio_info_t *gp, int active, time_t timeout)
 	}
 
 	for (;;) {
-		val = gpio_get(gp);
+		val = net_gpioGet(gp);
 		if (val < 0) {
 			return val;
 		}
 
 		if (!!val == !!active) {
-			gpio_debug_printf(gp, "gpio_wait: finished waiting");
+			gpio_debug_printf(gp, "net_gpioWait: finished waiting");
 			return EOK;
 		}
 
 		if (timeout != 0) {
 			gettime(&now, NULL);
 			if (now >= when) {
-				gpio_debug_printf(gp, "gpio_wait: timeout");
+				gpio_debug_printf(gp, "net_gpioWait: timeout");
 				return -ETIME;
 			}
 		}
@@ -200,7 +200,7 @@ int gpio_wait(const gpio_info_t *gp, int active, time_t timeout)
  * X = GPIO pin
  * Y = GPIO port
  */
-int gpio_init(gpio_info_t *gp, const char *arg, unsigned flags)
+int net_gpioInit(net_gpioInfo_t *gp, const char *arg, unsigned flags)
 {
 	char *endp;
 	const char *gpio_prefix;
@@ -251,7 +251,7 @@ int gpio_init(gpio_info_t *gp, const char *arg, unsigned flags)
 		}
 	}
 
-	gpio_debug_printf(gp, "oid=%u, port=%d", multidrv.id, multidrv.port);
+	gpio_debug_printf(gp, "oid=%u, port=%d", gp->multidrv.id, gp->multidrv.port);
 	gpio_debug_printf(gp, "gp->flags=0x%08x", gp->flags);
 
 	err = gpio_setDir(gp, !!(flags & GPIO_OUTPUT));

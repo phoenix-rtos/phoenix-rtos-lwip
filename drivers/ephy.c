@@ -179,13 +179,13 @@ __attribute__((unused)) static inline uint16_t ephy_mmdRead(const eth_phy_state_
 
 static void ephy_reset(const eth_phy_state_t *phy)
 {
-	if (gpio_valid(&phy->reset)) {
+	if (net_gpioValid(&phy->reset)) {
 		ephy_debug_printf(phy, "ephy_reset: start hardware reset...");
 		// TODO: prepare bootstrap pins
-		gpio_set(&phy->reset, 1);
+		net_gpioSet(&phy->reset, 1);
 		usleep(phy->reset_hold_time_us);
 		mdio_lock_bus(phy->bus);
-		gpio_set(&phy->reset, 0);
+		net_gpioSet(&phy->reset, 0);
 		usleep(phy->reset_release_time_us);
 		mdio_unlock_bus(phy->bus);
 		ephy_debug_printf(phy, "ephy_reset: hardware reset complete.");
@@ -513,7 +513,7 @@ static void ephy_linkThread(void *arg)
 	int err;
 
 	for (;;) {
-		err = gpio_wait(&phy->irq_gpio, 1, 0);
+		err = net_gpioWait(&phy->irq_gpio, 1, 0);
 		// FIXME: thread exit
 
 		if (err == 0) {
@@ -530,7 +530,7 @@ static void ephy_linkThread(void *arg)
 
 
 /* ARGS: pfx[-]n:/dev/gpioX[:...] */
-static char *ephy_parsePinArg(char *cfg, const char *pfx, size_t pfx_len, gpio_info_t *gp, unsigned flags)
+static char *ephy_parsePinArg(char *cfg, const char *pfx, size_t pfx_len, net_gpioInfo_t *gp, unsigned flags)
 {
 	char *p;
 	int err;
@@ -552,7 +552,7 @@ static char *ephy_parsePinArg(char *cfg, const char *pfx, size_t pfx_len, gpio_i
 		p++;
 	}
 
-	err = gpio_init(gp, cfg, flags);
+	err = net_gpioInit(gp, cfg, flags);
 	if (err != 0) {
 		printf("lwip: ephy: %s bad pin info: %s (%d)\n", pfx, strerror(-err), err);
 		return cfg - pfx_len;
@@ -907,7 +907,7 @@ int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb
 	phyid = ephy_readPhyId(phy);
 	if (phyid == 0U || phyid == ~0U) {
 		ephy_printf(phy, "Couldn't read PHY ID");
-		gpio_set(&phy->reset, 1);
+		net_gpioSet(&phy->reset, 1);
 		return -ENODEV;
 	}
 
@@ -957,13 +957,13 @@ int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb
 	ephy_setLinkState(phy);
 
 	if (phy->irq.type == ephy_gpio_irq) {
-		if (!gpio_valid(&phy->irq_gpio)) {
+		if (!net_gpioValid(&phy->irq_gpio)) {
 			ephy_printf(phy, "WARN: irq_gpio not valid, could not start PHY IRQ thread");
 			return -ENODEV;
 		}
 		err = beginthread(ephy_linkThread, 0, phy->th_stack, sizeof(phy->th_stack), phy);
 		if (err != 0) {
-			gpio_set(&phy->reset, 1);
+			net_gpioSet(&phy->reset, 1);
 			return err;
 		}
 	}
