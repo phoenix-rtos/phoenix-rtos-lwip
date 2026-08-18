@@ -661,16 +661,26 @@ static int ephy_config(eth_phy_state_t *phy, char *cfg)
 	}
 	p++;
 
-	if (strcmp(p, "irq:MAC") == 0) {
-		phy->irq.type = ephy_mac_irq;
-		return 0;
-	}
-	phy->irq.type = ephy_gpio_irq;
+	const char *irqMacStr = "irq:MAC";
+	size_t irqMacLen = sizeof("irq:MAC") - 1;
 
+	phy->irq.type = ephy_gpio_irq;
 	while (p != NULL && *p != '\0') {
 		cfg = p;
+		if (strncmp(p, irqMacStr, irqMacLen) == 0) {
+			if ((p[irqMacLen] == '\0') || (p[irqMacLen] == ':')) {
+				phy->irq.type = ephy_mac_irq;
+				p += irqMacLen;
+				if (p[0] == ':') {
+					p++;
+				}
+			}
+		}
 
-		p = ephy_parsePinArg(p, "irq:", 4, &phy->irq_gpio, GPIO_INPUT);
+		if ((p == cfg) && (phy->irq.type == ephy_gpio_irq)) {
+			p = ephy_parsePinArg(p, "irq:", 4, &phy->irq_gpio, GPIO_INPUT);
+		}
+
 		if (p == cfg) {
 			p = ephy_parsePinArg(p, "reset:", 6, &phy->reset, GPIO_OUTPUT | GPIO_ACTIVE);
 		}
