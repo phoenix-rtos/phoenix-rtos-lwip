@@ -34,7 +34,7 @@ typedef struct {
 		int id;
 	};
 	uint32_t pin;
-#if defined(__CPU_IMXRT106X) || defined(__CPU_IMXRT117X)
+#if defined(__CPU_IMXRT106X) || defined(__CPU_IMXRT117X) || defined(__CPU_STM32N6)
 	oid_t multidrv;
 #endif
 } net_gpioInfo_t;

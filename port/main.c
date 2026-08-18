@@ -81,6 +81,7 @@ int main(int argc, char **argv)
 	void init_lwip_sockets(void);
 	void register_driver_rtl(void);
 	void register_driver_enet(void);
+	void register_driver_eth(void);
 	void register_driver_greth(void);
 	void register_driver_pppos(void);
 	void register_driver_pppou(void);
@@ -95,6 +96,9 @@ int main(int argc, char **argv)
 #endif
 #ifdef HAVE_DRIVER_enet
 	register_driver_enet();
+#endif
+#ifdef HAVE_DRIVER_eth
+	register_driver_eth();
 #endif
 #ifdef HAVE_DRIVER_greth
 	register_driver_greth();

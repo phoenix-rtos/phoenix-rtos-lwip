@@ -1,0 +1,12 @@
+#
+# Makefile for Phoenix-RTOS 3 LwIP
+#
+# STM32N6 target
+#
+# Copyright 2022 Phoenix Systems
+#
+
+NET_DRIVERS_SUPPORTED := eth
+NET_DRIVERS ?= $(NET_DRIVERS_SUPPORTED)
+
+DRIVERS_SRCS_eth = stm32-eth.c ephy.c stm32-gpio.c $(DRIVERS_SRCS_UTIL)
