@@ -112,7 +112,7 @@ static int gpio_config(const char *name, uint32_t mask, unsigned flags)
 }
 
 
-static int gpio_doSet(const gpio_info_t *gp, int val)
+static int gpio_doSet(const net_gpioInfo_t *gp, int val)
 {
 	uint32_t data[2];
 
@@ -130,9 +130,9 @@ static int gpio_doSet(const gpio_info_t *gp, int val)
 }
 
 
-int gpio_set(const gpio_info_t *gp, int active)
+int net_gpioSet(const net_gpioInfo_t *gp, int active)
 {
-	if (!gpio_valid(gp)) {
+	if (!net_gpioValid(gp)) {
 		return -EINVAL;
 	}
 
@@ -144,12 +144,12 @@ int gpio_set(const gpio_info_t *gp, int active)
 }
 
 
-int gpio_get(const gpio_info_t *gp)
+int net_gpioGet(const net_gpioInfo_t *gp)
 {
 	uint32_t data[1];
 	int err;
 
-	if (!gpio_valid(gp)) {
+	if (!net_gpioValid(gp)) {
 		return -EINVAL;
 	}
 
@@ -169,12 +169,12 @@ int gpio_get(const gpio_info_t *gp)
 }
 
 
-int gpio_wait(const gpio_info_t *gp, int active, time_t timeout)
+int net_gpioWait(const net_gpioInfo_t *gp, int active, time_t timeout)
 {
 	time_t when, now;
 	int val;
 
-	if (!gpio_valid(gp)) {
+	if (!net_gpioValid(gp)) {
 		return -EINVAL;
 	}
 
@@ -184,7 +184,7 @@ int gpio_wait(const gpio_info_t *gp, int active, time_t timeout)
 	}
 
 	for (;;) {
-		val = gpio_get(gp);  // FIXME: in gpiosrv
+		val = net_gpioGet(gp);  // FIXME: in gpiosrv
 		if (val < 0) {
 			return val;
 		}
@@ -211,11 +211,11 @@ int gpio_wait(const gpio_info_t *gp, int active, time_t timeout)
 }
 
 
-static int gpio_close(gpio_info_t *gp)
+static int gpio_close(net_gpioInfo_t *gp)
 {
 	int err;
 
-	if (!gpio_valid(gp)) {
+	if (!net_gpioValid(gp)) {
 		return -EINVAL;
 	}
 
@@ -226,7 +226,7 @@ static int gpio_close(gpio_info_t *gp)
 }
 
 
-int gpio_init(gpio_info_t *gp, const char *arg, unsigned flags)
+int net_gpioInit(net_gpioInfo_t *gp, const char *arg, unsigned flags)
 {
 	char buf[64];
 	char *endp;

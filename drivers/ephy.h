@@ -40,7 +40,7 @@ typedef struct {
 		uint16_t reg;
 	} irq;
 
-	gpio_info_t reset, irq_gpio;
+	net_gpioInfo_t reset, irq_gpio;
 
 	link_state_cb_t link_state_callback;
 	void *link_state_callback_arg;
