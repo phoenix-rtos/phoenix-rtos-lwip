@@ -297,7 +297,7 @@ static int at_send_cmd_res(int fd, const char* cmd, int timeout_ms, char *rx_buf
 	serial_write(fd, (u8_t*)cmd, strlen(cmd));
 	end = strstr(cmd, "\r\n");
 	/* remove newlines for better result printing */
-	log_at("AT Tx: [%*s]", (end != NULL) ? end - cmd : strlen(cmd), cmd);
+	log_at("AT Tx: [%.*s]", (int)((end != NULL) ? end - cmd : strlen(cmd)), cmd);
 
 	// wait for result with optional response text
 	int off = 0;
@@ -519,7 +519,7 @@ static void pppos_do_rx(pppos_priv_t* state)
 		len = read(state->fd, buffer + off, sizeof(buffer) - off);
 		if (len < 0) {
 			if (errno != EINTR && errno != EWOULDBLOCK) {
-				log_error("%s() : read(%d) = %d (%d -> %s)", __func__, sizeof(buffer), len, errno, strerror(errno));
+				log_error("%s() : read(%zu) = %d (%d -> %s)", __func__, sizeof(buffer), len, errno, strerror(errno));
 				serial_close(state->fd);
 				state->fd = -1;
 				return;
