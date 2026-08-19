@@ -599,7 +599,7 @@ static void pppos_mainLoop(void* _state)
 		if (!at_is_responding(state->fd, 1000)) {
 			goto fail;
 		}
-		const char **at_cmd = ppposModem_atInitCmds;
+		const char *const *at_cmd = ppposModem_atInitCmds;
 		while (*at_cmd) {
 			if ((res = at_send_cmd(state->fd, *at_cmd, PPPOS_MODEM_AT_INIT_CMDS_TIMEOUT_MS)) != AT_RESULT_OK) {
 				log_warn("failed to initialize modem (cmd=%s), res=%d, retrying", *at_cmd, res);
