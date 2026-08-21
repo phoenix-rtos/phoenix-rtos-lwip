@@ -24,6 +24,7 @@ typedef struct {
 		ephy_ksz8081rnd,
 		ephy_ksz9031mnx,
 		ephy_dp83867is,
+		ephy_dp83825i,
 		ephy_rtl8201fi,
 		ephy_rtl8211fdi,
 		ephy_88e1111,

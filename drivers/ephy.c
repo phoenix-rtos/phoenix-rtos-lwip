@@ -130,6 +130,15 @@ enum {
 	EPHY_DP83867IS_D3_SGMIICTL1 = 0xD3 /* SGMIICTL1 (via MMD access) */
 };
 
+/* DP83825I-specific registers */
+enum {
+	EPHY_DP83825I_0C_R12 = 0x0C,    /* Register_12 (Interrupt control?) */
+	EPHY_DP83825I_10_PHYSTS = 0x10, /* PHY Status */
+	EPHY_DP83825I_11_PHYSCR,        /* PHY Control */
+	EPHY_DP83825I_12_MISR1,         /* MII Interrupt Status 1 */
+	EPHY_DP83825I_13_MISR2,         /* MII Interrupt Status 2 */
+};
+
 /* 88E1111-specific registers*/
 enum {
 	EPHY_88E1111_11_PHYSR = 0x11, /* PHY Specific Status */
@@ -279,6 +288,7 @@ static void ephy_setLinkState(const eth_phy_state_t *phy)
 		case ephy_ksz9031mnx:
 		case ephy_dp83867is:
 		case ephy_rtl8201fi:
+		case ephy_dp83825i:
 			ephy_printf(phy, "link is %s %uMbps/%s (ctl %04x, status %04x, adv %04x, lpa %04x)",
 					(linkup != 0) ? "UP  " : "DOWN", speed, (full_duplex != 0) ? "Full" : "Half", bctl, bstat, adv, lpa);
 			break;
@@ -509,7 +519,6 @@ void ephy_macInterrupt(const eth_phy_state_t *phy)
 static void ephy_linkThread(void *arg)
 {
 	eth_phy_state_t *phy = arg;
-	uint16_t stat;
 	int err;
 
 	for (;;) {
@@ -517,10 +526,7 @@ static void ephy_linkThread(void *arg)
 		// FIXME: thread exit
 
 		if (err == 0) {
-			stat = ephy_regRead(phy, phy->irq.reg);
-			if ((stat & phy->irq.mask) != 0) {
-				ephy_setLinkState(phy);
-			}
+			ephy_macInterrupt(phy);
 		}
 	}
 
@@ -585,6 +591,9 @@ static __attribute__((unused)) char *ephy_parsePhyModel(eth_phy_state_t *phy, ch
 	}
 	else if (strcmp(cfg, "dp83867is") == 0) {
 		phy->model = ephy_dp83867is;
+	}
+	else if (strcmp(cfg, "dp83825i") == 0) {
+		phy->model = ephy_dp83825i;
 	}
 	else if (strcmp(cfg, "rtl8201fi-vc-cg") == 0) {
 		phy->model = ephy_rtl8201fi;
@@ -896,6 +905,9 @@ int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb
 			phy->reset_hold_time_us = 10 * 1000 /* 10ms */;
 			phy->reset_release_time_us = 3 * 30 * 1000 /* 90ms */;
 			break;
+		case ephy_dp83825i:
+			phy->reset_hold_time_us = 25;
+			phy->reset_release_time_us = 2 * 1000;
 		default:
 			/* unreachable */
 			break;
@@ -939,9 +951,13 @@ int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb
 			phy->irq.mask = 0x00FF;
 			break;
 		case ephy_dp83867is:
-			ephy_dp83867is_init(phy);
 			phy->irq.reg = EPHY_DP83867IS_13_ISR;
 			phy->irq.mask = 0x00FF;
+			break;
+		case ephy_dp83825i:
+			ephy_dp83867is_init(phy);
+			phy->irq.reg = EPHY_DP83825I_12_MISR1;
+			phy->irq.mask = (1U << 13);
 			break;
 		case ephy_rtl8201fi:
 			ephy_rtl8201fi_init(phy);
@@ -991,6 +1007,10 @@ int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb
 		case ephy_dp83867is:
 			ephy_regWrite(phy, EPHY_DP83867IS_1E_CFG3, (1U << 7) | (1U << 1));
 			ephy_regWrite(phy, EPHY_DP83867IS_12_MICR, (1U << 10));
+			break;
+		case ephy_dp83825i:
+			ephy_regWrite(phy, EPHY_DP83825I_11_PHYSCR, (1U << 1) | (1U << 0));
+			ephy_regWrite(phy, EPHY_DP83825I_12_MISR1, (1U << 5));
 			break;
 		case ephy_rtl8201fi:
 			ephy_regWrite(phy, EPHY_RTL_1F_PAGESEL, 7);
