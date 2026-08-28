@@ -33,6 +33,8 @@
 #define LWIP_HOOK_NETPACKET_SENDTO(pcb, p, dst_addr, dst_addr_len) netpacket_sendto(pcb, p, dst_addr, dst_addr_len)
 #define LWIP_HOOK_NETPACKET_INPUT(p, netif)                        netpacket_input(p, netif)
 #define LWIP_HOOK_NETPACKET_LINKOUTPUT(netif, p)                   netpacket_linkoutput(netif, p)
+#define LWIP_HOOK_NETPACKET_RAW_INPUT(p, netif)                    netpacket_raw_input(p, netif)
+#define LWIP_HOOK_NETPACKET_RAW_LINKOUTPUT(netif, p)               netpacket_raw_linkoutput(netif, p)
 #endif
 
 #endif /* PHOENIX_HOOKS_H_ */
