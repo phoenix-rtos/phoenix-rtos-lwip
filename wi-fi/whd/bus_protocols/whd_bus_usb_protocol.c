@@ -83,7 +83,6 @@ static struct {
         cy_queue_t queue;
         cy_semaphore_t semaphore;
         cy_thread_t thread;
-        bool failed;
     } rx;
 } whd_bus_usb_common;
 
@@ -124,7 +123,6 @@ static whd_result_t whd_bus_usb_wait_for_wlan_event(whd_driver_t whd_driver, cy_
 uint32_t whd_bus_usb_attach(whd_driver_t whd_driver, whd_usb_config_t *config, cyhal_usb_t *usb_obj)
 {
     struct whd_bus_info* whd_bus_info;
-
     whd_bus_info = (whd_bus_info_t *)malloc(sizeof(whd_bus_info_t));
 
     if (whd_bus_info == NULL)
@@ -217,6 +215,15 @@ static whd_result_t whd_bus_usb_init_internal(whd_driver_t whd_driver)
     cy_rslt_t rslt;
     whd_result_t result;
 
+    if (whd_driver->bus_priv != NULL && cyhal_usb_is_initialized(whd_driver->bus_priv->usb_obj)) {
+        if (cyhal_usb_check_state(whd_bus_usb_common.config.path)) {
+            return WHD_SUCCESS;
+        }
+        else {
+            (void)cyhal_usb_free(whd_driver->bus_priv->usb_obj);
+        }
+    }
+
     result = whd_bus_usb_wait_and_init_device(whd_driver);
     if (result != WHD_SUCCESS) {
         return result;
@@ -289,8 +296,10 @@ whd_result_t whd_bus_usb_deinit(whd_driver_t whd_driver)
     if (whd_bus_is_up(whd_driver) == WHD_FALSE) {
         return WHD_SUCCESS;
     }
+
+    cy_rslt_t cy_result = cyhal_usb_close(whd_driver->bus_priv->usb_obj);
     whd_result_t whd_result = whd_bus_usb_stop_rx(whd_driver);
-    cy_rslt_t cy_result = cyhal_usb_free(whd_driver->bus_priv->usb_obj);
+    cy_result = cyhal_usb_free(whd_driver->bus_priv->usb_obj);
     return ((whd_result == WHD_SUCCESS) && (cy_result == CY_RSLT_SUCCESS)) ? WHD_SUCCESS : WHD_HAL_ERROR;
 }
 
@@ -326,6 +335,7 @@ static inline whd_result_t whd_bus_usb_handle_rx(whd_driver_t whd_driver, whd_bu
 
 static void whd_bus_usb_rx_thread(cy_thread_arg_t arg)
 {
+    const uint8_t error_type = WLC_ERR_BUS;
     whd_driver_t whd_driver = arg;
     whd_buffer_t buffer = NULL;
     whd_result_t result;
@@ -348,10 +358,8 @@ static void whd_bus_usb_rx_thread(cy_thread_arg_t arg)
             if (result != WHD_SUCCESS) {
                 whd_buffer_release(whd_driver, buffer, WHD_NETWORK_RX);
                 if (result == WHD_BUS_FAIL && !cyhal_usb_check_state(whd_bus_usb_common.config.path)) {
-                    WPRINT_WHD_ERROR(("%s: bus failed - device disconnected, exiting\n", __FUNCTION__));
-                    whd_bus_usb_common.rx.failed = true;
-                    whd_thread_notify(whd_driver);
-                    break;
+                    WPRINT_WHD_ERROR(("%s: bus failed - device disconnected\n", __FUNCTION__));
+                    whd_set_error_handler_locally(whd_driver, &error_type, NULL, NULL, NULL);
                 }
                 cy_rtos_delay_milliseconds(10);
                 continue;
@@ -423,10 +431,10 @@ static whd_result_t whd_bus_usb_stop_rx(whd_driver_t whd_driver)
     whd_bus_set_state(whd_driver, WHD_FALSE);
     whd_usb_rx_thread_notify();
     whd_thread_notify(whd_driver);
-    result |= cy_rtos_join_thread(&whd_bus_usb_common.rx.thread);
+    result = cy_rtos_join_thread(&whd_bus_usb_common.rx.thread);
     whd_bus_usb_rx_queue_buffers_release(whd_driver);
-    result |= cy_rtos_queue_deinit(&whd_bus_usb_common.rx.queue);
-    result |= cy_rtos_deinit_semaphore(&whd_bus_usb_common.rx.semaphore);
+    result = cy_rtos_queue_deinit(&whd_bus_usb_common.rx.queue);
+    result = cy_rtos_deinit_semaphore(&whd_bus_usb_common.rx.semaphore);
     whd_bus_usb_common.rx.thread = 0;
     return (result == CY_RSLT_SUCCESS) ? WHD_SUCCESS : WHD_RTOS_ERROR;
 }
@@ -631,10 +639,6 @@ static whd_bool_t whd_bus_usb_wake_interrupt_present(whd_driver_t whd_driver)
  **************************************************************************************************/
 static uint32_t whd_bus_usb_packet_available_to_read(whd_driver_t whd_driver)
 {
-    if (whd_bus_usb_common.rx.failed) {
-        return WHD_BUS_FAIL;
-    }
-
     size_t count;
     (void)cy_rtos_queue_count(&whd_bus_usb_common.rx.queue, &count);
     return count;
@@ -916,6 +920,11 @@ void whd_usb_rx_thread_notify(void)
 static whd_result_t whd_bus_usb_wait_for_wlan_event(whd_driver_t whd_driver, cy_semaphore_t *transceive_semaphore)
 {
     cy_rslt_t result;
+
+    if (!(whd_bus_is_up(whd_driver) == WHD_TRUE)) {
+        cy_rtos_get_semaphore(transceive_semaphore, 1000, WHD_FALSE);
+        return WHD_BUS_FAIL;
+    }
 
     whd_usb_rx_thread_notify();
 

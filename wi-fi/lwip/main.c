@@ -841,16 +841,13 @@ static void wifi_msg_thread(void *arg)
 }
 
 
+static void wifi_deinit(void);
+
+
 static void *wifi_handle_error(whd_driver_t whd_driver, const uint8_t *error_type, const uint8_t *event_data, void *handler_user_data)
 {
-	if (*error_type == WLC_ERR_BUS) {
-		msg_t msg = {
-			.oid = { .id = CTRL_DEV_ID, .port = wifi_common.ctrl.port },
-			.type = mtWrite,
-			.i.data = "off",
-			.i.size = sizeof("off") - 1,
-		};
-		msgSend(wifi_common.ctrl.port, &msg);
+	if (*error_type == WLC_ERR_FW || *error_type == WLC_ERR_BUS) {
+		wifi_deinit();
 	}
 	return NULL;
 }
