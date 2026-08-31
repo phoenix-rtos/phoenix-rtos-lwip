@@ -29,6 +29,11 @@
 
 #include "fifo.h"
 
+#ifdef LWIP_HOOK_FILENAME
+#include LWIP_HOOK_FILENAME
+#endif
+
+
 #define PKT_QUEUE_LEN 64
 #define TUN_PRIO 3
 
@@ -77,12 +82,20 @@ static err_t _tuntap_output_cb(struct netif *netif, struct pbuf *p, const ip4_ad
 
 static err_t tun_output_cb(struct netif *netif, struct pbuf *p, const ip4_addr_t *ipaddr)
 {
+#if LWIP_NETPACKET
+	LWIP_HOOK_NETPACKET_RAW_LINKOUTPUT(netif, p);
+#endif /* LWIP_NETPACKET */
+
 	return _tuntap_output_cb(netif, p, ipaddr);
 }
 
 
 static err_t tap_output_cb(struct netif *netif, struct pbuf *p)
 {
+#if LWIP_NETPACKET
+	LWIP_HOOK_NETPACKET_LINKOUTPUT(netif, p);
+#endif /* LWIP_NETPACKET */
+
 	return _tuntap_output_cb(netif, p, NULL);
 }
 
@@ -97,6 +110,16 @@ static int _tuntap_write(tuntap_priv_t *state, const void *data, size_t size)
 		return -ENOMEM;
 
 	pbuf_take(p, data, size);
+
+#if LWIP_NETPACKET
+	if (state->type == DEV_TAP) {
+		LWIP_HOOK_NETPACKET_INPUT(p, state->netif);
+	}
+	else {
+		LWIP_HOOK_NETPACKET_RAW_INPUT(p, state->netif);
+	}
+#endif /* LWIP_NETPACKET */
+
 	state->netif->input(p, state->netif);
 	return size;
 }
@@ -235,6 +258,13 @@ static int _tuntap_init(struct netif *netif, char *cfg)
 /* ARGS: none (cfg is ignored) */
 static int tun_init(struct netif *netif, char *cfg)
 {
+	tuntap_priv_t *state = netif->state;
+
+	if (state == NULL) {
+		return ERR_MEM;
+	}
+
+	state->type = DEV_TUN;
 	netif->name[0] = 't';
 	netif->name[1] = 'u';
 	netif->mtu = 1500;
@@ -247,6 +277,13 @@ static int tun_init(struct netif *netif, char *cfg)
 /* ARGS: none (cfg is ignored) */
 static int tap_init(struct netif *netif, char *cfg)
 {
+	tuntap_priv_t *state = netif->state;
+
+	if (state == NULL) {
+		return ERR_MEM;
+	}
+
+	state->type = DEV_TAP;
 	netif->name[0] = 't';
 	netif->name[1] = 'a';
 	netif->mtu = 1500;

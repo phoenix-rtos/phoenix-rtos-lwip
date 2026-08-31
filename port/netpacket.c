@@ -13,6 +13,8 @@
 #if LWIP_NETPACKET
 
 #include "lwip/memp.h"
+#include "lwip/prot/ieee.h"
+#include "lwip/prot/ip.h"
 #include "lwip/sockets.h"
 #include "netpacket.h"
 
@@ -295,6 +297,51 @@ static void netpacket_linkoutput_full(struct netif *netif, struct pbuf *p, struc
 #endif
 		}
 	}
+}
+
+
+static void netpacket_raw_link(struct netif *netif, struct pbuf *p)
+{
+	if (p->len < sizeof(struct ip_hdr)) {
+		return;
+	}
+
+	u16_t type = 0;
+
+	u8_t ip_ver = ((u8_t *)p->payload)[0] >> 4;
+	if (ip_ver == 4) {
+		type = ETHTYPE_IP;
+	}
+	else if (ip_ver == 6) {
+		type = ETHTYPE_IPV6;
+	}
+
+	struct eth_addr src_addr = { 0 };
+
+	struct netpacket_pcb *pcb = NULL;
+	for (pcb = netpacket_pcbs; pcb != NULL && pcb->netif != NULL; pcb = pcb->next) {
+		if (netif_get_index(pcb->netif) != netif_get_index(netif)) {
+			continue;
+		}
+
+		if ((pcb->protocol != ETH_P_ALL) && (pcb->protocol != type)) {
+			continue;
+		}
+
+		netpacket_recv(pcb, p, &src_addr);
+	}
+}
+
+
+void netpacket_raw_input(struct pbuf *p, struct netif *netif)
+{
+	netpacket_raw_link(netif, p);
+}
+
+
+void netpacket_raw_linkoutput(struct netif *netif, struct pbuf *p)
+{
+	netpacket_raw_link(netif, p);
 }
 
 #endif /* LWIP_NETPACKET */
