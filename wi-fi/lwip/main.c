@@ -63,6 +63,13 @@ _Static_assert(((float)WIFI_STA_SCAN_TIMEOUT_SECONDS / WIFI_STA_N_SCANS) >= 5.0f
 #define CTRL_DEV_ID   2
 #define CTRL_DEV_NAME "/dev/wifi/ctrl"
 
+#define RFTEST_ENABLED
+#define RFTEST_DEV_ID   3
+#define RFTEST_DEV_NAME "/dev/wifi/rftest"
+
+int rftest_init(void);
+void rftest_handleCtrl(msg_t *msg);
+
 #define CONST_STRLEN(str) (sizeof(str) - 1)
 
 #define SNPRINTF_APPEND(overflow, buf, size, fmt, ...) \
@@ -808,6 +815,7 @@ static void wifi_msg_thread(void *arg)
 			break;
 		}
 
+
 		if ((msg.oid.id != STA_DEV_ID && msg.oid.id != AP_DEV_ID) || !wifi_common.initialized) {
 			msg.o.err = -ENODEV;
 			msgRespond(wifi_common.msgport, &msg, rid);
@@ -1122,10 +1130,24 @@ static void wifi_ctrl_thread(void *arg)
 		return;
 	}
 
+#ifdef RFTEST_ENABLED
+	if (wifi_dev_init(wifi_common.ctrl.port, RFTEST_DEV_ID, RFTEST_DEV_NAME) < 0) {
+		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't create Wi-Fi rftest device\n");
+	}
+#endif
+
 	for (;;) {
 		if (msgRecv(wifi_common.ctrl.port, &msg, &rid) < 0) {
 			continue;
 		}
+
+#ifdef RFTEST_ENABLED
+		if (msg.oid.id == RFTEST_DEV_ID) {
+			rftest_handleCtrl(&msg);
+			(void)msgRespond(wifi_common.ctrl.port, &msg, rid);
+			continue;
+		}
+#endif
 
 		switch (msg.type) {
 			case mtOpen: {
@@ -1202,6 +1224,10 @@ __constructor__(1000) void init_wifi(void)
 	if (cy_log_init(CY_LOG_INFO) != CY_RSLT_SUCCESS) {
 		errout(-ENOSYS, "can't init Wi-Fi logs\n");
 	}
+
+#ifdef RFTEST_ENABLED
+	rftest_init();
+#endif
 
 	err = sys_thread_opt_new("wifi-ctrl", wifi_ctrl_thread, NULL, WIFI_THREAD_STACKSZ, WIFI_THREAD_PRIO, NULL);
 	if (err < 0) {

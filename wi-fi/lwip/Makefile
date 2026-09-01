@@ -8,7 +8,7 @@
 
 NAME := wifi-lwip
 
-LOCAL_SRCS := cybsp.c cybsp_wifi.c cy_network_buffer_lwip.c cy_lwip.c cy_lwip_dhcp_server.c main.c
+LOCAL_SRCS := cybsp.c cybsp_wifi.c cy_network_buffer_lwip.c cy_lwip.c cy_lwip_dhcp_server.c main.c rftest.c
 
 LOCAL_CFLAGS += -DCY_WIFI_HOST_WAKE_SW_FORCE=0
 LOCAL_CFLAGS += -DCY_RSLT_MODULE_BOARD_LIB_WHD_INTEGRATION=0x2ff
