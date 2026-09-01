@@ -16,4 +16,12 @@ LOCAL_CFLAGS += -DCY_RSLT_MODULE_BOARD_LIB_WHD_INTEGRATION=0x2ff
 LOCAL_CFLAGS += -DENABLE_WIFI_MIDDLEWARE_LOGS
 LOCAL_CFLAGS += -DCYBSP_WIFI_WL_REG_ON=0 # fake value - actual pin is hardcoded
 
+# RF certification test interface (/dev/wifi/rftest)
+ifeq (${LWIP_WIFI_RFTEST},yes)
+  LOCAL_SRCS += rftest.c
+  LOCAL_CFLAGS += -DLWIP_WIFI_RFTEST=1
+else
+  LOCAL_CFLAGS += -DLWIP_WIFI_RFTEST=0
+endif
+
 include $(static-lib.mk)

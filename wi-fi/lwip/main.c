@@ -28,6 +28,7 @@
 #include "netif.h"
 #include "lwip/sys.h"
 #include "cmd.h"
+#include "rftest.h"
 
 /* timeout for STA scanning in seconds */
 #ifndef WIFI_STA_SCAN_TIMEOUT_SECONDS
@@ -70,6 +71,9 @@ _Static_assert(((float)WIFI_STA_SCAN_TIMEOUT_SECONDS / WIFI_STA_N_SCANS) >= 5.0f
 
 #define CTRL_DEV_ID   2
 #define CTRL_DEV_NAME "/dev/wifi/ctrl"
+
+#define RFTEST_DEV_ID   3
+#define RFTEST_DEV_NAME "/dev/wifi/rftest"
 
 #define SNPRINTF_APPEND(overflow, buf, size, fmt, ...) \
 	do { \
@@ -1406,6 +1410,13 @@ static int wifi_init(const cmdCtx_t *ctx)
 		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "Wi-Fi is already initialized\n");
 		err = -1;
 	}
+#if LWIP_WIFI_RFTEST
+	else if (rftest_isInitialized()) {
+		/* both use the same SDIO bus and chip */
+		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "Wi-Fi RF test is active, reset it first\n");
+		err = -EBUSY;
+	}
+#endif
 	else {
 		err = _wifi_init();
 	}
@@ -1459,10 +1470,28 @@ static void wifi_ctrl_thread(void *arg)
 		return;
 	}
 
+#if LWIP_WIFI_RFTEST
+	if (wifi_dev_init(wifi_common.ctrl.port, RFTEST_DEV_ID, RFTEST_DEV_NAME) < 0) {
+		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't create Wi-Fi rftest device\n");
+	}
+#endif
+
 	for (;;) {
 		if (msgRecv(wifi_common.ctrl.port, &msg, &rid) < 0) {
 			continue;
 		}
+
+#if LWIP_WIFI_RFTEST
+		if (msg.oid.id == RFTEST_DEV_ID) {
+			mutexLock(wifi_common.ctrl.lock);
+			bool running = wifi_common.initialized;
+			mutexUnlock(wifi_common.ctrl.lock);
+
+			rftest_handleCtrl(&msg, running);
+			(void)msgRespond(wifi_common.ctrl.port, &msg, rid);
+			continue;
+		}
+#endif
 
 		switch (msg.type) {
 			case mtOpen: {
@@ -1522,6 +1551,10 @@ __constructor__(1000) void init_wifi(void)
 	if (cy_log_init(CY_LOG_INFO) != CY_RSLT_SUCCESS) {
 		errout(-ENOSYS, "can't init Wi-Fi logs\n");
 	}
+
+#if LWIP_WIFI_RFTEST
+	rftest_init();
+#endif
 
 	err = sys_thread_opt_new("wifi-ctrl", wifi_ctrl_thread, NULL, WIFI_THREAD_STACKSZ, WIFI_THREAD_PRIO, NULL);
 	if (err < 0) {
