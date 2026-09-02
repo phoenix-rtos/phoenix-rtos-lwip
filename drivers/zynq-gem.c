@@ -29,7 +29,8 @@
  * reg - register offset
  */
 #define reg(mmio, reg) (*((mmio) + ((reg) >> 2)))
-#define mbarrier()     __asm__ volatile("dmb ish")
+#define gem_dma_rmb()  __asm__ volatile("dmb oshld" ::: "memory")
+#define gem_dma_wmb()  __asm__ volatile("dmb oshst" ::: "memory")
 #define log(fmt, ...) \
 	do { \
 		if (LOG_ENABLE) \
@@ -247,6 +248,7 @@ static size_t gem_nextRxBufferSize(const net_bufdesc_ring_t *ring, size_t i)
 	if ((bd->addr & DESC_RX_CPU_OWN) == 0) {
 		return 0;
 	}
+	gem_dma_rmb();
 
 	sz = bd->status & DESC_RX_LEN_MASK;
 
@@ -271,15 +273,20 @@ static bool gem_pktRxFinished(const net_bufdesc_ring_t *ring, size_t i)
 static void gem_fillRxDesc(const net_bufdesc_ring_t *ring, size_t i, addr_t pa, size_t sz, unsigned seg)
 {
 	volatile gembd_t *bd = ((volatile gembd_t *)ring->ring) + i;
+	gem_dma_wmb();
 	bd->addr = (pa & DESC_RX_ADDR_MASK) | ((i == ring->last) ? DESC_RX_WRAP : 0);
-	mbarrier();
+	gem_dma_wmb();
 }
 
 
 static bool gem_nextTxDone(const net_bufdesc_ring_t *ring, size_t i)
 {
 	volatile gembd_t *bd = ((volatile gembd_t *)ring->ring) + i;
-	return (bd->status & DESC_TX_CPU_OWN) > 0;
+	if ((bd->status & DESC_TX_CPU_OWN) == 0) {
+		return false;
+	}
+	gem_dma_rmb();
+	return true;
 }
 
 
@@ -288,10 +295,12 @@ static void gem_fillTxDesc(const net_bufdesc_ring_t *ring, size_t i, addr_t pa, 
 	volatile gembd_t *bd = ((volatile gembd_t *)ring->ring) + i;
 
 	bd->addr = pa;
+	/* Publish the buffer address and data before handing the descriptor to DMA. */
+	gem_dma_wmb();
 	bd->status = (sz & DESC_TX_SZ_MASK) |
 			((i == ring->last) ? DESC_TX_WRAP : 0) |
 			((seg & BDRING_SEG_LAST) ? DESC_TX_LAST : 0);
-	mbarrier();
+	gem_dma_wmb();
 }
 
 
@@ -646,7 +655,7 @@ static int gem_init(struct netif *netif, char *cfg)
 	gem->bdSec[1][0].addr = 0 | DESC_RX_WRAP | DESC_RX_CPU_OWN;
 	gem->bdSec[0][0].addr = 0;
 	gem->bdSec[0][0].status = DESC_TX_LAST | DESC_TX_WRAP | DESC_TX_CPU_OWN;
-	mbarrier();
+	gem_dma_wmb();
 
 	if ((ret = gem_platformConfigClk(gem, 10)) < 0) {
 		log("failed to configure gem clock");
