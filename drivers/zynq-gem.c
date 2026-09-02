@@ -104,7 +104,7 @@
 #define TXSTATUS_RESP_NOT_OK          (1 << 8)
 
 /* Size of buffer descriptor rings. */
-#define BD_RING_SIZE 8
+#define BD_RING_SIZE 128
 
 /* buffer descriptors definitions */
 #define DESC_TX_SZ_MASK   (0x3FFF << 0)
