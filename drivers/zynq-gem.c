@@ -323,12 +323,20 @@ static err_t gem_send(struct netif *netif, struct pbuf *p)
 	size_t nf;
 
 #if (ETH_PAD_SIZE != 0)
-	(void)pbuf_header(p, -ETH_PAD_SIZE); /* drop the padding word (not supported by HW) */
+	if (pbuf_remove_header(p, ETH_PAD_SIZE) != 0) { /* padding is not supported by HW */
+		return ERR_BUF;
+	}
 #endif
 
 	/* TODO: I don't think that mutex is needed here, because inside the ringbuffer
 	there is another mutex implemented. */
 	nf = net_transmitPacket(gem->tx, p);
+
+#if (ETH_PAD_SIZE != 0)
+	u8_t paddingRestored = pbuf_add_header(p, ETH_PAD_SIZE);
+	LWIP_ASSERT("failed to restore Ethernet padding", paddingRestored == 0);
+	(void)paddingRestored;
+#endif
 
 	if (nf != 0) {
 
