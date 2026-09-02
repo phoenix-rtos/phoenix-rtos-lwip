@@ -249,7 +249,7 @@ static size_t net_fillFragments(struct pbuf *p, addr_t *pa, size_t *psz, size_t 
 	n = fragsz = 0;
 
 	while (sz != 0) {
-		if (++n >= max_n) {
+		if (n >= max_n) {
 			return 0;
 		}
 
@@ -270,7 +270,7 @@ static size_t net_fillFragments(struct pbuf *p, addr_t *pa, size_t *psz, size_t 
 			data += *psz;
 		}
 
-		++psz, ++pa;
+		++n, ++psz, ++pa;
 	}
 
 	return n;
