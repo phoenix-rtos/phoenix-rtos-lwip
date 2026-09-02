@@ -61,7 +61,4 @@ int ephy_enableLoopback(const eth_phy_state_t *phy, bool enable);
 void ephy_macInterrupt(const eth_phy_state_t *phy);
 
 
-int ephy_linkStateGet(const eth_phy_state_t *phy);
-
-
 #endif /* NET_EPHY_H_ */

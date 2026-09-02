@@ -557,7 +557,6 @@ static void gem_run(void *arg)
 	gem_t *gem = (gem_t *)arg;
 	uint32_t ts, rs, irq;
 	size_t rxDone;
-	int linkState = 0;
 
 	log("gem driver thread started");
 	gem_syncSpeedWithPhy(gem);
@@ -628,14 +627,7 @@ static void gem_run(void *arg)
 			log("tx status: resp not ok");
 		}
 
-		if (ephy_linkStateGet(&gem->phy) != linkState) {
-			if (linkState == 0) {
-				linkState = 1;
-			}
-			else {
-				linkState = 0;
-			}
-
+		if ((irq & IRQ_LINK_CHANGE) != 0) {
 			ephy_macInterrupt(&gem->phy);
 		}
 	}

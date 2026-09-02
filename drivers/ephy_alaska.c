@@ -296,9 +296,3 @@ int ephy_enableLoopback(const eth_phy_state_t *phy, bool enable)
 	/* TODO */
 	return 0;
 }
-
-
-int ephy_linkStateGet(const eth_phy_state_t *phy)
-{
-	return (ephy_mdioRead(phy, REG_0_17_CSSR1) & CSSR1_LINK_STATUS) > 0;
-}
