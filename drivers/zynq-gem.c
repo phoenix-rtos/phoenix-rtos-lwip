@@ -304,6 +304,61 @@ static void gem_fillTxDesc(const net_bufdesc_ring_t *ring, size_t i, addr_t pa, 
 }
 
 
+/* GEM marks only the first descriptor of a completed frame as CPU-owned. */
+static size_t gem_reapTxFinished(net_bufdesc_ring_t *ring)
+{
+	volatile gembd_t *bds = ring->ring;
+	size_t frameStart, head, i, n = 0;
+	uint32_t status;
+	bool frameComplete;
+
+	if (atomic_load(&ring->tail) == atomic_load(&ring->head)) {
+		return 0;
+	}
+
+	mutexLock(ring->lock);
+	i = atomic_load(&ring->tail);
+	head = atomic_load(&ring->head);
+
+	while (i != head) {
+		frameStart = i;
+		status = bds[i].status;
+		if ((status & DESC_TX_CPU_OWN) == 0) {
+			break;
+		}
+		gem_dma_rmb();
+
+		frameComplete = false;
+		do {
+			status = bds[i].status;
+			i = (i + 1) & ring->last;
+			if ((status & DESC_TX_LAST) != 0) {
+				frameComplete = true;
+				break;
+			}
+		} while (i != head);
+
+		if (!frameComplete) {
+			i = frameStart;
+			break;
+		}
+
+		if (ring->bufp[i] != NULL) {
+			pbuf_free(ring->bufp[i]);
+			ring->bufp[i] = NULL;
+		}
+		++n;
+	}
+
+	if (n > 0) {
+		atomic_store(&ring->tail, i);
+	}
+	mutexUnlock(ring->lock);
+
+	return n;
+}
+
+
 static const net_bufdesc_ops_t netBufdescOps = {
 	.nextRxBufferSize = gem_nextRxBufferSize,
 	.pktRxFinished = gem_pktRxFinished,
@@ -330,6 +385,7 @@ static err_t gem_send(struct netif *netif, struct pbuf *p)
 
 	/* TODO: I don't think that mutex is needed here, because inside the ringbuffer
 	there is another mutex implemented. */
+	gem_reapTxFinished(gem->tx);
 	nf = net_transmitPacket(gem->tx, p);
 
 #if (ETH_PAD_SIZE != 0)
@@ -557,8 +613,8 @@ static void gem_run(void *arg)
 
 		if (ts & TXSTATUS_TRANSMIT_CPLT) {
 			log("tx status: transmit completed");
-			net_reapTxFinished(gem->tx);
 		}
+		gem_reapTxFinished(gem->tx);
 
 		if (ts & TXSTATUS_TRANSMIT_UNDER_RUN) {
 			log("tx status: transmit under run");
