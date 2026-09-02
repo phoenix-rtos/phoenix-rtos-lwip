@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
+#include <unistd.h>
 #include <sys/platform.h>
 #include <sys/threads.h>
 #include "netif-driver.h"
@@ -39,6 +40,7 @@
 
 #define GEM_MMIO_MODULE_SIZE 0x1000
 #define GEM_PACKET_MAX_SIZE  1536
+#define GEM_POLL_INTERVAL_US  100
 
 /* network_control register definitions */
 #define NWCTRL_EN_RX         (1 << 2)
@@ -630,6 +632,8 @@ static void gem_run(void *arg)
 		if ((irq & IRQ_LINK_CHANGE) != 0) {
 			ephy_macInterrupt(&gem->phy);
 		}
+
+		usleep(GEM_POLL_INTERVAL_US);
 	}
 }
 
