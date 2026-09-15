@@ -34,6 +34,8 @@ err_t netpacket_send(struct netpacket_pcb *pcb, struct pbuf *p);
 err_t netpacket_sendto(struct netpacket_pcb *pcb, struct pbuf *p, u8_t *dst_addr, u8_t dst_addr_len);
 int netpacket_input(struct pbuf *p, struct netif *netif);
 void netpacket_linkoutput(struct netif *netif, struct pbuf *p);
+void netpacket_raw_input(struct pbuf *p, struct netif *netif);
+void netpacket_raw_linkoutput(struct netif *netif, struct pbuf *p);
 
 #endif /* LWIP_NETPACKET */
 
