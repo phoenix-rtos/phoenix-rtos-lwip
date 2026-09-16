@@ -27,6 +27,7 @@ typedef struct {
 		ephy_rtl8201fi,
 		ephy_rtl8211fdi,
 		ephy_88e1111,
+		ephy_vsc854105,
 	} model;
 	unsigned bus;
 	unsigned addr;
