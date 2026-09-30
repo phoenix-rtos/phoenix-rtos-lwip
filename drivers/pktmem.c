@@ -17,7 +17,7 @@
 #include <stdbool.h>
 
 
-#define PKT_BUF_CACHE_SIZE (16) /* number of cached free packet buffers that can be reused without allocating new ones */
+#define PKT_BUF_CACHE_SIZE (32) /* number of cached free packet buffers that can be reused without allocating new ones */
 
 
 /*    pktmem memory layout:
@@ -87,6 +87,7 @@ static void net_listAdd(pktmem_info_t *info, pktmem_info_t *after)
 
 static void net_listDel(pktmem_info_t *info)
 {
+	// printf("net_listDel, info=%p, info->prev=%p, info->next=%p\n", info, info->prev, info->next);
 	pktmem_info_t *prev, *next;
 
 	prev = info->prev;
