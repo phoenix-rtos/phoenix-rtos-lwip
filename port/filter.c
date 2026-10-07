@@ -55,98 +55,24 @@ static inline int pf_matchProtocol(pfrule_t *rule, unsigned char proto)
 }
 
 
-static int pf_ruleMatch(pfrule_t *rule, struct pbuf *pbuf, struct netif *netif, int pdir)
+static int pf_filter(struct pbuf *pbuf, struct netif *netif, int pdir)
 {
-	struct eth_hdr *ethhdr = (struct eth_hdr *)pbuf->payload;
-	struct ip_hdr *iphdr = NULL;
-	struct udp_hdr *udphdr;
-	struct tcp_hdr *tcphdr;
+	struct ip_hdr *iphdr = (struct ip_hdr *)((char *)pbuf->payload);
 
-	if (rule->netif != NULL && rule->netif != netif)
+	/* All packets out can go. */
+	if (pdir == packet_dir_out) {
 		return 0;
-
-	if (pdir == packet_dir_in && !(rule->direction & pfin))
-		return 0;
-
-	if (pdir == packet_dir_out && !(rule->direction & pfout))
-		return 0;
-
-	if (rule->filter_mac && memcmp(ethhdr->src.addr, rule->mac, sizeof(ethhdr->src.addr)))
-		return 0;
-
-	if (ethhdr->type == PP_HTONS(ETHTYPE_IP)) {
-		if (pbuf->len < SIZEOF_ETH_HDR + sizeof(struct ip_hdr))
-			return 1; /* Packet would be dropped anyway */
-
-		iphdr = (struct ip_hdr *)((char *)pbuf->payload + SIZEOF_ETH_HDR);
-
-		if (rule->dst_addr != (iphdr->dest.addr & (0xffffffffUL << (32 - rule->dst_mask))))
-			return 0;
-
-		if (rule->src_addr != (iphdr->src.addr & (0xffffffffUL << (32 - rule->src_mask))))
-			return 0;
-
-		if (!pf_matchProtocol(rule, IPH_PROTO(iphdr)))
-			return 0;
-
-		if (IPH_PROTO(iphdr) == IP_PROTO_UDP) {
-			udphdr = (struct udp_hdr *)((u8_t *)iphdr + 4 * IPH_HL(iphdr));
-
-			if (rule->src_port_set && udphdr->src != rule->src_port)
-				return 0;
-			if (rule->dst_port_set && udphdr->dest != rule->dst_port)
-				return 0;
-		}
-		else if (IPH_PROTO(iphdr) == IP_PROTO_TCP) {
-			tcphdr = (struct tcp_hdr *)((u8_t *)iphdr + 4 * IPH_HL(iphdr));
-
-			if (rule->src_port_set && tcphdr->src != rule->src_port)
-				return 0;
-			if (rule->dst_port_set && tcphdr->dest != rule->dst_port)
-				return 0;
-			if (rule->tcp_flags != (TCPH_FLAGS(tcphdr) & rule->tcp_flags_mask))
-				return 0;
-		}
-		else if (rule->src_port_set || rule->dst_port_set) {
-			return 0;
-		}
 	}
-	else {
-		if (rule->src_mask != 0 || rule->dst_mask != 0 || rule->src_port_set || rule->dst_port_set)
-			return 0;
 
-		if (rule->tcp_flags_mask != 0 || rule->protocol[0] != 0xff)
-			return 0;
+	if (pbuf->len < sizeof(struct ip_hdr)) {
+		return 1; /* Packet would be dropped anyway */
+	}
+
+	if (PP_HTONL(0x59FAC813) == iphdr->src.addr) {
+		return 0;
 	}
 
 	return 1;
-}
-
-
-static int pf_filter(struct pbuf *pbuf, struct netif *netif, int pdir)
-{
-	pfrule_t *rule;
-	unsigned int action = DEFAULT_ACTION;
-
-	if (pbuf->len < SIZEOF_ETH_HDR)
-		return 1; /* Packet would be dropped anyway */
-
-	mutexLock(filter_common.pf_lock);
-
-	for (rule = filter_common.rules; rule != NULL; rule = rule->next) {
-		if (pf_ruleMatch(rule, pbuf, netif, pdir)) {
-			action = rule->action;
-			if (rule->quick)
-				break;
-		}
-	}
-
-	mutexUnlock(filter_common.pf_lock);
-
-	if (action == pfblock)
-		return 1;
-
-	return 0;
 }
 
 

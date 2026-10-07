@@ -25,6 +25,8 @@
 #define LWIP_HOOK_ETH_INPUT(pbuf, input_netif) pf_filterIn(pbuf, input_netif)
 #endif
 
+#define LWIP_HOOK_IP4_INPUT(pbuf, input_netif) pf_filterIn(pbuf, input_netif)
+
 #if LWIP_NETPACKET
 #define LWIP_HOOK_NETPACKET_NEW(conn, proto)                       netpacket_new(conn, proto)
 #define LWIP_HOOK_NETPACKET_REMOVE(pcb)                            netpacket_remove(pcb)
