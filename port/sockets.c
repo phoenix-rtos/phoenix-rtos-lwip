@@ -957,12 +957,10 @@ static int do_getnameinfo(const struct sockaddr *sa, socklen_t addrlen, char *ho
 		if (host != NULL) {
 			snprintf(host, hostsz, "%u.%u.%u.%u", (unsigned char)sa->sa_data[2], (unsigned char)sa->sa_data[3],
 				(unsigned char)sa->sa_data[4], (unsigned char)sa->sa_data[5]);
-			host[hostsz - 1] = '\0';
 		}
 
 		if (serv != NULL) {
 			snprintf(serv, servsz, "%u", ntohs(sa_in->sin_port));
-			serv[servsz - 1] = '\0';
 		}
 
 		return 0;
