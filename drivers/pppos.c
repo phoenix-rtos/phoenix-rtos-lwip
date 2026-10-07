@@ -606,6 +606,11 @@ static void pppos_mainLoop(void* _state)
 				goto fail;
 			}
 
+			if (strncmp(*at_cmd, "AT+CPIN=", 8) == 0) {
+				log_info("additional 5 sec wait for CPIN to register");
+				sleep(5);
+			}
+
 			at_cmd += 1;
 		}
 
