@@ -100,7 +100,7 @@ typedef struct
 #define COL_YELLOW  "\033[1;33m"
 #define COL_NORMAL  "\033[0m"
 
-#if 0
+#if 1
 /* clang-format off */
 #define log_debug(fmt, ...)     do { if (1) pppos_printf(fmt, ##__VA_ARGS__); } while (0)
 #define log_at(fmt, ...)     	do { if (1) pppos_printf(COL_CYAN fmt COL_NORMAL, ##__VA_ARGS__); } while (0)
