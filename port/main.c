@@ -82,6 +82,7 @@ int main(int argc, char **argv)
 	void register_driver_rtl(void);
 	void register_driver_enet(void);
 	void register_driver_greth(void);
+	void register_driver_stm32eth(void);
 	void register_driver_pppos(void);
 	void register_driver_pppou(void);
 	void register_driver_tun(void);
@@ -98,6 +99,9 @@ int main(int argc, char **argv)
 #endif
 #ifdef HAVE_DRIVER_greth
 	register_driver_greth();
+#endif
+#ifdef HAVE_DRIVER_stm32eth
+	register_driver_stm32eth();
 #endif
 #ifdef HAVE_DRIVER_pppos
 	register_driver_pppos();

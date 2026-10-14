@@ -50,7 +50,7 @@
 #include <board_config.h>
 
 
-#define ETH_DEBUG  1
+#define ETH_DEBUG  0
 #define MDIO_DEBUG 0
 
 #define ETH_ENABLE_FLOW_CONTROL  true
