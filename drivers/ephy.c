@@ -137,6 +137,23 @@ enum {
 	EPHY_88E1111_13_ISR,          /* Interrupt Status */
 };
 
+/* LAN8742A-specific registers (source: STMicroelectronics stm32-lan8742 BSP, lan8742.h) */
+enum {
+	EPHY_LAN8742_12_SMR = 0x12,  /* Special Modes */
+	EPHY_LAN8742_1D_ISFR = 0x1D, /* Interrupt Source Flag */
+	EPHY_LAN8742_1E_IMR,         /* Interrupt Mask */
+	EPHY_LAN8742_1F_PHYSCSR,     /* PHY Special Control/Status */
+};
+
+#define EPHY_LAN8742_INT_4_LINK_DOWN        (1U << 4)
+#define EPHY_LAN8742_INT_6_AUTONEG_COMPLETE (1U << 6)
+
+#define EPHY_LAN8742_PHYSCSR_SPEED_MASK 0x001CU
+#define EPHY_LAN8742_PHYSCSR_10HD       0x0004U
+#define EPHY_LAN8742_PHYSCSR_10FD       0x0014U
+#define EPHY_LAN8742_PHYSCSR_100HD      0x0008U
+#define EPHY_LAN8742_PHYSCSR_100FD      0x0018U
+
 
 #define ephy_printf(phy, fmt, ...) printf("lwip: ephy%u.%u: " fmt "\n", phy->bus, phy->addr, ##__VA_ARGS__)
 
@@ -293,6 +310,11 @@ static void ephy_setLinkState(const eth_phy_state_t *phy)
 			ephy_printf(phy, "link is %s %uMbps/%s (ctl %04x, status %04x, adv %04x, lpa %04x, pctl %04x,%04x)",
 					linkup ? "UP  " : "DOWN", speed, full_duplex ? "Full" : "Half", bctl, bstat, adv, lpa, pc1, pc2);
 			break;
+		case ephy_lan8742a:
+			physr = ephy_regRead(phy, EPHY_LAN8742_1F_PHYSCSR);
+			ephy_printf(phy, "link is %s %uMbps/%s (ctl %04x, status %04x, adv %04x, lpa %04x, physcsr %04x)",
+					(linkup != 0) ? "UP  " : "DOWN", speed, (full_duplex != 0) ? "Full" : "Half", bctl, bstat, adv, lpa, physr);
+			break;
 		default:
 			/* unreachable */
 			break;
@@ -435,6 +457,43 @@ static inline int ephy_88e1111_linkSpeed(const eth_phy_state_t *phy, int *full_d
 }
 
 
+static inline int ephy_lan8742a_linkSpeed(const eth_phy_state_t *phy, int *full_duplex)
+{
+	/* BMSR link status is latched low - read twice to get the current state */
+	uint16_t bmsr = ephy_regRead(phy, EPHY_COMMON_01_BMSR);
+	bmsr = ephy_regRead(phy, EPHY_COMMON_01_BMSR);
+	if ((bmsr & (1U << 2)) == 0) {
+		return 0;
+	}
+
+	uint16_t physcsr = ephy_regRead(phy, EPHY_LAN8742_1F_PHYSCSR);
+	switch (physcsr & EPHY_LAN8742_PHYSCSR_SPEED_MASK) {
+		case EPHY_LAN8742_PHYSCSR_10HD:
+			if (full_duplex != NULL) {
+				*full_duplex = 0;
+			}
+			return 10;
+		case EPHY_LAN8742_PHYSCSR_10FD:
+			if (full_duplex != NULL) {
+				*full_duplex = 1;
+			}
+			return 10;
+		case EPHY_LAN8742_PHYSCSR_100HD:
+			if (full_duplex != NULL) {
+				*full_duplex = 0;
+			}
+			return 100;
+		case EPHY_LAN8742_PHYSCSR_100FD:
+			if (full_duplex != NULL) {
+				*full_duplex = 1;
+			}
+			return 100;
+		default:
+			return 0;
+	}
+}
+
+
 int ephy_linkSpeed(const eth_phy_state_t *phy, int *full_duplex)
 {
 	switch (phy->model) {
@@ -452,6 +511,8 @@ int ephy_linkSpeed(const eth_phy_state_t *phy, int *full_duplex)
 			return ephy_rtl8211fdi_linkSpeed(phy, full_duplex);
 		case ephy_88e1111:
 			return ephy_88e1111_linkSpeed(phy, full_duplex);
+		case ephy_lan8742a:
+			return ephy_lan8742a_linkSpeed(phy, full_duplex);
 		default:
 			/* unreachable */
 			return 0;
@@ -466,6 +527,7 @@ static inline uint16_t ephy_bmcrMaxSpeedMask(const eth_phy_state_t *phy)
 		case ephy_ksz8081rnb:
 		case ephy_ksz8081rnd:
 		case ephy_rtl8201fi:
+		case ephy_lan8742a:
 			return 1U << 13;
 		case ephy_rtl8211fdi:
 			return 1U << 6;
@@ -594,6 +656,9 @@ static __attribute__((unused)) char *ephy_parsePhyModel(eth_phy_state_t *phy, ch
 	}
 	else if (strcmp(cfg, "88e1111") == 0) {
 		phy->model = ephy_88e1111;
+	}
+	else if (strcmp(cfg, "lan8742a") == 0) {
+		phy->model = ephy_lan8742a;
 	}
 	else {
 		printf("lwip: ephy: unsupported PHY model: \"%s\"\n", cfg);
@@ -896,6 +961,15 @@ int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb
 			phy->reset_hold_time_us = 10 * 1000 /* 10ms */;
 			phy->reset_release_time_us = 3 * 30 * 1000 /* 90ms */;
 			break;
+		case ephy_lan8742a:
+			/*
+			 * LAN8742A datasheet (Microchip DS00001989), section "Resets":
+			 * hardware reset - nRST asserted for min. 100 us (power-on nRST timing, T_rstia),
+			 * software reset - BMCR.15 self-clears within 0.5 s (IEEE 802.3 clause 22.2.4.1.1).
+			 */
+			phy->reset_hold_time_us = 100 /* 100us */;
+			phy->reset_release_time_us = 500 * 1000 /* 500ms */;
+			break;
 		default:
 			/* unreachable */
 			break;
@@ -957,6 +1031,10 @@ int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb
 			phy->irq.reg = EPHY_88E1111_13_ISR;
 			phy->irq.mask = 0x0400;
 			break;
+		case ephy_lan8742a:
+			phy->irq.reg = EPHY_LAN8742_1D_ISFR;
+			phy->irq.mask = EPHY_LAN8742_INT_4_LINK_DOWN | EPHY_LAN8742_INT_6_AUTONEG_COMPLETE;
+			break;
 		default:
 			/* unreachable */
 			break;
@@ -1002,6 +1080,9 @@ int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb
 			break;
 		case ephy_88e1111:
 			ephy_regWrite(phy, EPHY_88E1111_12_IER, (1U << 10));
+			break;
+		case ephy_lan8742a:
+			ephy_regWrite(phy, EPHY_LAN8742_1E_IMR, EPHY_LAN8742_INT_4_LINK_DOWN | EPHY_LAN8742_INT_6_AUTONEG_COMPLETE);
 			break;
 		default:
 			/* unreachable */
