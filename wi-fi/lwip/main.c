@@ -91,7 +91,7 @@ struct wifi_device {
 	} key;
 
 
-	bool busy;
+	pid_t client;
 	int len;
 	char buf[192];
 	cy_lwip_nw_interface_t iface;
@@ -134,7 +134,7 @@ static struct {
 	};
 
 	struct {
-		bool busy;
+		pid_t client;
 		uint32_t port;
 		int len;
 		char buf[16];
@@ -639,13 +639,13 @@ static int wifi_sta_get_connected(whd_ssid_t *ssid)
 }
 
 
-static int wifi_dev_open(id_t id, int flags)
+static int wifi_dev_open(id_t id, pid_t client, int flags)
 {
 	char *buf;
 	size_t size;
 	bool overflow = false;
 
-	if (wifi_common.dev[id].busy) {
+	if (wifi_common.dev[id].client != 0) {
 		return -EBUSY;
 	}
 
@@ -691,26 +691,30 @@ static int wifi_dev_open(id_t id, int flags)
 		return -EFBIG;
 	}
 
-	wifi_common.dev[id].busy = true;
+	wifi_common.dev[id].client = client;
 	wifi_common.dev[id].len = buf - wifi_common.dev[id].buf;
 
 	return 0;
 }
 
 
-static int wifi_dev_close(id_t id)
+static int wifi_dev_close(id_t id, pid_t client)
 {
-	if (!wifi_common.dev[id].busy) {
+	if (wifi_common.dev[id].client == 0 || (wifi_common.dev[id].client != client && client != 1)) {
 		return -EBADF;
 	}
-	wifi_common.dev[id].busy = false;
+	wifi_common.dev[id].client = 0;
 	return 0;
 }
 
 
-static int wifi_dev_read(id_t id, char *data, size_t size, off_t offset)
+static int wifi_dev_read(id_t id, pid_t client, char *data, size_t size, off_t offset)
 {
 	int cnt;
+
+	if (wifi_common.dev[id].client == 0 || wifi_common.dev[id].client != client) {
+		return -EBADF;
+	}
 
 	if (offset > wifi_common.dev[id].len) {
 		return -ERANGE;
@@ -744,9 +748,14 @@ static int wifi_set_addr(ip_addr_t *addr, const char *data, size_t size)
 }
 
 
-static int wifi_dev_write(id_t id, const char *data, size_t size)
+static int wifi_dev_write(id_t id, pid_t client, const char *data, size_t size)
 {
 	const size_t inputSize = size;
+
+	if (wifi_common.dev[id].client == 0 || wifi_common.dev[id].client != client) {
+		return -EBADF;
+	}
+
 	data = trim(data, &size);
 
 	if (size >= CONST_STRLEN("ssid ") && strncmp("ssid ", data, 5) == 0) {
@@ -788,6 +797,24 @@ static int wifi_dev_write(id_t id, const char *data, size_t size)
 }
 
 
+static int wifi_dev_getattr(id_t id, pid_t client, int type, long long *val)
+{
+	switch (type) {
+		case atSize:
+			if (wifi_common.dev[id].client == 0 || wifi_common.dev[id].client != client) {
+				*val = 0;
+			}
+			else {
+				*val = wifi_common.dev[id].len;
+			}
+			return EOK;
+
+		default:
+			return -EINVAL;
+	}
+}
+
+
 static int wifi_dev_init(unsigned int port, id_t id, const char *path)
 {
 	oid_t wifi_oid = { port, id };
@@ -816,19 +843,23 @@ static void wifi_msg_thread(void *arg)
 
 		switch (msg.type) {
 			case mtOpen:
-				msg.o.err = wifi_dev_open(msg.oid.id, msg.i.openclose.flags);
+				msg.o.err = wifi_dev_open(msg.oid.id, msg.pid, msg.i.openclose.flags);
 				break;
 
 			case mtClose:
-				msg.o.err = wifi_dev_close(msg.oid.id);
+				msg.o.err = wifi_dev_close(msg.oid.id, msg.pid);
 				break;
 
 			case mtRead:
-				msg.o.err = wifi_dev_read(msg.oid.id, msg.o.data, msg.o.size, msg.i.io.offs);
+				msg.o.err = wifi_dev_read(msg.oid.id, msg.pid, msg.o.data, msg.o.size, msg.i.io.offs);
 				break;
 
 			case mtWrite:
-				msg.o.err = wifi_dev_write(msg.oid.id, msg.i.data, msg.i.size);
+				msg.o.err = wifi_dev_write(msg.oid.id, msg.pid, msg.i.data, msg.i.size);
+				break;
+
+			case mtGetAttr:
+				msg.o.err = wifi_dev_getattr(msg.oid.id, msg.pid, msg.i.attr.type, &msg.o.attr.val);
 				break;
 
 			default:
@@ -1092,6 +1123,7 @@ static void wifi_ctrl_thread(void *arg)
 {
 	msg_t msg;
 	msg_rid_t rid;
+	pid_t client;
 
 	int err = mutexCreate(&wifi_common.ctrl.lock);
 	if (err < 0) {
@@ -1127,9 +1159,11 @@ static void wifi_ctrl_thread(void *arg)
 			continue;
 		}
 
+		client = msg.pid;
+
 		switch (msg.type) {
 			case mtOpen: {
-				if (wifi_common.ctrl.busy) {
+				if (wifi_common.ctrl.client != 0) {
 					msg.o.err = -EBUSY;
 					break;
 				}
@@ -1140,31 +1174,44 @@ static void wifi_ctrl_thread(void *arg)
 
 				int bytes = snprintf(wifi_common.ctrl.buf, sizeof(wifi_common.ctrl.buf), "running=%d\n", running ? 1 : 0);
 				wifi_common.ctrl.len = bytes;
-				wifi_common.ctrl.busy = true;
+				wifi_common.ctrl.client = client;
 				msg.o.err = EOK;
 				break;
 			}
 
 			case mtClose:
-				wifi_common.ctrl.busy = false;
+				if (wifi_common.ctrl.client == 0 || (wifi_common.ctrl.client != client && client != 1)) {
+					msg.o.err = -EBADF;
+					break;
+				}
+				wifi_common.ctrl.client = 0;
 				msg.o.err = EOK;
 				break;
 
 			case mtRead: {
+				if (wifi_common.ctrl.client == 0 || wifi_common.ctrl.client != client) {
+					msg.o.err = -EBADF;
+					break;
+				}
+
 				off_t offset = msg.i.io.offs;
-				if (offset > wifi_common.ctrl.len) {
+				if (offset < 0 || offset > wifi_common.ctrl.len) {
 					msg.o.err = -ERANGE;
 					break;
 				}
 
 				int cnt = min(msg.o.size, wifi_common.ctrl.len - offset);
-
 				memcpy(msg.o.data, wifi_common.ctrl.buf + offset, cnt);
 				msg.o.err = cnt;
 				break;
 			}
 
 			case mtWrite: {
+				if (wifi_common.ctrl.client == 0 || wifi_common.ctrl.client != client) {
+					msg.o.err = -EBADF;
+					break;
+				}
+
 				const char *data = msg.i.data;
 				size_t size = msg.i.size;
 
@@ -1182,6 +1229,25 @@ static void wifi_ctrl_thread(void *arg)
 					break;
 				}
 				msg.o.err = msg.i.size;
+				break;
+			}
+
+			case mtGetAttr: {
+				switch (msg.i.attr.type) {
+					case atSize:
+						if (wifi_common.ctrl.client == 0 || wifi_common.ctrl.client != client) {
+							msg.o.attr.val = 0;
+						}
+						else {
+							msg.o.attr.val = wifi_common.ctrl.len;
+						}
+						msg.o.err = EOK;
+						break;
+
+					default:
+						msg.o.err = -EINVAL;
+						break;
+				}
 				break;
 			}
 
