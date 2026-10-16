@@ -175,6 +175,8 @@ static int wait_for_cmd(uint32_t flags, uint32_t wait_us, uint32_t max_cnt)
 				cy_log_msg(CYLF_SDIO, CY_LOG_ERR, "SDIO cmd error (Command CRC Error)\n");
 			if (val & (1 << 16)) /* CTOE=1 */
 				cy_log_msg(CYLF_SDIO, CY_LOG_ERR, "SDIO cmd error (Command Timeout Error)\n");
+			/* error bits are W1C and survive RSTC/RSTD - clear them (except CINT) or every next cmd fails */
+			*(sdio_common.base + int_status) = val & ~(1U << 8);
 			return -1;
 		}
 
