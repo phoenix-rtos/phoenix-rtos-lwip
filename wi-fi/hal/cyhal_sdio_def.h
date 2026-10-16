@@ -39,105 +39,105 @@
 
 /* Pads of the Wi-Fi uSDHC; set *_ISEL to -1 for pads without input select (e.g. USDHC1 on SD1 pads) */
 
-#ifndef CONFIG_USDHC2_CLK_MUX_PAD
-#define CONFIG_USDHC2_CLK_MUX_PAD mux_csi_vsync
+#ifndef CONFIG_USDHC_CLK_MUX_PAD
+#define CONFIG_USDHC_CLK_MUX_PAD mux_csi_vsync
 #endif
 
-#ifndef CONFIG_USDHC2_CLK_PAD
-#define CONFIG_USDHC2_CLK_PAD pad_csi_vsync
+#ifndef CONFIG_USDHC_CLK_PAD
+#define CONFIG_USDHC_CLK_PAD pad_csi_vsync
 #endif
 
-#ifndef CONFIG_USDHC2_CLK_MUX_VAL
-#define CONFIG_USDHC2_CLK_MUX_VAL 1
+#ifndef CONFIG_USDHC_CLK_MUX_VAL
+#define CONFIG_USDHC_CLK_MUX_VAL 1
 #endif
 
-#ifndef CONFIG_USDHC2_CLK_ISEL
-#define CONFIG_USDHC2_CLK_ISEL 0
-#endif
-
-
-#ifndef CONFIG_USDHC2_CMD_MUX_PAD
-#define CONFIG_USDHC2_CMD_MUX_PAD mux_csi_hsync
-#endif
-
-#ifndef CONFIG_USDHC2_CMD_PAD
-#define CONFIG_USDHC2_CMD_PAD pad_csi_hsync
-#endif
-
-#ifndef CONFIG_USDHC2_CMD_MUX_VAL
-#define CONFIG_USDHC2_CMD_MUX_VAL 1
-#endif
-
-#ifndef CONFIG_USDHC2_CMD_ISEL
-#define CONFIG_USDHC2_CMD_ISEL 0
+#ifndef CONFIG_USDHC_CLK_ISEL
+#define CONFIG_USDHC_CLK_ISEL 0
 #endif
 
 
-#ifndef CONFIG_USDHC2_D0_MUX_PAD
-#define CONFIG_USDHC2_D0_MUX_PAD mux_csi_d0
+#ifndef CONFIG_USDHC_CMD_MUX_PAD
+#define CONFIG_USDHC_CMD_MUX_PAD mux_csi_hsync
 #endif
 
-#ifndef CONFIG_USDHC2_D0_PAD
-#define CONFIG_USDHC2_D0_PAD pad_csi_d0
+#ifndef CONFIG_USDHC_CMD_PAD
+#define CONFIG_USDHC_CMD_PAD pad_csi_hsync
 #endif
 
-#ifndef CONFIG_USDHC2_D0_MUX_VAL
-#define CONFIG_USDHC2_D0_MUX_VAL 1
+#ifndef CONFIG_USDHC_CMD_MUX_VAL
+#define CONFIG_USDHC_CMD_MUX_VAL 1
 #endif
 
-#ifndef CONFIG_USDHC2_D0_ISEL
-#define CONFIG_USDHC2_D0_ISEL 0
-#endif
-
-
-#ifndef CONFIG_USDHC2_D1_MUX_PAD
-#define CONFIG_USDHC2_D1_MUX_PAD mux_csi_d1
-#endif
-
-#ifndef CONFIG_USDHC2_D1_PAD
-#define CONFIG_USDHC2_D1_PAD pad_csi_d1
-#endif
-
-#ifndef CONFIG_USDHC2_D1_MUX_VAL
-#define CONFIG_USDHC2_D1_MUX_VAL 1
-#endif
-
-#ifndef CONFIG_USDHC2_D1_ISEL
-#define CONFIG_USDHC2_D1_ISEL 0
+#ifndef CONFIG_USDHC_CMD_ISEL
+#define CONFIG_USDHC_CMD_ISEL 0
 #endif
 
 
-#ifndef CONFIG_USDHC2_D2_MUX_PAD
-#define CONFIG_USDHC2_D2_MUX_PAD mux_csi_d2
+#ifndef CONFIG_USDHC_D0_MUX_PAD
+#define CONFIG_USDHC_D0_MUX_PAD mux_csi_d0
 #endif
 
-#ifndef CONFIG_USDHC2_D2_PAD
-#define CONFIG_USDHC2_D2_PAD pad_csi_d2
+#ifndef CONFIG_USDHC_D0_PAD
+#define CONFIG_USDHC_D0_PAD pad_csi_d0
 #endif
 
-#ifndef CONFIG_USDHC2_D2_MUX_VAL
-#define CONFIG_USDHC2_D2_MUX_VAL 1
+#ifndef CONFIG_USDHC_D0_MUX_VAL
+#define CONFIG_USDHC_D0_MUX_VAL 1
 #endif
 
-#ifndef CONFIG_USDHC2_D2_ISEL
-#define CONFIG_USDHC2_D2_ISEL 2
+#ifndef CONFIG_USDHC_D0_ISEL
+#define CONFIG_USDHC_D0_ISEL 0
 #endif
 
 
-#ifndef CONFIG_USDHC2_D3_MUX_PAD
-#define CONFIG_USDHC2_D3_MUX_PAD mux_csi_d3
+#ifndef CONFIG_USDHC_D1_MUX_PAD
+#define CONFIG_USDHC_D1_MUX_PAD mux_csi_d1
 #endif
 
-#ifndef CONFIG_USDHC2_D3_PAD
-#define CONFIG_USDHC2_D3_PAD pad_csi_d3
+#ifndef CONFIG_USDHC_D1_PAD
+#define CONFIG_USDHC_D1_PAD pad_csi_d1
 #endif
 
-#ifndef CONFIG_USDHC2_D3_MUX_VAL
-#define CONFIG_USDHC2_D3_MUX_VAL 1
+#ifndef CONFIG_USDHC_D1_MUX_VAL
+#define CONFIG_USDHC_D1_MUX_VAL 1
 #endif
 
-#ifndef CONFIG_USDHC2_D3_ISEL
-#define CONFIG_USDHC2_D3_ISEL 0
+#ifndef CONFIG_USDHC_D1_ISEL
+#define CONFIG_USDHC_D1_ISEL 0
+#endif
+
+
+#ifndef CONFIG_USDHC_D2_MUX_PAD
+#define CONFIG_USDHC_D2_MUX_PAD mux_csi_d2
+#endif
+
+#ifndef CONFIG_USDHC_D2_PAD
+#define CONFIG_USDHC_D2_PAD pad_csi_d2
+#endif
+
+#ifndef CONFIG_USDHC_D2_MUX_VAL
+#define CONFIG_USDHC_D2_MUX_VAL 1
+#endif
+
+#ifndef CONFIG_USDHC_D2_ISEL
+#define CONFIG_USDHC_D2_ISEL 2
+#endif
+
+
+#ifndef CONFIG_USDHC_D3_MUX_PAD
+#define CONFIG_USDHC_D3_MUX_PAD mux_csi_d3
+#endif
+
+#ifndef CONFIG_USDHC_D3_PAD
+#define CONFIG_USDHC_D3_PAD pad_csi_d3
+#endif
+
+#ifndef CONFIG_USDHC_D3_MUX_VAL
+#define CONFIG_USDHC_D3_MUX_VAL 1
+#endif
+
+#ifndef CONFIG_USDHC_D3_ISEL
+#define CONFIG_USDHC_D3_ISEL 0
 #endif
 
 
