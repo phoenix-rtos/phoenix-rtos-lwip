@@ -24,6 +24,12 @@
 
 #define EPHY_DEBUG 0
 
+/* adv: no-next-page, no-rem-fault, no-pause, no-T4, 100M/10M-FD & 10M-HD, 802.3 (differs from the reset default) */
+#define EPHY_ANAR_ADV  ((1U << 8) | (1U << 6) | (1U << 5) | 1U)
+#define EPHY_ANAR_MASK 0x0fffU /* without NP/ACK/RF bits, which some PHYs manage themselves */
+
+#define EPHY_CHECK_PERIOD_US (1000 * 1000)
+
 
 /* EPHY common registers */
 enum {
@@ -489,8 +495,7 @@ static void ephy_restartAN(const eth_phy_state_t *phy)
 		/* adv: 1000M-FD */
 		ephy_regWrite(phy, EPHY_COMMON_09_GBCR, (1U << 9));
 	}
-	/* adv: no-next-page, no-rem-fault, no-pause, no-T4, 100M/10M-FD & 10M-HD, 802.3 */
-	ephy_regWrite(phy, EPHY_COMMON_04_ANAR, (1U << 8) | (1U << 6) | (1U << 5) | 1U);
+	ephy_regWrite(phy, EPHY_COMMON_04_ANAR, EPHY_ANAR_ADV);
 	ephy_regWrite(phy, EPHY_COMMON_00_BMCR, bmcr);
 }
 
@@ -506,6 +511,53 @@ void ephy_macInterrupt(const eth_phy_state_t *phy)
 }
 
 
+static int ephy_configure(eth_phy_state_t *phy);
+
+
+/* Returns true if the PHY answers on MDIO */
+static bool ephy_isResponding(const eth_phy_state_t *phy)
+{
+	uint16_t id = ephy_regRead(phy, EPHY_COMMON_02_PHYID1);
+
+	return (id != 0U) && (id != 0xffffU);
+}
+
+
+/* Returns false if the PHY is back at its reset defaults (e.g. after a power loss) */
+static bool ephy_isConfigured(const eth_phy_state_t *phy)
+{
+	return (ephy_regRead(phy, EPHY_COMMON_04_ANAR) & EPHY_ANAR_MASK) == EPHY_ANAR_ADV;
+}
+
+
+/* Detects PHY power loss (it raises no IRQ) and restores the PHY config once it's back */
+static void ephy_checkPower(eth_phy_state_t *phy)
+{
+	if (!ephy_isResponding(phy)) {
+		if (phy->absent == 0U) {
+			phy->absent = 1U;
+			ephy_printf(phy, "PHY not responding");
+			if (phy->link_state_callback != NULL) {
+				phy->link_state_callback(phy->link_state_callback_arg, 0);
+			}
+		}
+	}
+	else if (!ephy_isConfigured(phy)) {
+		ephy_printf(phy, "%s, reconfiguring", (phy->absent != 0U) ? "PHY is back" : "PHY reset detected");
+		phy->absent = 0U;
+		ephy_reset(phy);
+		/* on failure ANAR stays at the reset default, so it's retried on the next check */
+		(void)ephy_configure(phy);
+	}
+	else if (phy->absent != 0U) {
+		/* MDIO dropout without a PHY reset: only the link reported as down needs restoring */
+		ephy_printf(phy, "PHY is back");
+		phy->absent = 0U;
+		ephy_setLinkState(phy);
+	}
+}
+
+
 static void ephy_linkThread(void *arg)
 {
 	eth_phy_state_t *phy = arg;
@@ -513,7 +565,7 @@ static void ephy_linkThread(void *arg)
 	int err;
 
 	for (;;) {
-		err = net_gpioWait(&phy->irq_gpio, 1, 0);
+		err = net_gpioWait(&phy->irq_gpio, 1, EPHY_CHECK_PERIOD_US);
 		// FIXME: thread exit
 
 		if (err == 0) {
@@ -521,6 +573,9 @@ static void ephy_linkThread(void *arg)
 			if ((stat & phy->irq.mask) != 0) {
 				ephy_setLinkState(phy);
 			}
+		}
+		else if (err == -ETIME) {
+			ephy_checkPower(phy);
 		}
 	}
 
@@ -1017,7 +1072,10 @@ int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb
 		return err;
 	}
 
-	/* No IRQ is lost before the thread starts: INTRP is level-triggered and stays asserted until the status is read */
+	/*
+	 * Started last: the thread treats an unconfigured ANAR as a PHY reset, so it must not race with the setup above.
+	 * No IRQ is lost meanwhile: INTRP is level-triggered and stays asserted until the thread reads the status.
+	 */
 	if (phy->irq.type == ephy_gpio_irq) {
 		if (!net_gpioValid(&phy->irq_gpio)) {
 			ephy_printf(phy, "WARN: irq_gpio not valid, could not start PHY IRQ thread");
