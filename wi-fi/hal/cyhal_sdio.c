@@ -27,9 +27,6 @@
 #include "cyhal_sdio_def.h"
 
 
-#define USDHC2_ADDR 0x2194000
-#define USDHC2_IRQ  (32 + 23)
-
 #define DMA_BUFFER_SIZE 2048  // should be large enough to hold whole Wi-Fi frame
 
 enum {
@@ -65,13 +62,20 @@ enum {
 };
 
 
+/* The input select (daisy) registers exist only for USDHC2, the SDIO pads of other controllers have none */
+#if CONFIG_WIFI_USDHC_ADDR != 0x2194000
+#if (CONFIG_USDHC2_CLK_ISEL >= 0) || (CONFIG_USDHC2_CMD_ISEL >= 0) || (CONFIG_USDHC2_D0_ISEL >= 0) || (CONFIG_USDHC2_D1_ISEL >= 0) || (CONFIG_USDHC2_D2_ISEL >= 0) || (CONFIG_USDHC2_D3_ISEL >= 0)
+#error "CONFIG_USDHC2_*_ISEL must be -1 when Wi-Fi is not on USDHC2"
+#endif
+#endif
+
 static const struct cyhal_sdio_pad {
 	int isel;
 	int iomux;
 	int iopad;
 	char mux_setting;
 	bool do_pull_up;
-	char daisy;
+	int daisy;
 } cyhal_sdio_pads[] = {
 	{ pctl_isel_usdhc2_clk, PCTL(CONFIG_USDHC2_CLK_MUX_PAD), PCTL(CONFIG_USDHC2_CLK_PAD), CONFIG_USDHC2_CLK_MUX_VAL, false, CONFIG_USDHC2_CLK_ISEL },
 	{ pctl_isel_usdhc2_cmd, PCTL(CONFIG_USDHC2_CMD_MUX_PAD), PCTL(CONFIG_USDHC2_CMD_PAD), CONFIG_USDHC2_CMD_MUX_VAL, true, CONFIG_USDHC2_CMD_ISEL },
@@ -363,10 +367,12 @@ static int cyhal_sdio_pad_init(void)
 			return ret;
 		}
 
-		ret = cyhal_utils_set_iosel(p->isel, p->daisy);
-		if (ret < 0) {
-			cy_log_msg(CYLF_SDIO, CY_LOG_ERR, "can't configure SDIO pins iosel\n");
-			return ret;
+		if (p->daisy >= 0) {
+			ret = cyhal_utils_set_iosel(p->isel, (char)p->daisy);
+			if (ret < 0) {
+				cy_log_msg(CYLF_SDIO, CY_LOG_ERR, "can't configure SDIO pins iosel\n");
+				return ret;
+			}
 		}
 	}
 
@@ -384,7 +390,7 @@ cy_rslt_t cyhal_sdio_init(cyhal_sdio_t *obj)
 	memset(&sdio_common, 0, sizeof(sdio_common));
 
 	do {
-		void *ptr = mmap(NULL, _PAGE_SIZE, PROT_WRITE | PROT_READ, MAP_DEVICE | MAP_PHYSMEM | MAP_ANONYMOUS, -1, USDHC2_ADDR);
+		void *ptr = mmap(NULL, _PAGE_SIZE, PROT_WRITE | PROT_READ, MAP_DEVICE | MAP_PHYSMEM | MAP_ANONYMOUS, -1, CONFIG_WIFI_USDHC_ADDR);
 		if (ptr == MAP_FAILED) {
 			cy_log_msg(CYLF_SDIO, CY_LOG_ERR, "failed to mmap SDIO registers\n");
 			break;
@@ -416,8 +422,8 @@ cy_rslt_t cyhal_sdio_init(cyhal_sdio_t *obj)
 			break;
 		}
 
-		/* enable USDHC2_CLK */
-		if (cyhal_utils_set_devclk(pctl_clk_usdhc2, 3) < 0) {
+		/* enable uSDHC clock */
+		if (cyhal_utils_set_devclk(PCTL(CONFIG_WIFI_USDHC_CLK), 3) < 0) {
 			cy_log_msg(CYLF_SDIO, CY_LOG_ERR, "can't enable SDIO clock\n");
 			break;
 		}
@@ -796,7 +802,7 @@ void cyhal_sdio_register_irq(cyhal_sdio_t *obj, cyhal_sdio_irq_handler_t handler
 	sdio_common.irq_handler = handler;
 	sdio_common.irq_handler_arg = handler_arg;
 
-	interrupt(USDHC2_IRQ, sdio_irq_handler, NULL, sdio_common.irq_cond, &sdio_common.irq_handle);
+	interrupt(CONFIG_WIFI_USDHC_IRQ, sdio_irq_handler, NULL, sdio_common.irq_cond, &sdio_common.irq_handle);
 }
 
 
