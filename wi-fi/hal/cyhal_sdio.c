@@ -524,12 +524,8 @@ cy_rslt_t cyhal_sdio_configure(cyhal_sdio_t *obj, const cyhal_sdio_cfg_t *config
 		*(sdio_common.base + sys_ctrl) = (0x4 << 16) | (0x4 << 8) | 0xf; /* DTOCV=0x4 SDCLKFS=0x4 DVS=0x0 */
 	}
 
-#if 0
-    /* FRC_SDCLK_ON=1 */
-    val = *(sdio_common.base + vend_spec);
-    val |= 1 << 8;
-    *(sdio_common.base + vend_spec) = val;
-#endif
+	/* FRC_SDCLK_ON=1: the card signals interrupts on DAT1 only while SDCLK runs, a gated idle clock loses them */
+	*(sdio_common.base + vend_spec) |= 1 << 8;
 
 #if 1
 	/* INITA=1 */
