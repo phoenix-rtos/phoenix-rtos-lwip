@@ -14,6 +14,21 @@
 #ifndef _CYHAL_SDIO_DEF_H_
 #define _CYHAL_SDIO_DEF_H_
 
+/* uSDHC controller of the Wi-Fi module (default: USDHC2) */
+#ifndef CONFIG_WIFI_USDHC_ADDR
+#define CONFIG_WIFI_USDHC_ADDR 0x2194000
+#endif
+
+#ifndef CONFIG_WIFI_USDHC_IRQ
+#define CONFIG_WIFI_USDHC_IRQ (32 + 23)
+#endif
+
+#ifndef CONFIG_WIFI_USDHC_CLK
+#define CONFIG_WIFI_USDHC_CLK clk_usdhc2
+#endif
+
+/* Pads of the Wi-Fi uSDHC; set *_ISEL to -1 for pads without input select (e.g. USDHC1 on SD1 pads) */
+
 #ifndef CONFIG_USDHC2_CLK_MUX_PAD
 #define CONFIG_USDHC2_CLK_MUX_PAD mux_csi_vsync
 #endif
