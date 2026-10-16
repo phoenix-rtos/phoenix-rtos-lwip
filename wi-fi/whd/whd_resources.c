@@ -47,9 +47,15 @@
 #define NVRAM_FILE_EXTENSION ".nvram_blob"
 #endif
 
+/* CYW5557x secure bootloader accepts only signed TRX images */
+#ifndef TRX_FIRMWARE_FILE_EXTENSION
+#define TRX_FIRMWARE_FILE_EXTENSION ".trxse"
+#endif
+
 #define AW_NM512_FILENAME          "43439A0"
 #define STERLING_LWB_FILENAME      "brcmfmac43430-sdio-prod"
 #define STERLING_LWB5PLUS_FILENAME "4373A0"
+#define AW_XH327_FILENAME          "55572A1"
 
 
 static uint8_t resource_buf[BLOCK_SIZE];
@@ -121,6 +127,26 @@ static const struct chip_lookup {
 				.mem_size = 0,
 			},
 		}
+	},
+	{
+		.chip_id = 55560, /* CYW55572 */
+		.rsrc = {
+			[WHD_RESOURCE_WLAN_FIRMWARE] = {
+				.path = WIFI_FIRMWARE_FILES_DIRECTORY_PATH "/" AW_XH327_FILENAME TRX_FIRMWARE_FILE_EXTENSION,
+				.mem_image = NULL,
+				.mem_size = 0,
+			},
+			[WHD_RESOURCE_WLAN_NVRAM] = {
+				.path = WIFI_FIRMWARE_FILES_DIRECTORY_PATH "/" AW_XH327_FILENAME NVRAM_FILE_EXTENSION,
+				.mem_image = NULL,
+				.mem_size = 0,
+			},
+			[WHD_RESOURCE_WLAN_CLM] = {
+				.path = WIFI_FIRMWARE_FILES_DIRECTORY_PATH "/" AW_XH327_FILENAME CLM_FILE_EXTENSION,
+				.mem_image = NULL,
+				.mem_size = 0,
+			},
+		},
 	},
 };
 
