@@ -1,0 +1,21 @@
+wi-fi/hal/cyhal_sdio.c
+  s_961eda7c4468ed::t_0b0a2cddce7165 73-78
+wi-fi/hal/cyhal_sdio_def.h
+  s_961eda7c4468ed::t_66a04874eb86d3 32-33,36-37,40-41,44-45,49-50,53-54,57-58,61-62,66-67,70-71,74-75,78-79,83-84,87-88,91-92,95-96,100-101,104-105,108-109,112-113,117-118,121-122,125-126,129-130
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d88c5e2af8309e41b1c26f8da86a4edf76a1caa1",
+  "prompts": {},
+  "sessions": {
+    "s_961eda7c4468ed": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8172be12-599a-462e-8ba1-28cddf925c2a",
+        "model": "unknown"
+      },
+      "human_author": "Marek Białowąs <marek.bialowas@phoenix-rtos.com>"
+    }
+  }
+}
