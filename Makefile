@@ -44,6 +44,10 @@ include $(static-lib.mk)
 
 ifeq (${LWIP_WIFI_BUILD},yes)
 CFLAGS += -Iwi-fi/hal -Iwi-fi/lwip -Iwi-fi/whd
+# secure-boot chips (e.g. CYW5557x) need the bootloader handshake, older ones must not use it
+ifeq (${LWIP_WIFI_BLHS},yes)
+CFLAGS += -DBLHS_SUPPORT
+endif
 include wi-fi/hal/Makefile
 include wi-fi/whd/Makefile
 include wi-fi/lwip/Makefile
