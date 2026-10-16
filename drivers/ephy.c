@@ -577,6 +577,11 @@ static void ephy_linkThread(void *arg)
 		else if (err == -ETIME) {
 			ephy_checkPower(phy);
 		}
+		else {
+			/* don't spin at the highest priority - it would starve everything, the watchdog daemon included */
+			ephy_printf(phy, "IRQ GPIO wait failed: %s (%d)", strerror(-err), err);
+			usleep(EPHY_CHECK_PERIOD_US);
+		}
 	}
 
 	ephy_printf(phy, "thread finished.");
