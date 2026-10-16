@@ -32,6 +32,7 @@ typedef struct {
 	unsigned addr;
 	unsigned reset_hold_time_us;
 	unsigned reset_release_time_us;
+	uint8_t board_rev;
 
 	struct {
 		enum { ephy_gpio_irq,
