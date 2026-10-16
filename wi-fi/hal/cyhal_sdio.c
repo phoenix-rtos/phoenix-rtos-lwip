@@ -525,11 +525,11 @@ cy_rslt_t cyhal_sdio_configure(cyhal_sdio_t *obj, const cyhal_sdio_cfg_t *config
 
 	if (config->frequencyhal_hz == 50000000) {
 		/* FREQ = 400000000 / 2 / (4 * 1) = 50000000 */
-		*(sdio_common.base + sys_ctrl) = (0x2 << 8) | 0xf; /* SDCLKFS=0x2 DVS=0x0 */
+		*(sdio_common.base + sys_ctrl) = (0xe << 16) | (0x2 << 8) | 0xf; /* DTOCV=0xe SDCLKFS=0x2 DVS=0x0 */
 	}
 	else {
 		/* FREQ = 400000000 / 2 / (8 * 1) = 25000000 */
-		*(sdio_common.base + sys_ctrl) = (0x4 << 8) | 0xf; /* SDCLKFS=0x4 DVS=0x0 */
+		*(sdio_common.base + sys_ctrl) = (0xe << 16) | (0x4 << 8) | 0xf; /* DTOCV=0xe SDCLKFS=0x4 DVS=0x0 */
 	}
 
 #if 0
