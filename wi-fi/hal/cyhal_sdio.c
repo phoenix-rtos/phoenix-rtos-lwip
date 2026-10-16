@@ -523,13 +523,14 @@ cy_rslt_t cyhal_sdio_configure(cyhal_sdio_t *obj, const cyhal_sdio_cfg_t *config
 		val = *(sdio_common.base + pres_state) & (1 << 3);
 	} while (!val);
 
+	/* data timeout = SDCLK * 2^(14 + DTOCV) = 10.5 ms at both clocks, longer than wait_for_cmd() polls (~1 ms) */
 	if (config->frequencyhal_hz == 50000000) {
 		/* FREQ = 400000000 / 2 / (4 * 1) = 50000000 */
-		*(sdio_common.base + sys_ctrl) = (0x2 << 8) | 0xf; /* SDCLKFS=0x2 DVS=0x0 */
+		*(sdio_common.base + sys_ctrl) = (0x5 << 16) | (0x2 << 8) | 0xf; /* DTOCV=0x5 SDCLKFS=0x2 DVS=0x0 */
 	}
 	else {
 		/* FREQ = 400000000 / 2 / (8 * 1) = 25000000 */
-		*(sdio_common.base + sys_ctrl) = (0x4 << 8) | 0xf; /* SDCLKFS=0x4 DVS=0x0 */
+		*(sdio_common.base + sys_ctrl) = (0x4 << 16) | (0x4 << 8) | 0xf; /* DTOCV=0x4 SDCLKFS=0x4 DVS=0x0 */
 	}
 
 #if 0
