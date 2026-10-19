@@ -371,7 +371,11 @@ static void eth_macConfig(eth_state_t *state)
 
 	v = state->base[eth_macq0txfcr];
 	v &= ~(ETH_MACQ0TXFCR_PT_MASK | ETH_MACQ0TXFCR_DZPQ | ETH_MACQ0TXFCR_PLT_MASK | ETH_MACQ0TXFCR_TFE);
-	v |= ETH_ENABLE_FLOW_CONTROL ? (ETH_MACQ0TXFCR_DZPQ | ETH_MACQ0TXFCR_TFE) : 0;
+	/*
+	 * Pause time: maximum (0xffff pause quanta), zero-quanta pause enabled (DZPQ = 0) to resume the link partner early
+	 * - as HAL (ZeroQuantaPause = ENABLE) and Linux stmmac. Previously PT = 0 (pause frames with zero pause time).
+	 */
+	v |= ETH_ENABLE_FLOW_CONTROL ? (ETH_MACQ0TXFCR_TFE | ETH_MACQ0TXFCR_PT_MASK) : 0;
 	state->base[eth_macq0txfcr] = v;
 
 	eth_debug_printf(state, "MAC configured, MACCR=0x%08x", (unsigned int)state->base[eth_maccr]);
