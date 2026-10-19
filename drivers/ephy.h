@@ -56,6 +56,13 @@ int ephy_linkSpeed(const eth_phy_state_t *phy, int *full_duplex);
 /* called by the MAC driver if it handles the PHY IRQ */
 void ephy_macInterrupt(const eth_phy_state_t *phy);
 
+/*
+ * called periodically by the MAC driver if there is no usable PHY IRQ: checks the link status in BMSR
+ * and reports the link state through the callback if it differs from linkUp (the last reported state)
+ * or if the link was lost since the previous poll
+ */
+void ephy_pollLink(const eth_phy_state_t *phy, bool linkUp);
+
 /* toggle MACPHY internal loopback for test mode */
 int ephy_enableLoopback(const eth_phy_state_t *phy, bool enable);
 

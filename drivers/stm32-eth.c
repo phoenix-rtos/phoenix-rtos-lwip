@@ -202,6 +202,7 @@ typedef struct {
 	oid_t multidrvOid;
 	int mdioBus; /* MDIO bus index registered by this device, < 0 if none */
 	bool phyValid;
+	bool linkUp; /* last link state reported by ephy (written only by ephy_init() and the link thread) */
 	eth_phy_state_t phy;
 
 	atomic_uint txDropped;
@@ -544,6 +545,8 @@ static void eth_setLinkState(void *arg, int state)
 	eth_state_t *priv = netif->state;
 	int speed, duplex = 0;
 
+	priv->linkUp = (state != 0);
+
 	if (state == 0) {
 		eth_debug_printf(priv, "link down");
 		netif_set_link_down(netif);
@@ -607,7 +610,10 @@ static const char *eth_media(struct netif *netif)
 }
 
 
-/* NUCLEO-N657X0-Q has no PHY interrupt line (nINT/REFCLKO pin outputs REF_CLK) - poll the PHY */
+/*
+ * NUCLEO-N657X0-Q has no PHY interrupt line (nINT/REFCLKO pin outputs REF_CLK) - poll the PHY.
+ * NOTE: LAN8742A ISFR reports an event on every read when polled, so link changes are detected from BMSR.
+ */
 static void eth_linkThread(void *arg)
 {
 	eth_state_t *state = arg;
@@ -617,7 +623,7 @@ static void eth_linkThread(void *arg)
 		(void)condWait(state->cond, state->lock, LINK_POLL_INTERVAL_US);
 		mutexUnlock(state->lock);
 
-		ephy_macInterrupt(&state->phy);
+		ephy_pollLink(&state->phy, state->linkUp);
 
 		mutexLock(state->lock);
 	}
@@ -866,6 +872,7 @@ static int eth_netifInit(struct netif *netif, char *cfg)
 	atomic_init(&state->txDropped, 0U);
 	state->mdioBus = -1;
 	state->phyValid = false;
+	state->linkUp = false;
 
 	if (cfg == NULL) {
 		return -EINVAL;

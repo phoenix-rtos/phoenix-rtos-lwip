@@ -568,6 +568,25 @@ void ephy_macInterrupt(const eth_phy_state_t *phy)
 }
 
 
+void ephy_pollLink(const eth_phy_state_t *phy, bool linkUp)
+{
+	/* BMSR link status is latched low: the first read shows whether the link was lost since the previous read */
+	uint16_t latched = ephy_regRead(phy, EPHY_COMMON_01_BMSR);
+	uint16_t current = ephy_regRead(phy, EPHY_COMMON_01_BMSR);
+	bool lost = linkUp && ((latched & (1U << 2)) == 0);
+	bool up = (current & (1U << 2)) != 0;
+
+	if (lost && up && (phy->link_state_callback != NULL)) {
+		/* link went down and up again between polls - report the drop first */
+		phy->link_state_callback(phy->link_state_callback_arg, 0);
+	}
+
+	if (lost || (up != linkUp)) {
+		ephy_setLinkState(phy);
+	}
+}
+
+
 static void ephy_linkThread(void *arg)
 {
 	eth_phy_state_t *phy = arg;
