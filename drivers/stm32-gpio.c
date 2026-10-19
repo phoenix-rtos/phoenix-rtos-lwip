@@ -170,7 +170,7 @@ int net_gpioGet(const net_gpioInfo_t *gp)
 	}
 
 	if ((gp->flags & GPIO_INVERTED) != 0) {
-		ret = ~ret;
+		ret = (ret == 0U) ? 1U : 0U;
 	}
 
 	return ret != 0 ? 1 : 0;
