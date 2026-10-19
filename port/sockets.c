@@ -794,7 +794,7 @@ static int socket_op(msg_t *msg, int sock)
 			smo->ret = map_errno(lwip_fcntl(sock, F_SETFL, smi->send.flags));
 			break;
 		case sockmGetOpt:
-			if (smi->opt.optname == IP_IPSEC_POLICY) {
+			if ((smi->opt.level == IPPROTO_IP) && (smi->opt.optname == IP_IPSEC_POLICY)) {
 				/* TODO: IP_IPSEC_POLICY */
 				smo->ret = 0;
 				break;
@@ -803,7 +803,7 @@ static int socket_op(msg_t *msg, int sock)
 			smo->ret = lwip_getsockopt(sock, smi->opt.level, smi->opt.optname, msg->o.data, &salen) < 0 ? -errno : salen;
 			break;
 		case sockmSetOpt:
-			if (smi->opt.optname == IP_IPSEC_POLICY) {
+			if ((smi->opt.level == IPPROTO_IP) && (smi->opt.optname == IP_IPSEC_POLICY)) {
 				/* TODO: IP_IPSEC_POLICY */
 				smo->ret = 0;
 				break;
