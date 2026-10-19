@@ -320,6 +320,105 @@ enum eth_regs {
 #define ETH_MACMDIOAR_PA_MASK   (0x1fUL << ETH_MACMDIOAR_PA_SHIFT)
 #define ETH_MACMDIOAR_PSE       (1UL << 27) /* Preamble suppression enable */
 
+/* HW feature registers (read-only) */
+#define ETH_MACHWF0R_ACTPHYSEL_SHIFT 28 /* Active PHY interface: 0 = MII, 1 = RGMII, 4 = RMII */
+#define ETH_MACHWF0R_ACTPHYSEL_MASK  (0x7UL << ETH_MACHWF0R_ACTPHYSEL_SHIFT)
+
+#define ETH_MACHWF1R_RXFIFOSIZE_SHIFT 0 /* RX FIFO size: 128 B << n */
+#define ETH_MACHWF1R_RXFIFOSIZE_MASK  (0x1fUL << ETH_MACHWF1R_RXFIFOSIZE_SHIFT)
+#define ETH_MACHWF1R_TXFIFOSIZE_SHIFT 6 /* TX FIFO size: 128 B << n */
+#define ETH_MACHWF1R_TXFIFOSIZE_MASK  (0x1fUL << ETH_MACHWF1R_TXFIFOSIZE_SHIFT)
+#define ETH_MACHWF1R_ADDR64_SHIFT     14 /* Address width: 0 = 32-bit, 1 = 40-bit, 2 = 48-bit */
+#define ETH_MACHWF1R_ADDR64_MASK      (0x3UL << ETH_MACHWF1R_ADDR64_SHIFT)
+
+#define ETH_MACHWF2R_RXQCNT_SHIFT  0 /* Number of MTL RX queues - 1 */
+#define ETH_MACHWF2R_RXQCNT_MASK   (0xfUL << ETH_MACHWF2R_RXQCNT_SHIFT)
+#define ETH_MACHWF2R_TXQCNT_SHIFT  6 /* Number of MTL TX queues - 1 */
+#define ETH_MACHWF2R_TXQCNT_MASK   (0xfUL << ETH_MACHWF2R_TXQCNT_SHIFT)
+#define ETH_MACHWF2R_RXCHCNT_SHIFT 12 /* Number of DMA RX channels - 1 */
+#define ETH_MACHWF2R_RXCHCNT_MASK  (0xfUL << ETH_MACHWF2R_RXCHCNT_SHIFT)
+#define ETH_MACHWF2R_TXCHCNT_SHIFT 18 /* Number of DMA TX channels - 1 */
+#define ETH_MACHWF2R_TXCHCNT_MASK  (0xfUL << ETH_MACHWF2R_TXCHCNT_SHIFT)
+
+/* MTL TX queue operating mode (MTLTXQxOMR) */
+#define ETH_MTLTXQOMR_FTQ        (1UL << 0) /* Flush TX queue */
+#define ETH_MTLTXQOMR_TSF        (1UL << 1) /* TX store and forward */
+#define ETH_MTLTXQOMR_TXQEN_MASK (0x3UL << 2)
+#define ETH_MTLTXQOMR_TXQEN_EN   (0x2UL << 2) /* TX queue enabled */
+#define ETH_MTLTXQOMR_TTC_MASK   (0x7UL << 4)
+#define ETH_MTLTXQOMR_TQS_SHIFT  16 /* TX queue size: 256 B * (n + 1) */
+#define ETH_MTLTXQOMR_TQS_MASK   (0xfUL << ETH_MTLTXQOMR_TQS_SHIFT)
+
+/* DMA system bus mode (DMASBMR) */
+#define ETH_DMASBMR_FB               (1UL << 0)  /* Fixed burst length */
+#define ETH_DMASBMR_BLEN4            (1UL << 1)  /* AXI burst length 4 */
+#define ETH_DMASBMR_AAL              (1UL << 12) /* Address-aligned beats */
+#define ETH_DMASBMR_RD_OSR_LMT_SHIFT 16          /* AXI maximum read outstanding request limit - 1 */
+#define ETH_DMASBMR_RD_OSR_LMT_MASK  (0x3UL << ETH_DMASBMR_RD_OSR_LMT_SHIFT)
+#define ETH_DMASBMR_WR_OSR_LMT_SHIFT 24 /* AXI maximum write outstanding request limit - 1 */
+#define ETH_DMASBMR_WR_OSR_LMT_MASK  (0x3UL << ETH_DMASBMR_WR_OSR_LMT_SHIFT)
+#define ETH_DMASBMR_CFG_MASK         0xc30334ffUL /* Fields configured by HAL (stm32n6xx_hal_eth.c: ETH_DMASBMR_MASK) */
+
+/* DMA debug status (DMADSR) */
+#define ETH_DMADSR_RPS0_SHIFT 8 /* RX process state, channel 0 */
+#define ETH_DMADSR_RPS0_MASK  (0xfUL << ETH_DMADSR_RPS0_SHIFT)
+#define ETH_DMADSR_TPS0_SHIFT 12 /* TX process state, channel 0: 0 = stopped, 6 = suspended */
+#define ETH_DMADSR_TPS0_MASK  (0xfUL << ETH_DMADSR_TPS0_SHIFT)
+
+#define ETH_DMADSR_TPS_STOPPED   0x0U
+#define ETH_DMADSR_TPS_SUSPENDED 0x6U
+
+/* DMA channel control (DMACxCR) */
+#define ETH_DMACCR_MSS_MASK  (0x3fffUL << 0) /* Maximum segment size (TSO) */
+#define ETH_DMACCR_PBLX8     (1UL << 16)     /* 8xPBL mode */
+#define ETH_DMACCR_DSL_SHIFT 18              /* Descriptor skip length (in bus width units) */
+#define ETH_DMACCR_DSL_MASK  (0x7UL << ETH_DMACCR_DSL_SHIFT)
+#define ETH_DMACCR_CFG_MASK  0x001d3fffUL /* Fields configured by HAL (stm32n6xx_hal_eth.c: ETH_DMACxCR_MASK) */
+
+/* DMA channel TX control (DMACxTXCR) */
+#define ETH_DMACTXCR_ST          (1UL << 0)  /* Start or stop transmission */
+#define ETH_DMACTXCR_OSF         (1UL << 4)  /* Operate on second packet */
+#define ETH_DMACTXCR_TSE         (1UL << 12) /* TCP segmentation enable */
+#define ETH_DMACTXCR_TXPBL_SHIFT 16          /* TX programmable burst length */
+#define ETH_DMACTXCR_TXPBL_MASK  (0x3fUL << ETH_DMACTXCR_TXPBL_SHIFT)
+
+/* DMA channel RX control (DMACxRXCR) */
+#define ETH_DMACRXCR_SR          (1UL << 0) /* Start or stop receive */
+#define ETH_DMACRXCR_RBSZ_SHIFT  1          /* RX buffer size in bytes (multiple of 4), register value = size << 1 */
+#define ETH_DMACRXCR_RBSZ_MASK   (0x1fffUL << ETH_DMACRXCR_RBSZ_SHIFT)
+#define ETH_DMACRXCR_RXPBL_SHIFT 16 /* RX programmable burst length */
+#define ETH_DMACRXCR_RXPBL_MASK  (0x3fUL << ETH_DMACRXCR_RXPBL_SHIFT)
+#define ETH_DMACRXCR_RPF         (1UL << 31) /* DMA RX packet flush */
+
+/* DMA channel status (DMACxSR), write 1 to clear */
+#define ETH_DMACSR_TI        (1UL << 0)  /* Transmit interrupt */
+#define ETH_DMACSR_TPS       (1UL << 1)  /* Transmit process stopped */
+#define ETH_DMACSR_TBU       (1UL << 2)  /* Transmit buffer unavailable */
+#define ETH_DMACSR_RI        (1UL << 6)  /* Receive interrupt */
+#define ETH_DMACSR_RBU       (1UL << 7)  /* Receive buffer unavailable */
+#define ETH_DMACSR_RPS       (1UL << 8)  /* Receive process stopped */
+#define ETH_DMACSR_ETI       (1UL << 10) /* Early transmit interrupt */
+#define ETH_DMACSR_FBE       (1UL << 12) /* Fatal bus error */
+#define ETH_DMACSR_CDE       (1UL << 13) /* Context descriptor error */
+#define ETH_DMACSR_AIS       (1UL << 14) /* Abnormal interrupt summary */
+#define ETH_DMACSR_NIS       (1UL << 15) /* Normal interrupt summary */
+#define ETH_DMACSR_TEB_SHIFT 16          /* TX DMA error bits (valid with FBE) */
+#define ETH_DMACSR_TEB_MASK  (0x7UL << ETH_DMACSR_TEB_SHIFT)
+#define ETH_DMACSR_REB_SHIFT 19 /* RX DMA error bits (valid with FBE) */
+#define ETH_DMACSR_REB_MASK  (0x7UL << ETH_DMACSR_REB_SHIFT)
+#define ETH_DMACSR_W1C_MASK  0x0000ffffUL
+
+/* TX normal descriptor, read format (stm32n6xx_hal_eth.h: ETH_DMATXNDESCRF_*) */
+#define ETH_TDES2_B1L_MASK  0x3fffUL    /* Buffer 1 length */
+#define ETH_TDES2_IOC       (1UL << 31) /* Interrupt on completion */
+#define ETH_TDES3_FL_MASK   0x7fffUL    /* Packet length */
+#define ETH_TDES3_CPC_SHIFT 26          /* CRC/pad control: 0 = insert CRC and pad */
+#define ETH_TDES3_CPC_MASK  (0x3UL << ETH_TDES3_CPC_SHIFT)
+#define ETH_TDES3_LD        (1UL << 28) /* Last descriptor */
+#define ETH_TDES3_FD        (1UL << 29) /* First descriptor */
+#define ETH_TDES3_CTXT      (1UL << 30) /* Context type */
+#define ETH_TDES3_OWN       (1UL << 31) /* Owned by DMA */
+
 #define ETH_MACISR_RGSMIIIS (1UL << 0)
 #define ETH_MACISR_PHYIS    (1UL << 3)
 #define ETH_MACISR_PMTIS    (1UL << 4)
