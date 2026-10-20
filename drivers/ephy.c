@@ -137,6 +137,19 @@ enum {
 	EPHY_88E1111_13_ISR,          /* Interrupt Status */
 };
 
+/* VSC8541-05-specific registers */
+enum {
+	/* Page 0 */
+	EPHY_VSC854105_17_PHYCR1 = 0x17,     /* Extended PHY Control 1*/
+	EPHY_VSC854105_19_IMR = 0x19,        /* Interrupt mask */
+	EPHY_VSC854105_1A_ISR = 0x1A,        /* Interrupt status */
+	EPHY_VSC854105_1C_AXCS = 0x1C,       /* Auxiliary Control and Status */
+	EPHY_VSC854105_1F_EXTPAGESEL = 0x1F, /* Extended PHY Control 1*/
+
+	/* Page 2 */
+	EPHY_VSC854105_PAGE2_14_RGMIICR = 0x14, /* RGMII Control */
+};
+
 
 #define ephy_printf(phy, fmt, ...) printf("lwip: ephy%u.%u: " fmt "\n", phy->bus, phy->addr, ##__VA_ARGS__)
 
@@ -279,6 +292,7 @@ static void ephy_setLinkState(const eth_phy_state_t *phy)
 		case ephy_ksz9031mnx:
 		case ephy_dp83867is:
 		case ephy_rtl8201fi:
+		case ephy_vsc854105:
 			ephy_printf(phy, "link is %s %uMbps/%s (ctl %04x, status %04x, adv %04x, lpa %04x)",
 					(linkup != 0) ? "UP  " : "DOWN", speed, (full_duplex != 0) ? "Full" : "Half", bctl, bstat, adv, lpa);
 			break;
@@ -435,6 +449,32 @@ static inline int ephy_88e1111_linkSpeed(const eth_phy_state_t *phy, int *full_d
 }
 
 
+static inline int ephy_vsc854105_linkSpeed(const eth_phy_state_t *phy, int *full_duplex)
+{
+	uint16_t axcr = ephy_regRead(phy, EPHY_VSC854105_1C_AXCS);
+
+	uint16_t speed;
+
+	if (full_duplex != NULL) {
+		*full_duplex = ((axcr & (1U << 5)) != 0) ? 1 : 0;
+	}
+
+	speed = (axcr >> 3) & 0x3U;
+
+	switch (speed) {
+		case 0x2:
+			return 1000;
+		case 0x1:
+			return 100;
+		case 0x0:
+			return 10;
+		default:
+			return 0;
+	}
+	return 0;
+}
+
+
 int ephy_linkSpeed(const eth_phy_state_t *phy, int *full_duplex)
 {
 	switch (phy->model) {
@@ -452,6 +492,8 @@ int ephy_linkSpeed(const eth_phy_state_t *phy, int *full_duplex)
 			return ephy_rtl8211fdi_linkSpeed(phy, full_duplex);
 		case ephy_88e1111:
 			return ephy_88e1111_linkSpeed(phy, full_duplex);
+		case ephy_vsc854105:
+			return ephy_vsc854105_linkSpeed(phy, full_duplex);
 		default:
 			/* unreachable */
 			return 0;
@@ -468,6 +510,7 @@ static inline uint16_t ephy_bmcrMaxSpeedMask(const eth_phy_state_t *phy)
 		case ephy_rtl8201fi:
 			return 1U << 13;
 		case ephy_rtl8211fdi:
+		case ephy_vsc854105:
 			return 1U << 6;
 		default:
 			return 0;
@@ -594,6 +637,9 @@ static __attribute__((unused)) char *ephy_parsePhyModel(eth_phy_state_t *phy, ch
 	}
 	else if (strcmp(cfg, "88e1111") == 0) {
 		phy->model = ephy_88e1111;
+	}
+	else if (strcmp(cfg, "vsc854105") == 0) {
+		phy->model = ephy_vsc854105;
 	}
 	else {
 		printf("lwip: ephy: unsupported PHY model: \"%s\"\n", cfg);
@@ -867,6 +913,30 @@ static inline void ephy_rtl8211fdi_init(eth_phy_state_t *phy)
 }
 
 
+static inline void ephy_vsc854105_init(eth_phy_state_t *phy)
+{
+	uint16_t reg;
+
+	ephy_regWrite(phy, EPHY_VSC854105_1F_EXTPAGESEL, 0x0); /* set main page */
+	reg = ephy_regRead(phy, EPHY_VSC854105_17_PHYCR1);
+	reg &= ~(0x1800);  /* clean MAC config bits */
+	reg |= (1U << 12); /* set RGMII mode */
+	ephy_regWrite(phy, EPHY_VSC854105_17_PHYCR1, reg);
+
+	/* Perform a software reset */
+	ephy_regWrite(phy, EPHY_COMMON_00_BMCR, 1U << 15);
+	usleep(phy->reset_release_time_us);
+
+	ephy_regWrite(phy, EPHY_VSC854105_1F_EXTPAGESEL, 0x2);
+	reg = ephy_regRead(phy, EPHY_VSC854105_PAGE2_14_RGMIICR);
+	reg &= ~((1U << 11) | 0x70 | 0x7);
+	/* TODO: clock configuration. */
+	ephy_regWrite(phy, EPHY_VSC854105_PAGE2_14_RGMIICR, reg);
+
+	ephy_regWrite(phy, EPHY_VSC854105_1F_EXTPAGESEL, 0x0); /* get back main page */
+}
+
+
 int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb_t cb, void *cb_arg)
 {
 	uint32_t phyid;
@@ -895,6 +965,10 @@ int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb
 		case ephy_rtl8211fdi:
 			phy->reset_hold_time_us = 10 * 1000 /* 10ms */;
 			phy->reset_release_time_us = 3 * 30 * 1000 /* 90ms */;
+			break;
+		case ephy_vsc854105:
+			phy->reset_hold_time_us = 15 * 1000 /* 15ms */;
+			phy->reset_release_time_us = 15 * 1000 /* 15ms */;
 			break;
 		default:
 			/* unreachable */
@@ -957,6 +1031,11 @@ int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb
 			phy->irq.reg = EPHY_88E1111_13_ISR;
 			phy->irq.mask = 0x0400;
 			break;
+		case ephy_vsc854105:
+			ephy_vsc854105_init(phy);
+			phy->irq.reg = EPHY_VSC854105_1A_ISR;
+			phy->irq.mask = 0x6400;
+			break;
 		default:
 			/* unreachable */
 			break;
@@ -1002,6 +1081,9 @@ int ephy_init(eth_phy_state_t *phy, char *conf, uint8_t board_rev, link_state_cb
 			break;
 		case ephy_88e1111:
 			ephy_regWrite(phy, EPHY_88E1111_12_IER, (1U << 10));
+			break;
+		case ephy_vsc854105:
+			ephy_regWrite(phy, EPHY_VSC854105_19_IMR, phy->irq.mask);
 			break;
 		default:
 			/* unreachable */
