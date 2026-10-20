@@ -419,6 +419,30 @@ enum eth_regs {
 #define ETH_TDES3_CTXT      (1UL << 30) /* Context type */
 #define ETH_TDES3_OWN       (1UL << 31) /* Owned by DMA */
 
+/*
+ * TX normal descriptor, write-back format, TDES3 status (valid in the last descriptor of a packet):
+ * stm32n6xx_hal_eth.h ETH_DMATXNDESCWBF_* and Linux stmmac dwmac4_descs.h TDES3_*.
+ * NOTE: HAL defines ETH_DMATXNDESCWBF_IHE as 0x4 (= UF) - IHE is bit 0 (stmmac TDES3_IP_HDR_ERROR).
+ * OWN, CTXT, FD and LD have the same positions as in the read format.
+ */
+#define ETH_TDES3_WB_IHE      (1UL << 0) /* IP header error */
+#define ETH_TDES3_WB_DB       (1UL << 1) /* Deferred bit */
+#define ETH_TDES3_WB_UF       (1UL << 2) /* Underflow error */
+#define ETH_TDES3_WB_ED       (1UL << 3) /* Excessive deferral */
+#define ETH_TDES3_WB_CC_SHIFT 4          /* Collision count */
+#define ETH_TDES3_WB_CC_MASK  (0xfUL << ETH_TDES3_WB_CC_SHIFT)
+#define ETH_TDES3_WB_EC       (1UL << 8)  /* Excessive collision */
+#define ETH_TDES3_WB_LC       (1UL << 9)  /* Late collision */
+#define ETH_TDES3_WB_NC       (1UL << 10) /* No carrier */
+#define ETH_TDES3_WB_LOC      (1UL << 11) /* Loss of carrier */
+#define ETH_TDES3_WB_PCE      (1UL << 12) /* Payload checksum error */
+#define ETH_TDES3_WB_FF       (1UL << 13) /* Packet flushed */
+#define ETH_TDES3_WB_JT       (1UL << 14) /* Jabber timeout */
+#define ETH_TDES3_WB_ES       (1UL << 15) /* Error summary */
+#define ETH_TDES3_WB_ERR_MASK \
+	(ETH_TDES3_WB_IHE | ETH_TDES3_WB_UF | ETH_TDES3_WB_ED | ETH_TDES3_WB_EC | ETH_TDES3_WB_LC | ETH_TDES3_WB_NC | \
+			ETH_TDES3_WB_LOC | ETH_TDES3_WB_PCE | ETH_TDES3_WB_FF | ETH_TDES3_WB_JT | ETH_TDES3_WB_ES)
+
 #define ETH_MACISR_RGSMIIIS (1UL << 0)
 #define ETH_MACISR_PHYIS    (1UL << 3)
 #define ETH_MACISR_PMTIS    (1UL << 4)

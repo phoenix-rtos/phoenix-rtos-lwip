@@ -3,9 +3,10 @@
  *
  * STM32 ETH network module driver
  *
- * Driver skeleton: RIF, clocks, pins, MAC reset, MAC address, MDIO bus,
- * PHY link state polling and DMA descriptor rings (cacheable memory, one descriptor per cache line).
- * Data path (RX/TX, interrupts) is not implemented yet - DMA is never started in normal operation.
+ * RIF, clocks, pins, MAC reset, MAC address, MDIO bus, PHY link state polling,
+ * DMA descriptor rings (cacheable memory, one descriptor per cache line) and the TX path
+ * (linkoutput -> TX ring -> DMA, completed descriptors reaped without interrupts).
+ * RX path and interrupts are not implemented yet - the receiver (MACCR.RE, RX DMA) stays disabled.
  *
  * Copyright 2018, 2024, 2026 Phoenix Systems
  * Author: Michał Mirosław, Julian Uziembło, Jacek Maksymowicz
@@ -17,6 +18,7 @@
 #include "arch/cc.h"
 #include "lwip/etharp.h"
 #include "lwip/netif.h"
+#include "lwip/tcpip.h"
 #include "netif-driver.h"
 #include "bdring.h"
 #include "ephy.h"
@@ -29,6 +31,7 @@
 #include <stdatomic.h>
 #include <stdbool.h>
 #include <errno.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -60,13 +63,9 @@
 #define ETH_DEBUG  STM32ETH_DEBUG
 #define MDIO_DEBUG 0
 
-/*
- * DMA smoke test (debug only), runs once after the first link up:
- * transmit one broadcast test frame (EtherType 0x88B5) from a buffer in AXISRAM2 and one from AXISRAM3-6,
- * then stop DMA.
- */
-#ifndef STM32ETH_DMA_SMOKE_TEST
-#define STM32ETH_DMA_SMOKE_TEST 0
+/* Maximum TX buffer (fragment) length = TDES2.B1L limit; a smaller value forces multi-descriptor frames (test only) */
+#ifndef STM32ETH_TX_MAX_FRAG
+#define STM32ETH_TX_MAX_FRAG 0x3fffU
 #endif
 
 #define ETH_ENABLE_FLOW_CONTROL  true
@@ -100,6 +99,16 @@
 #define ETH_RING_ALIGN   ETH_CACHE_LINE
 #define ETH_RX_BUF_SIZE  1536U
 #define ETH_DMA_PBL      32U /* TX/RX programmable burst length (HAL default ETH_TXDMABURSTLENGTH_32BEAT) */
+#define ETH_TX_MAX_FRAGS 8U  /* bdring.c MAX_TX_FRAGMENTS: a packet needs fewer fragments than this */
+#define ETH_TX_QUEUE_TQS 7U  /* MTL TX queue 0 size: 256 B * (TQS + 1) = 2048 B (HAL ETH_TRANSMIT_QUEUE_SIZE_2048) */
+
+#define ETH_TX_STOP_TIMEOUT_US (10U * 1000U)
+#define ETH_STATS_POLLS        10U /* debug: log TX statistics every N link polls (if changed) */
+
+/* a full-size frame (DMA buffer of ETH_RX_BUF_SIZE) must fit in ETH_TX_MAX_FRAGS - 1 fragments */
+_Static_assert((STM32ETH_TX_MAX_FRAG <= 0x3fffU) && (STM32ETH_TX_MAX_FRAG >= ((ETH_RX_BUF_SIZE + ETH_TX_MAX_FRAGS - 2U) / (ETH_TX_MAX_FRAGS - 1U))),
+		"STM32ETH_TX_MAX_FRAG must be 220..0x3fff (TDES2.B1L)");
+_Static_assert(ETH_TX_RING_SIZE > ETH_TX_MAX_FRAGS, "TX ring must hold a packet of ETH_TX_MAX_FRAGS - 1 fragments");
 
 #define eth_printf(state, fmt, ...) printf("lwip: ETH%u: " fmt "\n", (unsigned int)(state)->devnum, ##__VA_ARGS__)
 
@@ -235,27 +244,35 @@ typedef struct {
 
 	struct netif *netif;
 
-#define PRIV_RESOURCES(s) &(s)->lock, 2, ~0x01
-	handle_t lock, cond;
+#define PRIV_RESOURCES(s) &(s)->lock, 3, ~0x03
+	handle_t lock, txLock, cond; /* txLock: TX ring filling + tail pointer, TX reaping */
 
 	size_t devnum;
 	oid_t multidrvOid;
 	int mdioBus; /* MDIO bus index registered by this device, < 0 if none */
 	bool phyValid;
-	bool linkUp; /* last link state reported by ephy (written only by ephy_init() and the link thread) */
+	atomic_bool linkUp; /* last link state reported by ephy (written only by ephy_init() and the link thread) */
+	atomic_uint linkChanges;
 	eth_phy_state_t phy;
-
-	atomic_uint txDropped;
 
 	/* DMA descriptor rings (cacheable memory from net_initRings()), valid if ringsValid */
 	net_bufdesc_ring_t rings[2];
 	bool ringsValid;
+	bool txStarted;        /* TX path (MTL queue, DMA, MAC TX) started by eth_startTx() */
+	atomic_bool txStopped; /* TX DMA fatal bus error - nothing is transmitted until reset */
 
-#if STM32ETH_DMA_SMOKE_TEST
-	bool smokeTestDone;
-#endif
+	/* Current packet (written under txLock): total length for TDES3.FL and the sum of its fragment lengths */
+	size_t txPktLen;
+	size_t txFragSum;
 
-	uint32_t linkStack[1024] __attribute__((aligned(16)));
+	/* TX statistics */
+	atomic_uint txDropped;  /* not queued: link down, TX stopped, ring full, no memory */
+	atomic_uint txRingFull; /* not queued because the ring was full (ERR_BUF) */
+	uint32_t txPackets;     /* completed packets (last descriptor written back), under TX ring lock */
+	uint32_t txErrors;      /* completed packets with TDES3.ES set, under TX ring lock */
+	uint32_t txErrFlags;    /* OR of TDES3 write-back error flags [15:0], under TX ring lock */
+
+	uint32_t linkStack[2048] __attribute__((aligned(16))); /* lwIP output path runs on it (netif_set_link_up()) */
 } eth_state_t;
 
 
@@ -437,18 +454,6 @@ static void eth_showCardId(eth_state_t *state)
 }
 
 
-/* Data path is not implemented yet - drop all packets. The pbuf is owned by the caller. */
-static err_t eth_netifOutput(struct netif *netif, struct pbuf *p)
-{
-	eth_state_t *state = netif->state;
-
-	(void)p;
-	(void)atomic_fetch_add(&state->txDropped, 1U);
-
-	return ERR_IF;
-}
-
-
 static int eth_mdioSetup(void *arg, unsigned max_khz, unsigned min_hold_ns, unsigned opt_preamble)
 {
 	eth_state_t *state = arg;
@@ -597,9 +602,11 @@ static void eth_setLinkState(void *arg, int state)
 	eth_state_t *priv = netif->state;
 	int speed, duplex = 0;
 
-	priv->linkUp = (state != 0);
+	(void)atomic_fetch_add(&priv->linkChanges, 1U);
 
 	if (state == 0) {
+		/* stop queueing TX frames first (linkoutput drops them while the link is down) */
+		atomic_store(&priv->linkUp, false);
 		eth_debug_printf(priv, "link down");
 		netif_set_link_down(netif);
 		return;
@@ -631,6 +638,8 @@ static void eth_setLinkState(void *arg, int state)
 		}
 	}
 
+	/* accept TX frames only after the MAC speed/duplex matches the link */
+	atomic_store(&priv->linkUp, true);
 	eth_debug_printf(priv, "link up %dMbps/%s, MACCR=0x%08x", speed, (duplex != 0) ? "full" : "half", (unsigned int)priv->base[eth_maccr]);
 	netif_set_link_up(netif);
 }
@@ -661,17 +670,6 @@ static const char *eth_media(struct netif *netif)
 	}
 }
 
-
-/* Descriptor rings: placement and sizes only, RX/TX callbacks are added together with the data path */
-static const net_bufdesc_ops_t eth_ringOps = {
-	.desc_size = ETH_DESC_SIZE,
-	.ring_alignment = ETH_RING_ALIGN,
-	.pkt_buf_sz = ETH_RX_BUF_SIZE,
-	.max_tx_frag = ETH_TDES2_B1L_MASK,
-};
-
-_Static_assert(sizeof(eth_dma_desc_t) == ETH_DESC_SIZE, "descriptor stride must match DMACxCR.DSL");
-_Static_assert((ETH_DESC_SIZE - 16U) == (ETH_DESC_DSL * 8U), "DSL in 8-byte units (64-bit DMA bus)");
 
 static const size_t eth_ringSizes[] = {
 	[ETH_RING_RX] = ETH_RX_RING_SIZE,
@@ -724,12 +722,15 @@ static inline addr_t eth_descPhys(const net_bufdesc_ring_t *ring, size_t i)
 /*
  * Prepare a TX normal descriptor and pass it to DMA (OWN is set last, then the cache line is cleaned).
  * The caller writes the tail pointer (after a dsb) to start DMA on it.
- * NOTE: FL is set to the buffer length - valid for packets in a single buffer only.
- * IOC is set on the last descriptor of a packet, so that DMACxSR.TI reports its completion.
+ * FL = pktLen (total length of the packet) in every descriptor of the packet - as HAL (stm32n6xx_hal_eth.c:3460, 3569)
+ * and Linux stmmac. IOC is set on the last descriptor of a packet, so that DMACxSR.TI reports its completion.
+ * CPC = 0 (insert CRC and pad), CIC = 0 (no checksum insertion).
+ * NOTE: invalidating the line of a descriptor while it is being filled would discard the CPU writes - descriptor lines
+ * are invalidated only under the TX ring lock or txLock (net_transmitPacket() fills them under both).
  */
-static inline void eth_txDescFill(volatile eth_dma_desc_t *desc, addr_t pa, size_t len, bool first, bool last)
+static inline void eth_txDescFill(volatile eth_dma_desc_t *desc, addr_t pa, size_t len, size_t pktLen, bool first, bool last)
 {
-	uint32_t tdes3 = (len & ETH_TDES3_FL_MASK) | (0UL << ETH_TDES3_CPC_SHIFT); /* CPC = 0: insert CRC and pad */
+	uint32_t tdes3 = (pktLen & ETH_TDES3_FL_MASK) | (0UL << ETH_TDES3_CPC_SHIFT);
 
 	tdes3 |= first ? ETH_TDES3_FD : 0U;
 	tdes3 |= last ? ETH_TDES3_LD : 0U;
@@ -761,164 +762,71 @@ static inline bool eth_txDescDone(volatile eth_dma_desc_t *desc)
 }
 
 
-#if STM32ETH_DMA_SMOKE_TEST
-
-#define SMOKE_ETHERTYPE       0x88b5U /* IEEE 802 local experimental EtherType 1 */
-#define SMOKE_PAYLOAD_LEN     64U
-#define SMOKE_FRAME_LEN       (14U + SMOKE_PAYLOAD_LEN)
-#define SMOKE_TIMEOUT_US      (100U * 1000U)
-#define SMOKE_STOP_TIMEOUT_US (10U * 1000U)
-#define SMOKE_PROBE_TRIES     64U
-#define SMOKE_PROBE_SIZE      (16U * 1024U)
-#define SMOKE_AXISRAM3_START  0x34200000U /* AXISRAM3-6: 0x34200000-0x343bffff */
-#define SMOKE_AXISRAM6_END    0x343c0000U
-#define SMOKE_BUFS            2U
-#define SMOKE_BUF_SIZE        _PAGE_SIZE /* dmammap() granularity */
+static inline eth_state_t *eth_txRingState(const net_bufdesc_ring_t *ring)
+{
+	return (eth_state_t *)((uintptr_t)ring - offsetof(eth_state_t, rings[ETH_RING_TX]));
+}
 
 
-typedef struct {
-	const char *name;
-	bool run;
-	addr_t buf;
-	addr_t desc;
+/*
+ * bdring fillTxDesc callback - called by net_transmitPacket() (from eth_netifOutput(), under txLock and the ring lock)
+ * for each fragment of a packet, from the last one to the first one.
+ * The total packet length for TDES3.FL is taken from the pbuf in eth_netifOutput() (state->txPktLen),
+ * so it doesn't depend on the fill order.
+ */
+static void eth_fillTxDesc(const net_bufdesc_ring_t *ring, size_t i, addr_t pa, size_t sz, unsigned seg)
+{
+	eth_state_t *state = eth_txRingState(ring);
+
+	/* frame data written by the CPU (pbuf copy) must reach memory before DMA reads it; NOMMU: pa == va */
+	eth_cleanDCache((void *)pa, sz);
+
+	eth_txDescFill(eth_desc(ring, i), pa, sz, state->txPktLen, (seg & BDRING_SEG_FIRST) != 0U, (seg & BDRING_SEG_LAST) != 0U);
+	state->txFragSum += sz;
+}
+
+
+/* bdring nextTxDone callback - called by net_reapTxFinished() under the ring lock */
+static bool eth_nextTxDone(const net_bufdesc_ring_t *ring, size_t i)
+{
+	eth_state_t *state = eth_txRingState(ring);
+	volatile eth_dma_desc_t *desc = eth_desc(ring, i);
 	uint32_t tdes3;
-	uint32_t sr;
-	uint32_t dsr;
-	unsigned int us;
-} eth_smokeResult_t;
 
-
-static void eth_smokeLogRegs(eth_state_t *state, const char *when)
-{
-	eth_printf(state, "DMA smoke: %s: DMAC0SR=0x%08x DMADSR=0x%08x DMAISR=0x%08x DMAC0TXCR=0x%08x DMAC0CATXDR=0x%08x DMAC0CATXBR=0x%08x",
-			when, (unsigned int)state->base[eth_dmac0sr], (unsigned int)state->base[eth_dmadsr], (unsigned int)state->base[eth_dmaisr],
-			(unsigned int)state->base[eth_dmac0txcr], (unsigned int)state->base[eth_dmac0catxdr], (unsigned int)state->base[eth_dmac0catxbr]);
-	eth_printf(state, "DMA smoke: %s: DMAC0TXDLAR=0x%08x DMAC0TXDTPR=0x%08x DMAC0TXRLR=%u MTLTXQ0OMR=0x%08x MTLTXQ0DR=0x%08x MTLTXQ0UR=0x%08x MACCR=0x%08x",
-			when, (unsigned int)state->base[eth_dmac0txdlar], (unsigned int)state->base[eth_dmac0txdtpr], (unsigned int)state->base[eth_dmac0txrlr],
-			(unsigned int)state->base[eth_mtltxq0omr], (unsigned int)state->base[eth_mtltxq0dr], (unsigned int)state->base[eth_mtltxq0ur],
-			(unsigned int)state->base[eth_maccr]);
-}
-
-
-/* Test frame: broadcast, EtherType 0x88B5, payload 00 01 .. 3f */
-static void eth_smokeFillFrame(eth_state_t *state, uint8_t *frame)
-{
-	memset(frame, 0xff, 6);                     /* destination: broadcast */
-	memcpy(frame + 6, state->netif->hwaddr, 6); /* source: our MAC */
-	frame[12] = (uint8_t)(SMOKE_ETHERTYPE >> 8);
-	frame[13] = (uint8_t)(SMOKE_ETHERTYPE & 0xffU);
-	for (size_t i = 0; i < SMOKE_PAYLOAD_LEN; i++) {
-		frame[14U + i] = (uint8_t)i; /* counter pattern 00 01 02 ... */
+	if (!eth_txDescDone(desc)) {
+		return false;
 	}
-}
 
-
-/* Transmit one frame from buf using TX descriptor i. TX DMA must be running (suspended at descriptor i). */
-static void eth_smokeTransmit(eth_state_t *state, size_t i, uint8_t *buf, eth_smokeResult_t *res)
-{
-	const net_bufdesc_ring_t *tx = &state->rings[ETH_RING_TX];
-	volatile eth_dma_desc_t *desc = eth_desc(tx, i);
-	time_t start, now;
-
-	eth_smokeFillFrame(state, buf);
-	res->run = true;
-	res->buf = va2pa(buf);
-	res->desc = eth_descPhys(tx, i);
-	eth_debug_printf(state, "DMA smoke: %s: buffer 0x%08x, descriptor %u at 0x%08x",
-			res->name, (unsigned int)res->buf, (unsigned int)i, (unsigned int)res->desc);
-
-	eth_cleanDCache(buf, SMOKE_FRAME_LEN);
-
-	eth_txDescFill(desc, res->buf, SMOKE_FRAME_LEN, true, true);
-
-	/* clear DMA channel status, so that it reports this transfer only */
-	state->base[eth_dmac0sr] = ETH_DMACSR_W1C_MASK;
-
-	__asm__ volatile("dsb" ::: "memory");
-	state->base[eth_dmac0txdtpr] = (uint32_t)eth_descPhys(tx, i + 1U);
-
-	gettime(&start, NULL);
-	for (;;) {
-		if (eth_txDescDone(desc) || ((state->base[eth_dmac0sr] & ETH_DMACSR_FBE) != 0U)) {
-			break;
-		}
-
-		gettime(&now, NULL);
-		if ((now - start) >= (time_t)SMOKE_TIMEOUT_US) {
-			break;
-		}
-		usleep(100);
-	}
-	gettime(&now, NULL);
-
-	res->us = (unsigned int)(now - start);
-	eth_invalDCache(desc, sizeof(*desc));
-	res->tdes3 = desc->des[3];
-	res->sr = state->base[eth_dmac0sr];
-	res->dsr = state->base[eth_dmadsr];
-}
-
-
-/* Allocate dmammap() chunks until one reaches into AXISRAM3-6. Returns a buffer inside it (owned by *chunk) or NULL. */
-static uint8_t *eth_smokeAllocAxisram36(eth_state_t *state, void **chunk)
-{
-	void *chunks[SMOKE_PROBE_TRIES];
-	uint8_t *found = NULL;
-	size_t n;
-
-	*chunk = NULL;
-	for (n = 0; n < SMOKE_PROBE_TRIES; n++) {
-		chunks[n] = dmammap(SMOKE_PROBE_SIZE);
-		if (chunks[n] == NULL) {
-			break;
-		}
-
-		addr_t pa = va2pa(chunks[n]);
-		addr_t pend = pa + SMOKE_PROBE_SIZE;
-		addr_t b = (pa < SMOKE_AXISRAM3_START) ? SMOKE_AXISRAM3_START : pa;
-		if ((b + SMOKE_FRAME_LEN <= pend) && (b + SMOKE_FRAME_LEN <= SMOKE_AXISRAM6_END)) {
-			found = (uint8_t *)chunks[n] + (b - pa);
-			*chunk = chunks[n];
-			n++;
-			break;
+	/* write-back format: status is valid in the last descriptor of a packet */
+	tdes3 = desc->des[3];
+	if ((tdes3 & ETH_TDES3_LD) != 0U) {
+		state->txPackets++;
+		if ((tdes3 & ETH_TDES3_WB_ES) != 0U) {
+			state->txErrors++;
+			state->txErrFlags |= tdes3 & ETH_TDES3_WB_ERR_MASK;
 		}
 	}
 
-	eth_debug_printf(state, "DMA smoke: AXISRAM3-6 probe: %u allocation(s) of %u B, %s",
-			(unsigned int)n, SMOKE_PROBE_SIZE, (found != NULL) ? "found" : "not found");
-
-	/* free all other chunks */
-	for (size_t i = 0; i < n; i++) {
-		if ((chunks[i] != NULL) && (chunks[i] != *chunk)) {
-			munmap(chunks[i], SMOKE_PROBE_SIZE);
-		}
-	}
-
-	return found;
+	return true;
 }
 
 
-/* Start TX: MTL TX queue 0, TX DMA (suspended - tail pointer = first descriptor) and MAC TX. Returns previous MTLTXQ0OMR. */
-static uint32_t eth_smokeStart(eth_state_t *state)
-{
-	uint32_t omr = state->base[eth_mtltxq0omr];
-	uint32_t v = omr;
+/* Descriptor rings: TX callbacks only, RX is added together with the RX path */
+static const net_bufdesc_ops_t eth_ringOps = {
+	.nextTxDone = eth_nextTxDone,
+	.fillTxDesc = eth_fillTxDesc,
+	.desc_size = ETH_DESC_SIZE,
+	.ring_alignment = ETH_RING_ALIGN,
+	.pkt_buf_sz = ETH_RX_BUF_SIZE,
+	.max_tx_frag = STM32ETH_TX_MAX_FRAG,
+};
 
-	/* MTL TX queue 0: enabled, store and forward, 2048 B (HAL ETH_TRANSMIT_QUEUE_SIZE_2048) */
-	v &= ~(ETH_MTLTXQOMR_TQS_MASK | ETH_MTLTXQOMR_TXQEN_MASK | ETH_MTLTXQOMR_TTC_MASK | ETH_MTLTXQOMR_TSF);
-	v |= (7UL << ETH_MTLTXQOMR_TQS_SHIFT) | ETH_MTLTXQOMR_TXQEN_EN | ETH_MTLTXQOMR_TSF;
-	state->base[eth_mtltxq0omr] = v;
-
-	state->base[eth_dmac0txcr] |= ETH_DMACTXCR_ST;
-	state->base[eth_maccr] |= ETH_MACCR_TE;
-	__asm__ volatile("dsb" ::: "memory");
-
-	return omr;
-}
+_Static_assert(sizeof(eth_dma_desc_t) == ETH_DESC_SIZE, "descriptor stride must match DMACxCR.DSL");
+_Static_assert((ETH_DESC_SIZE - 16U) == (ETH_DESC_DSL * 8U), "DSL in 8-byte units (64-bit DMA bus)");
 
 
 /* Wait until (reg & mask) == val. Returns false on timeout. */
-static bool eth_smokeWait(eth_state_t *state, unsigned int reg, uint32_t mask, uint32_t val)
+static bool eth_waitReg(eth_state_t *state, unsigned int reg, uint32_t mask, uint32_t val, time_t timeout)
 {
 	time_t start, now;
 
@@ -929,7 +837,7 @@ static bool eth_smokeWait(eth_state_t *state, unsigned int reg, uint32_t mask, u
 		}
 
 		gettime(&now, NULL);
-		if ((now - start) >= (time_t)SMOKE_STOP_TIMEOUT_US) {
+		if ((now - start) >= timeout) {
 			return false;
 		}
 		usleep(100);
@@ -937,151 +845,238 @@ static bool eth_smokeWait(eth_state_t *state, unsigned int reg, uint32_t mask, u
 }
 
 
-/*
- * Stop TX (HAL_ETH_Stop() order): TX DMA, wait for the TX process to stop, flush MTL TX queue 0,
- * MAC TX, restore MTLTXQ0OMR (queue disabled). On success the TX ring is restored to the state after init.
- * Returns false if DMA may still access memory or needs a reset (SWR) before it can be used again.
- */
-static bool eth_smokeStop(eth_state_t *state, uint32_t omr, bool fbe)
+/* Log TX DMA/MTL/MAC status registers and the descriptors at the ring tail (next to reap) and head (next to fill) */
+static void eth_logTxRegs(eth_state_t *state, const char *when)
 {
 	const net_bufdesc_ring_t *tx = &state->rings[ETH_RING_TX];
-	bool stopped, flushed;
+	volatile eth_dma_desc_t *desc;
+	uint32_t tdes[2][4];
+	unsigned int head, tail;
 
-	state->base[eth_dmac0txcr] &= ~ETH_DMACTXCR_ST;
-	stopped = eth_smokeWait(state, eth_dmadsr, ETH_DMADSR_TPS0_MASK, ETH_DMADSR_TPS_STOPPED << ETH_DMADSR_TPS0_SHIFT);
-	if (!stopped) {
-		eth_printf(state, "WARN: DMA smoke: TX process not stopped (DMADSR=0x%08x)", (unsigned int)state->base[eth_dmadsr]);
-	}
+	eth_printf(state, "TX %s: DMAC0SR=0x%08x DMADSR=0x%08x DMAISR=0x%08x DMAC0TXCR=0x%08x DMAC0CATXDR=0x%08x DMAC0CATXBR=0x%08x",
+			when, (unsigned int)state->base[eth_dmac0sr], (unsigned int)state->base[eth_dmadsr], (unsigned int)state->base[eth_dmaisr],
+			(unsigned int)state->base[eth_dmac0txcr], (unsigned int)state->base[eth_dmac0catxdr], (unsigned int)state->base[eth_dmac0catxbr]);
+	eth_printf(state, "TX %s: DMAC0TXDLAR=0x%08x DMAC0TXDTPR=0x%08x DMAC0TXRLR=%u MTLTXQ0OMR=0x%08x MTLTXQ0DR=0x%08x MTLTXQ0UR=0x%08x MACCR=0x%08x",
+			when, (unsigned int)state->base[eth_dmac0txdlar], (unsigned int)state->base[eth_dmac0txdtpr], (unsigned int)state->base[eth_dmac0txrlr],
+			(unsigned int)state->base[eth_mtltxq0omr], (unsigned int)state->base[eth_mtltxq0dr], (unsigned int)state->base[eth_mtltxq0ur],
+			(unsigned int)state->base[eth_maccr]);
 
-	state->base[eth_mtltxq0omr] |= ETH_MTLTXQOMR_FTQ;
-	flushed = eth_smokeWait(state, eth_mtltxq0omr, ETH_MTLTXQOMR_FTQ, 0U);
-	if (!flushed) {
-		eth_printf(state, "WARN: DMA smoke: MTL TX queue not flushed (MTLTXQ0DR=0x%08x)", (unsigned int)state->base[eth_mtltxq0dr]);
-	}
-
-	state->base[eth_maccr] &= ~ETH_MACCR_TE;
-	state->base[eth_mtltxq0omr] = omr & ~(ETH_MTLTXQOMR_TXQEN_MASK | ETH_MTLTXQOMR_FTQ);
-
-	if (!stopped || fbe) {
-		eth_printf(state, "ERROR: DMA smoke: TX DMA %s - reset (DMAMR.SWR) required before using DMA", fbe ? "fatal bus error" : "not stopped");
-		return false;
-	}
-
-	/* restore the TX ring to the state after init (DMA restarts from DLAR) */
-	for (size_t i = 0; i < ETH_TX_RING_SIZE; i++) {
-		volatile eth_dma_desc_t *desc = eth_desc(tx, i);
-		desc->des[0] = 0U;
-		desc->des[1] = 0U;
-		desc->des[2] = 0U;
-		desc->des[3] = 0U;
-	}
-	eth_cleanDCache(tx->ring, ETH_TX_RING_SIZE * sizeof(eth_dma_desc_t));
-	state->base[eth_dmac0txdlar] = (uint32_t)tx->phys;
-	state->base[eth_dmac0txdtpr] = (uint32_t)tx->phys;
-	state->base[eth_dmac0sr] = ETH_DMACSR_W1C_MASK;
-
-	return true;
-}
-
-
-static void eth_smokeLogResult(eth_state_t *state, const eth_smokeResult_t *res)
-{
-	if (!res->run) {
-		eth_printf(state, "DMA smoke: %s: NOT COVERED", res->name);
+	if (!state->ringsValid) {
 		return;
 	}
 
-	eth_printf(state, "DMA smoke: %s 0x%08x desc 0x%08x OWN=%u FBE=%u TI=%u TBU=%u TPS=%u AIS=%u NIS=%u TEB=%u "
-					  "TDES3=0x%08x DMAC0SR=0x%08x DMADSR=0x%08x (TPS0=%u) t=%u us",
-			res->name, (unsigned int)res->buf, (unsigned int)res->desc,
-			((res->tdes3 & ETH_TDES3_OWN) != 0U) ? 1U : 0U,
-			((res->sr & ETH_DMACSR_FBE) != 0U) ? 1U : 0U,
-			((res->sr & ETH_DMACSR_TI) != 0U) ? 1U : 0U,
-			((res->sr & ETH_DMACSR_TBU) != 0U) ? 1U : 0U,
-			((res->sr & ETH_DMACSR_TPS) != 0U) ? 1U : 0U,
-			((res->sr & ETH_DMACSR_AIS) != 0U) ? 1U : 0U,
-			((res->sr & ETH_DMACSR_NIS) != 0U) ? 1U : 0U,
-			(unsigned int)((res->sr & ETH_DMACSR_TEB_MASK) >> ETH_DMACSR_TEB_SHIFT),
-			(unsigned int)res->tdes3, (unsigned int)res->sr, (unsigned int)res->dsr,
-			(unsigned int)((res->dsr & ETH_DMADSR_TPS0_MASK) >> ETH_DMADSR_TPS0_SHIFT), res->us);
+	/* descriptor lines are invalidated - not while one is being filled */
+	mutexLock(state->txLock);
+	head = atomic_load(&tx->head);
+	tail = atomic_load(&tx->tail);
+	for (size_t k = 0; k < 2U; k++) {
+		desc = eth_desc(tx, (k == 0U) ? tail : head);
+		eth_invalDCache(desc, sizeof(*desc));
+		for (size_t j = 0; j < 4U; j++) {
+			tdes[k][j] = desc->des[j];
+		}
+	}
+	mutexUnlock(state->txLock);
+
+	eth_printf(state, "TX %s: ring tail=%u (0x%08x) TDES=%08x %08x %08x %08x, head=%u (0x%08x) TDES=%08x %08x %08x %08x",
+			when, tail, (unsigned int)eth_descPhys(tx, tail),
+			(unsigned int)tdes[0][0], (unsigned int)tdes[0][1], (unsigned int)tdes[0][2], (unsigned int)tdes[0][3],
+			head, (unsigned int)eth_descPhys(tx, head),
+			(unsigned int)tdes[1][0], (unsigned int)tdes[1][1], (unsigned int)tdes[1][2], (unsigned int)tdes[1][3]);
 }
 
 
 /*
- * Verify that the ETH1 bus master can read descriptors from the TX ring (cacheable, DSL = 2) and frame buffers
- * in AXISRAM2 / AXISRAM3-6: transmit one broadcast frame from each buffer.
- * Runs once, from the link thread, after the first link up. TX DMA and MAC TX are stopped afterwards.
+ * Start the TX path (HAL: ETHEx_SetMTLConfig() + HAL_ETH_Start() TX part): MTL TX queue 0 (2048 B, store and forward,
+ * enabled), flush it, TX DMA (suspended: tail pointer = ring base) and MAC TX (MACCR.TE).
+ * The TX path is started once at init and runs regardless of the link state: linkoutput drops frames while the link
+ * is down and eth_setLinkState() disables TE only for the time of a speed/duplex change. RX stays disabled.
  */
-static void eth_dmaSmokeTest(eth_state_t *state)
+static void eth_startTx(eth_state_t *state)
 {
-	eth_smokeResult_t res[SMOKE_BUFS] = {
-		{ .name = "AXISRAM2" },
-		{ .name = "AXISRAM3-6" },
-	};
-	uint8_t *buf0, *buf1;
-	void *chunk1 = NULL;
-	bool fbe = false, idle;
-	uint32_t omr;
+	uint32_t v = state->base[eth_mtltxq0omr];
 
-	eth_printf(state, "DMA smoke: start");
+	v &= ~(ETH_MTLTXQOMR_TQS_MASK | ETH_MTLTXQOMR_TXQEN_MASK | ETH_MTLTXQOMR_TTC_MASK | ETH_MTLTXQOMR_TSF | ETH_MTLTXQOMR_FTQ);
+	v |= (ETH_TX_QUEUE_TQS << ETH_MTLTXQOMR_TQS_SHIFT) | ETH_MTLTXQOMR_TXQEN_EN | ETH_MTLTXQOMR_TSF;
+	state->base[eth_mtltxq0omr] = v;
 
-	buf0 = dmammap(SMOKE_BUF_SIZE);
-	if (buf0 == NULL) {
-		eth_printf(state, "DMA smoke: couldn't allocate buffer");
-		return;
+	state->base[eth_mtltxq0omr] = v | ETH_MTLTXQOMR_FTQ;
+	if (!eth_waitReg(state, eth_mtltxq0omr, ETH_MTLTXQOMR_FTQ, 0U, ETH_TX_STOP_TIMEOUT_US)) {
+		eth_printf(state, "WARN: MTL TX queue not flushed (MTLTXQ0OMR=0x%08x)", (unsigned int)state->base[eth_mtltxq0omr]);
 	}
 
-	buf1 = eth_smokeAllocAxisram36(state, &chunk1);
+	state->base[eth_dmac0txcr] |= ETH_DMACTXCR_ST;
+	state->base[eth_dmac0sr] = ETH_DMACSR_TPS;
+	state->base[eth_maccr] |= ETH_MACCR_TE;
+	__asm__ volatile("dsb" ::: "memory");
+	state->txStarted = true;
 
-	eth_smokeLogRegs(state, "before");
-	omr = eth_smokeStart(state);
-
-	/* buffer from dmammap() - normally in AXISRAM2 (axi_app starts at 0x34100000) */
-	if (va2pa(buf0) >= SMOKE_AXISRAM3_START) {
-		res[0].name = "AXISRAM3-6 (1st)";
-	}
-	eth_smokeTransmit(state, 0, buf0, &res[0]);
-	if ((res[0].sr & ETH_DMACSR_FBE) != 0U) {
-		fbe = true;
-		eth_smokeLogRegs(state, "FBE");
-	}
-
-	/* don't retry after a fatal bus error - DMA channel is stopped until reset */
-	if ((buf1 != NULL) && !fbe) {
-		eth_smokeTransmit(state, 1, buf1, &res[1]);
-		if ((res[1].sr & ETH_DMACSR_FBE) != 0U) {
-			fbe = true;
-			eth_smokeLogRegs(state, "FBE");
-		}
-	}
-
-	idle = eth_smokeStop(state, omr, fbe);
-	eth_smokeLogRegs(state, "after");
-
-	for (size_t i = 0; i < SMOKE_BUFS; i++) {
-		if (!res[i].run && fbe && (buf1 != NULL)) {
-			eth_printf(state, "DMA smoke: %s: NOT RUN (FBE)", res[i].name);
-		}
-		else {
-			eth_smokeLogResult(state, &res[i]);
-		}
-	}
-
-	eth_printf(state, "DMA smoke: done, MACCR=0x%08x DMAC0TXCR=0x%08x", (unsigned int)state->base[eth_maccr], (unsigned int)state->base[eth_dmac0txcr]);
-
-	if (!idle) {
-		/* DMA may still access the buffers - don't free them */
-		return;
-	}
-
-	munmap(buf0, SMOKE_BUF_SIZE);
-	if (chunk1 != NULL) {
-		munmap(chunk1, SMOKE_PROBE_SIZE);
-	}
+	eth_debug_printf(state, "TX started: MTLTXQ0OMR=0x%08x DMAC0TXCR=0x%08x DMAC0TXDTPR=0x%08x MACCR=0x%08x",
+			(unsigned int)state->base[eth_mtltxq0omr], (unsigned int)state->base[eth_dmac0txcr],
+			(unsigned int)state->base[eth_dmac0txdtpr], (unsigned int)state->base[eth_maccr]);
 }
 
 
-#endif /* STM32ETH_DMA_SMOKE_TEST */
+/*
+ * Stop the TX path (HAL_ETH_Stop() order): TX DMA, wait for the TX process to stop, flush MTL TX queue 0, MAC TX,
+ * disable the queue. Returns false if DMA may still access the descriptors/buffers (they must not be freed then).
+ */
+static bool eth_stopTx(eth_state_t *state)
+{
+	bool stopped, flushed;
+
+	if (!state->txStarted) {
+		return true;
+	}
+
+	state->base[eth_dmac0txcr] &= ~ETH_DMACTXCR_ST;
+	stopped = eth_waitReg(state, eth_dmadsr, ETH_DMADSR_TPS0_MASK, ETH_DMADSR_TPS_STOPPED << ETH_DMADSR_TPS0_SHIFT, ETH_TX_STOP_TIMEOUT_US);
+
+	state->base[eth_mtltxq0omr] |= ETH_MTLTXQOMR_FTQ;
+	flushed = eth_waitReg(state, eth_mtltxq0omr, ETH_MTLTXQOMR_FTQ, 0U, ETH_TX_STOP_TIMEOUT_US);
+
+	state->base[eth_maccr] &= ~ETH_MACCR_TE;
+	state->base[eth_mtltxq0omr] &= ~(ETH_MTLTXQOMR_TXQEN_MASK | ETH_MTLTXQOMR_FTQ);
+	state->txStarted = false;
+
+	if (!stopped || !flushed) {
+		eth_printf(state, "WARN: TX stop:%s%s", !stopped ? " DMA not stopped" : "", !flushed ? " MTL queue not flushed" : "");
+		eth_logTxRegs(state, "stop");
+	}
+
+	return stopped;
+}
+
+
+/* Free pbufs of completed TX descriptors */
+static void eth_txReap(eth_state_t *state)
+{
+	mutexLock(state->txLock);
+	(void)net_reapTxFinished(&state->rings[ETH_RING_TX]);
+	mutexUnlock(state->txLock);
+}
+
+
+/*
+ * Number of TX descriptors net_transmitPacket() needs for p: a regular pbuf is copied into one DMA buffer
+ * (net_makeDMAPbuf()), a custom (DMA) pbuf chain is referenced and split into fragments of at most max_tx_frag.
+ */
+static size_t eth_txFragsNeeded(const struct pbuf *p)
+{
+	size_t n = 0, left = p->tot_len;
+
+	if ((p->flags & PBUF_FLAG_IS_CUSTOM) == 0U) {
+		return (left + STM32ETH_TX_MAX_FRAG - 1U) / STM32ETH_TX_MAX_FRAG;
+	}
+
+	for (; (p != NULL) && (left != 0U); p = p->next) {
+		n += (p->len == 0U) ? 1U : ((p->len + STM32ETH_TX_MAX_FRAG - 1U) / STM32ETH_TX_MAX_FRAG);
+		left -= (p->len < left) ? p->len : left;
+	}
+
+	return n;
+}
+
+
+/*
+ * netif linkoutput. The pbuf stays owned by the caller (net_makeDMAPbuf() copies or references it).
+ * Returns: ERR_OK - queued, ERR_IF - link down or TX stopped (fatal bus error), ERR_BUF - TX ring full,
+ * ERR_MEM - no DMA buffer memory or too many fragments. imx-enet/greth return ERR_BUF for every failure and don't
+ * check the link state (their MAC drops frames without a link).
+ */
+static err_t eth_netifOutput(struct netif *netif, struct pbuf *p)
+{
+	eth_state_t *state = netif->state;
+	net_bufdesc_ring_t *tx = &state->rings[ETH_RING_TX];
+	size_t nfree, nfrags, nf;
+	err_t err;
+
+	if (!atomic_load(&state->linkUp) || atomic_load(&state->txStopped) || !state->txStarted) {
+		(void)atomic_fetch_add(&state->txDropped, 1U);
+		return ERR_IF;
+	}
+
+	mutexLock(state->txLock);
+
+	(void)net_reapTxFinished(tx);
+
+	/* bdring: a packet of n fragments needs n < min(free entries, MAX_TX_FRAGMENTS) */
+	nfree = (atomic_load(&tx->tail) - atomic_load(&tx->head) - 1U) & tx->last;
+	nfrags = eth_txFragsNeeded(p);
+	if ((nfrags >= ETH_TX_MAX_FRAGS) || (p->tot_len > ETH_TDES3_FL_MASK)) {
+		err = ERR_MEM;
+	}
+	else if (nfrags >= nfree) {
+		(void)atomic_fetch_add(&state->txRingFull, 1U);
+		err = ERR_BUF;
+	}
+	else {
+		state->txPktLen = p->tot_len;
+		state->txFragSum = 0;
+		nf = net_transmitPacket(tx, p);
+		if (nf != 0U) {
+			/* descriptors (and buffers) are cleaned - make sure it completed before DMA is started on them */
+			__asm__ volatile("dsb" ::: "memory");
+			state->base[eth_dmac0txdtpr] = (uint32_t)eth_descPhys(tx, atomic_load(&tx->head));
+			err = ERR_OK;
+
+			if (state->txFragSum != state->txPktLen) {
+				eth_printf(state, "WARN: TX fragments %u B != packet %u B", (unsigned int)state->txFragSum, (unsigned int)state->txPktLen);
+			}
+		}
+		else {
+			err = ERR_MEM;
+		}
+	}
+
+	mutexUnlock(state->txLock);
+
+	if (err != ERR_OK) {
+		(void)atomic_fetch_add(&state->txDropped, 1U);
+	}
+
+	return err;
+}
+
+
+/* Link thread: reap TX descriptors, check DMA channel status (fatal bus error stops TX, no recovery) */
+static void eth_txPoll(eth_state_t *state)
+{
+	const uint32_t handled = ETH_DMACSR_TI | ETH_DMACSR_TPS | ETH_DMACSR_TBU | ETH_DMACSR_ETI |
+			ETH_DMACSR_FBE | ETH_DMACSR_CDE | ETH_DMACSR_AIS | ETH_DMACSR_NIS;
+	uint32_t sr;
+
+	if (!state->txStarted) {
+		return;
+	}
+
+	sr = state->base[eth_dmac0sr];
+	if (((sr & ETH_DMACSR_FBE) != 0U) && !atomic_load(&state->txStopped)) {
+		atomic_store(&state->txStopped, true);
+		eth_printf(state, "ERROR: TX DMA fatal bus error (DMAC0SR=0x%08x TEB=%u) - transmission stopped, reset required",
+				(unsigned int)sr, (unsigned int)((sr & ETH_DMACSR_TEB_MASK) >> ETH_DMACSR_TEB_SHIFT));
+		eth_logTxRegs(state, "FBE");
+	}
+
+	if ((sr & handled) != 0U) {
+		state->base[eth_dmac0sr] = sr & handled;
+	}
+
+	eth_txReap(state);
+}
+
+
+#if ETH_DEBUG
+static void eth_logTxStats(eth_state_t *state, const char *why)
+{
+	const net_bufdesc_ring_t *tx = &state->rings[ETH_RING_TX];
+
+	eth_printf(state, "TX stats (%s): packets=%u errors=%u (flags 0x%04x) dropped=%u ring-full=%u MMC tx_packet_count_good=%u ring head=%u tail=%u",
+			why, (unsigned int)state->txPackets, (unsigned int)state->txErrors, (unsigned int)state->txErrFlags,
+			atomic_load(&state->txDropped), atomic_load(&state->txRingFull), (unsigned int)state->base[eth_tx_packet_count_good],
+			(unsigned int)atomic_load(&tx->head), (unsigned int)atomic_load(&tx->tail));
+}
+#endif
 
 
 /*
@@ -1091,18 +1086,36 @@ static void eth_dmaSmokeTest(eth_state_t *state)
 static void eth_linkThread(void *arg)
 {
 	eth_state_t *state = arg;
+#if ETH_DEBUG
+	unsigned int polls = 0, linkChanges = atomic_load(&state->linkChanges);
+	uint32_t txPackets = state->txPackets;
+#endif
 
 	mutexLock(state->lock);
 	for (;;) {
 		(void)condWait(state->cond, state->lock, LINK_POLL_INTERVAL_US);
 		mutexUnlock(state->lock);
 
-		ephy_pollLink(&state->phy, state->linkUp);
+		/*
+		 * netif_set_link_up/down() (from eth_setLinkState()) runs lwIP code (DHCP, ARP, ...) and may call linkoutput:
+		 * lwIP core lock must be held, txLock must not be held here.
+		 */
+		LOCK_TCPIP_CORE();
+		ephy_pollLink(&state->phy, atomic_load(&state->linkUp));
+		UNLOCK_TCPIP_CORE();
 
-#if STM32ETH_DMA_SMOKE_TEST
-		if (state->linkUp && !state->smokeTestDone) {
-			state->smokeTestDone = true;
-			eth_dmaSmokeTest(state);
+		/* no TX interrupt: free completed TX pbufs also when lwIP stops sending */
+		eth_txPoll(state);
+
+#if ETH_DEBUG
+		polls++;
+		if (atomic_load(&state->linkChanges) != linkChanges) {
+			linkChanges = atomic_load(&state->linkChanges);
+			eth_logTxStats(state, atomic_load(&state->linkUp) ? "link up" : "link down");
+		}
+		else if (((polls % ETH_STATS_POLLS) == 0U) && (state->txPackets != txPackets)) {
+			txPackets = state->txPackets;
+			eth_logTxStats(state, "periodic");
 		}
 #endif
 
@@ -1260,7 +1273,7 @@ static void eth_logHwFeatures(eth_state_t *state)
  * ETH_MACDMAConfig() l. 3201-3222, ETH_SetDMAConfig() l. 3056-3100, RBSZ l. 415,
  * descriptor lists: ETH_DMATxDescListInit() l. 3260-3266, ETH_DMARxDescListInit() l. 3309-3312),
  * except DSL = 2 (16-byte descriptors in 32-byte cache lines, no HAL backup fields).
- * DMA, MAC TX/RX and MTL queues are left disabled.
+ * DMA and MTL queues are left stopped here - the TX path is started by eth_startTx(), RX stays disabled.
  */
 static void eth_dmaConfig(eth_state_t *state)
 {
@@ -1358,10 +1371,26 @@ static int eth_initDma(eth_state_t *state)
 }
 
 
-static void eth_releaseRings(eth_state_t *state)
+/* dmaIdle: DMA can't access the rings and buffers any more (eth_stopTx() succeeded) */
+static void eth_releaseRings(eth_state_t *state, bool dmaIdle)
 {
+	const net_bufdesc_ring_t *tx = &state->rings[ETH_RING_TX];
+
 	if (!state->ringsValid) {
 		return;
+	}
+
+	if (!dmaIdle) {
+		eth_printf(state, "WARN: TX DMA not stopped - descriptor rings and TX buffers are not freed");
+		return;
+	}
+
+	/* pbufs of queued/completed TX packets (net_transmitPacket() keeps one past the last fragment) */
+	for (size_t i = 0; i <= tx->last; i++) {
+		if (tx->bufp[i] != NULL) {
+			pbuf_free(tx->bufp[i]);
+			tx->bufp[i] = NULL;
+		}
 	}
 
 	for (size_t i = 0; i < sizeof(state->rings) / sizeof(state->rings[0]); i++) {
@@ -1395,8 +1424,10 @@ static int eth_initHw(eth_state_t *state, size_t idx, bool mdio)
 	eth_macConfig(state);
 	eth_setupMacAddr(state, idx);
 
-	/* Last step: on failure the rings are not allocated */
+	/* Last fallible step: on failure the rings are not allocated */
 	CHECK(eth_initDma(state));
+
+	eth_startTx(state);
 
 	return 0;
 }
@@ -1404,8 +1435,11 @@ static int eth_initHw(eth_state_t *state, size_t idx, bool mdio)
 
 static void eth_releaseResources(eth_state_t *state)
 {
-	eth_releaseRings(state);
+	bool dmaIdle = eth_stopTx(state);
+
+	eth_releaseRings(state, dmaIdle);
 	resourceDestroy(state->cond);
+	resourceDestroy(state->txLock);
 	resourceDestroy(state->lock);
 	physunmap(state->base, ETH_REGS_SIZE);
 	state->base = NULL;
@@ -1508,11 +1542,15 @@ static int eth_netifInit(struct netif *netif, char *cfg)
 	atomic_init(&state->txDropped, 0U);
 	state->mdioBus = -1;
 	state->phyValid = false;
-	state->linkUp = false;
+	atomic_init(&state->linkUp, false);
+	atomic_init(&state->linkChanges, 0U);
 	state->ringsValid = false;
-#if STM32ETH_DMA_SMOKE_TEST
-	state->smokeTestDone = false;
-#endif
+	state->txStarted = false;
+	atomic_init(&state->txStopped, false);
+	atomic_init(&state->txRingFull, 0U);
+	state->txPackets = 0;
+	state->txErrors = 0;
+	state->txErrFlags = 0;
 
 	if (cfg == NULL) {
 		return -EINVAL;
@@ -1563,14 +1601,22 @@ static int eth_netifInit(struct netif *netif, char *cfg)
 		err = ephy_init(&state->phy, cfg, 0, eth_setLinkState, (void *)state->netif);
 		if (err < 0) {
 			eth_printf(state, "WARN: PHY init failed: %s (%d)", strerror(-err), err);
-			return err;
+		}
+		else {
+			state->phyValid = true;
+			eth_logPhyId(state);
+
+			err = beginthread(eth_linkThread, LINK_THREAD_PRIO, state->linkStack, sizeof(state->linkStack), state);
+			if (err < 0) {
+				eth_printf(state, "Couldn't begin link thread: %s (%d)", strerror(-err), err);
+			}
 		}
 
-		state->phyValid = true;
-		eth_logPhyId(state);
-
-		CHECK_MSG(beginthread(eth_linkThread, LINK_THREAD_PRIO, state->linkStack, sizeof(state->linkStack), state),
-				state, "Couldn't begin link thread: %s (%d)", strerror(-_ret), _ret);
+		if (err < 0) {
+			/* FIXME: state can't be released after register_mdio_bus() - at least keep DMA away from the rings */
+			(void)eth_stopTx(state);
+			return err;
+		}
 	}
 
 	eth_debug_printf(state, "Initialized");
