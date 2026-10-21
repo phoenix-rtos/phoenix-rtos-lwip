@@ -1,0 +1,21 @@
+#
+# Makefile for Phoenix-RTOS 3 LwIP
+#
+# STM32N6 target
+#
+# Copyright 2026 Phoenix Systems
+#
+
+NET_DRIVERS_SUPPORTED := stm32eth
+NET_DRIVERS ?= $(NET_DRIVERS_SUPPORTED)
+
+DRIVERS_SRCS_stm32eth = stm32-eth.c ephy.c stm32-gpio.c $(DRIVERS_SRCS_UTIL)
+
+# stm32eth debug options (default: off), e.g. `STM32ETH_DEBUG=1 STM32ETH_TX_MAX_FRAG=512 ./phoenix-rtos-build/build.sh core`
+# lwip must be rebuilt from clean after changing them
+ifneq ($(STM32ETH_DEBUG),)
+  CFLAGS += -DSTM32ETH_DEBUG=$(STM32ETH_DEBUG)
+endif
+ifneq ($(STM32ETH_TX_MAX_FRAG),)
+  CFLAGS += -DSTM32ETH_TX_MAX_FRAG=$(STM32ETH_TX_MAX_FRAG)
+endif
