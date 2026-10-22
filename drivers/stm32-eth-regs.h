@@ -443,6 +443,107 @@ enum eth_regs {
 	(ETH_TDES3_WB_IHE | ETH_TDES3_WB_UF | ETH_TDES3_WB_ED | ETH_TDES3_WB_EC | ETH_TDES3_WB_LC | ETH_TDES3_WB_NC | \
 			ETH_TDES3_WB_LOC | ETH_TDES3_WB_PCE | ETH_TDES3_WB_FF | ETH_TDES3_WB_JT | ETH_TDES3_WB_ES)
 
+/*
+ * RX normal descriptor, read format (stm32n6xx_hal_eth.h ETH_DMARXNDESCRF_*, Linux stmmac RDES3_*):
+ * RDES0 = buffer 1 address, RDES1 reserved, RDES2 = buffer 2 address
+ */
+#define ETH_RDES3_BUF1V (1UL << 24) /* Buffer 1 address valid */
+#define ETH_RDES3_BUF2V (1UL << 25) /* Buffer 2 address valid */
+#define ETH_RDES3_IOC   (1UL << 30) /* Interrupt on completion */
+#define ETH_RDES3_OWN   (1UL << 31) /* Owned by DMA */
+
+/* RX normal descriptor, write-back format, RDES3 (ETH_DMARXNDESCWBF_*, stmmac RDES3_*) */
+#define ETH_RDES3_WB_PL_MASK  0x7fffUL    /* Packet length (valid with LD) */
+#define ETH_RDES3_WB_ES       (1UL << 15) /* Error summary */
+#define ETH_RDES3_WB_LT_SHIFT 16          /* Length/type field */
+#define ETH_RDES3_WB_LT_MASK  (0x7UL << ETH_RDES3_WB_LT_SHIFT)
+#define ETH_RDES3_WB_DE       (1UL << 19) /* Dribble bit error */
+#define ETH_RDES3_WB_RE       (1UL << 20) /* Receive error */
+#define ETH_RDES3_WB_OE       (1UL << 21) /* Overflow error */
+#define ETH_RDES3_WB_RWT      (1UL << 22) /* Receive watchdog timeout */
+#define ETH_RDES3_WB_GP       (1UL << 23) /* Giant packet */
+#define ETH_RDES3_WB_CE       (1UL << 24) /* CRC error */
+#define ETH_RDES3_WB_RS0V     (1UL << 25) /* RDES0 status valid */
+#define ETH_RDES3_WB_RS1V     (1UL << 26) /* RDES1 status valid */
+#define ETH_RDES3_WB_RS2V     (1UL << 27) /* RDES2 status valid */
+#define ETH_RDES3_WB_LD       (1UL << 28) /* Last descriptor */
+#define ETH_RDES3_WB_FD       (1UL << 29) /* First descriptor */
+#define ETH_RDES3_WB_CTXT     (1UL << 30) /* Context descriptor */
+#define ETH_RDES3_WB_OWN      (1UL << 31) /* Owned by DMA */
+#define ETH_RDES3_WB_ERR_MASK \
+	(ETH_RDES3_WB_ES | ETH_RDES3_WB_DE | ETH_RDES3_WB_RE | ETH_RDES3_WB_OE | ETH_RDES3_WB_RWT | ETH_RDES3_WB_GP | ETH_RDES3_WB_CE)
+
+/* MTL RX queue operating mode (MTLRXQxOMR) */
+#define ETH_MTLRXQOMR_RTC_MASK  (0x3UL << 0)
+#define ETH_MTLRXQOMR_FUP       (1UL << 3) /* Forward undersized good packets */
+#define ETH_MTLRXQOMR_FEP       (1UL << 4) /* Forward error packets */
+#define ETH_MTLRXQOMR_RSF       (1UL << 5) /* RX store and forward */
+#define ETH_MTLRXQOMR_DISTCPEF  (1UL << 6) /* Disable dropping of TCP/IP checksum error packets */
+#define ETH_MTLRXQOMR_EHFC      (1UL << 7) /* Enable hardware flow control */
+#define ETH_MTLRXQOMR_RFA_MASK  (0x7UL << 8)
+#define ETH_MTLRXQOMR_RFD_MASK  (0x7UL << 14)
+#define ETH_MTLRXQOMR_RQS_SHIFT 20 /* RX queue size: 256 B * (n + 1) */
+#define ETH_MTLRXQOMR_RQS_MASK  (0xfUL << ETH_MTLRXQOMR_RQS_SHIFT)
+
+/* MTL RX queue missed packet and overflow counter (MTLRXQxMPOCR), cleared on read */
+#define ETH_MTLRXQMPOCR_OVFPKTCNT_MASK  0x7ffUL
+#define ETH_MTLRXQMPOCR_OVFCNTOVF       (1UL << 11) /* overflow counter crossed its maximum */
+#define ETH_MTLRXQMPOCR_MISPKTCNT_SHIFT 16
+#define ETH_MTLRXQMPOCR_MISPKTCNT_MASK  (0x7ffUL << ETH_MTLRXQMPOCR_MISPKTCNT_SHIFT)
+#define ETH_MTLRXQMPOCR_MISCNTOVF       (1UL << 27) /* missed counter crossed its maximum */
+
+/* DMA channel missed frame count (DMACxMFCR), cleared on read */
+#define ETH_DMACMFCR_MFC_MASK 0x7ffUL
+#define ETH_DMACMFCR_MFCO     (1UL << 15) /* counter crossed its maximum */
+
+/* MAC RX queue control 0 (MACRXQC0R) */
+#define ETH_MACRXQC0R_RXQ0EN_MASK (0x3UL << 0)
+#define ETH_MACRXQC0R_RXQ0EN_GT   (0x2UL << 0) /* RX queue 0 enabled for generic traffic (HAL ETH_RX_QUEUE0_ENABLED) */
+
+/* DMA channel interrupt enable (DMACxIER), same layout as DMACxSR */
+#define ETH_DMACIER_TIE  (1UL << 0)
+#define ETH_DMACIER_TXSE (1UL << 1)
+#define ETH_DMACIER_TBUE (1UL << 2)
+#define ETH_DMACIER_RIE  (1UL << 6)
+#define ETH_DMACIER_RBUE (1UL << 7)
+#define ETH_DMACIER_RSE  (1UL << 8)
+#define ETH_DMACIER_RWTE (1UL << 9)
+#define ETH_DMACIER_ETIE (1UL << 10)
+#define ETH_DMACIER_ERIE (1UL << 11)
+#define ETH_DMACIER_FBEE (1UL << 12)
+#define ETH_DMACIER_CDEE (1UL << 13)
+#define ETH_DMACIER_AIE  (1UL << 14)
+#define ETH_DMACIER_NIE  (1UL << 15)
+
+/* DMA channel status (DMACxSR), RX bits not defined above */
+#define ETH_DMACSR_RWT (1UL << 9)  /* Receive watchdog timeout */
+#define ETH_DMACSR_ERI (1UL << 11) /* Early receive interrupt */
+
+/* DMA interrupt status (DMAISR) */
+#define ETH_DMAISR_DC0IS (1UL << 0)
+#define ETH_DMAISR_DC1IS (1UL << 1)
+#define ETH_DMAISR_MTLIS (1UL << 16)
+#define ETH_DMAISR_MACIS (1UL << 17)
+
+/* DMA debug status (DMADSR): RX process state stopped */
+#define ETH_DMADSR_RPS_STOPPED 0x0U
+
+/* MMC interrupt masks (HAL_ETH_Init(): stm32n6xx_hal_eth.c:427-432) */
+#define ETH_MMCRIMR_RXCRCERPIM  (1UL << 5)
+#define ETH_MMCRIMR_RXALGNERPIM (1UL << 6)
+#define ETH_MMCRIMR_RXUCGPIM    (1UL << 17)
+#define ETH_MMCRIMR_RXLPIUSCIM  (1UL << 26)
+#define ETH_MMCRIMR_RXLPITRCIM  (1UL << 27)
+#define ETH_MMCRIMR_ALL \
+	(ETH_MMCRIMR_RXCRCERPIM | ETH_MMCRIMR_RXALGNERPIM | ETH_MMCRIMR_RXUCGPIM | ETH_MMCRIMR_RXLPIUSCIM | ETH_MMCRIMR_RXLPITRCIM)
+#define ETH_MMCTIMR_TXSCOLGPIM (1UL << 14)
+#define ETH_MMCTIMR_TXMCOLGPIM (1UL << 15)
+#define ETH_MMCTIMR_TXGPKTIM   (1UL << 21)
+#define ETH_MMCTIMR_TXLPIUSCIM (1UL << 26)
+#define ETH_MMCTIMR_TXLPITRCIM (1UL << 27)
+#define ETH_MMCTIMR_ALL \
+	(ETH_MMCTIMR_TXSCOLGPIM | ETH_MMCTIMR_TXMCOLGPIM | ETH_MMCTIMR_TXGPKTIM | ETH_MMCTIMR_TXLPIUSCIM | ETH_MMCTIMR_TXLPITRCIM)
+
 #define ETH_MACISR_RGSMIIIS (1UL << 0)
 #define ETH_MACISR_PHYIS    (1UL << 3)
 #define ETH_MACISR_PMTIS    (1UL << 4)

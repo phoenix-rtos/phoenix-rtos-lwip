@@ -4,9 +4,8 @@
  * STM32 ETH network module driver
  *
  * RIF, clocks, pins, MAC reset, MAC address, MDIO bus, PHY link state polling,
- * DMA descriptor rings (cacheable memory, one descriptor per cache line) and the TX path
- * (linkoutput -> TX ring -> DMA, completed descriptors reaped without interrupts).
- * RX path and interrupts are not implemented yet - the receiver (MACCR.RE, RX DMA) stays disabled.
+ * DMA descriptor rings (cacheable memory, one descriptor per cache line), TX path (linkoutput -> TX ring -> DMA),
+ * RX path (RX ring -> lwIP) and the ETH interrupt with one IRQ thread (RX, TX reaping, DMA errors, PHY polling).
  *
  * Copyright 2018, 2024, 2026 Phoenix Systems
  * Author: Michał Mirosław, Julian Uziembło, Jacek Maksymowicz
@@ -77,7 +76,7 @@
 #define RESET_TIMEOUT_US      (500U * 1000U)
 #define MDIO_TIMEOUT_US       (10U * 1000U)
 #define LINK_POLL_INTERVAL_US (1000U * 1000U)
-#define LINK_THREAD_PRIO      4
+#define IRQ_THREAD_PRIO       4 /* as imx-enet; tcpip thread: 3 */
 
 #define MULTIDRV_LOOKUP_RETRIES 100
 
@@ -102,8 +101,14 @@
 #define ETH_TX_MAX_FRAGS 8U  /* bdring.c MAX_TX_FRAGMENTS: a packet needs fewer fragments than this */
 #define ETH_TX_QUEUE_TQS 7U  /* MTL TX queue 0 size: 256 B * (TQS + 1) = 2048 B (HAL ETH_TRANSMIT_QUEUE_SIZE_2048) */
 
+#define ETH_RX_QUEUE_RQS 15U /* MTL RX queue 0 size: 256 B * (RQS + 1) = 4096 B = whole RX FIFO (HAL ETH_RECEIVE_QUEUE_SIZE_4096) */
+
 #define ETH_TX_STOP_TIMEOUT_US (10U * 1000U)
-#define ETH_STATS_POLLS        10U /* debug: log TX statistics every N link polls (if changed) */
+#define ETH_RX_STOP_TIMEOUT_US (10U * 1000U)
+#define ETH_STATS_POLLS        10U /* debug: log TX/RX statistics every N link polls (if changed) */
+
+/* DMA channel 0 interrupts: normal (RX/TX completion) and abnormal (RX buffer unavailable, fatal bus error) */
+#define ETH_DMA_IRQS (ETH_DMACIER_NIE | ETH_DMACIER_RIE | ETH_DMACIER_TIE | ETH_DMACIER_AIE | ETH_DMACIER_RBUE | ETH_DMACIER_FBEE)
 
 /* a full-size frame (DMA buffer of ETH_RX_BUF_SIZE) must fit in ETH_TX_MAX_FRAGS - 1 fragments */
 _Static_assert((STM32ETH_TX_MAX_FRAG <= 0x3fffU) && (STM32ETH_TX_MAX_FRAG >= ((ETH_RX_BUF_SIZE + ETH_TX_MAX_FRAGS - 2U) / (ETH_TX_MAX_FRAGS - 1U))),
@@ -185,6 +190,7 @@ enum {
 static const struct {
 	addr_t base;
 	int pctls[N_PCTLS];
+	unsigned int irq;                          /* ETH global interrupt */
 	int risup;                                 /* RIF slave index (register access) */
 	int rimc;                                  /* RIF master index (DMA access) */
 	stm32_pin_setup_t pinoutPhy[eth_phy_pins]; /* Pinout for PHY management */
@@ -202,6 +208,7 @@ static const struct {
 	{
 		.base = 0x58036000UL, /* ETH1_BASE_S */
 		.pctls = { pctl_eth1, pctl_eth1mac, pctl_eth1tx, pctl_eth1rx },
+		.irq = eth1_irq, /* ETH1_IRQn (179) + 16 */
 		.risup = pctl_risup_eth1,
 		.rimc = pctl_rimc_eth1,
 		.pinoutPhy = {
@@ -251,7 +258,7 @@ typedef struct {
 	oid_t multidrvOid;
 	int mdioBus; /* MDIO bus index registered by this device, < 0 if none */
 	bool phyValid;
-	atomic_bool linkUp; /* last link state reported by ephy (written only by ephy_init() and the link thread) */
+	atomic_bool linkUp; /* last link state reported by ephy (written only by ephy_init() and the IRQ thread) */
 	atomic_uint linkChanges;
 	eth_phy_state_t phy;
 
@@ -259,20 +266,44 @@ typedef struct {
 	net_bufdesc_ring_t rings[2];
 	bool ringsValid;
 	bool txStarted;        /* TX path (MTL queue, DMA, MAC TX) started by eth_startTx() */
-	atomic_bool txStopped; /* TX DMA fatal bus error - nothing is transmitted until reset */
+	bool rxStarted;        /* RX path (MTL queue, DMA, MAC RX) started by eth_startRx() */
+	atomic_bool txStopped; /* DMA fatal bus error - nothing is transmitted or received until reset */
+
+	/* ETH interrupt (eth_initDevice()) and IRQ thread (eth_netifInit()) */
+	handle_t irqHandle;
+	bool irqValid;
+	atomic_uint irqCount;
+	atomic_uint irqStatus; /* OR of DMAC0SR seen by the interrupt handler (debug) */
+
+	/* RX packet in progress (IRQ thread only): length of its previous descriptors, error */
+	size_t rxPktLen;
+	bool rxPktBad;
+	uint32_t rxLastRdes3;
+	err_t (*input)(struct pbuf *p, struct netif *netif); /* lwIP input (tcpip_input), called by eth_netifInput() */
+
+	/* RX statistics (IRQ thread only) */
+	uint32_t rxPackets, rxBytes;
+	uint32_t rxErrors;                                /* packets with RDES3.ES */
+	uint32_t rxErrFlags;                              /* OR of RDES3 write-back error flags */
+	uint32_t rxBadDesc;                               /* packets in more than one descriptor or context descriptors (not expected) */
+	uint32_t rxInputDrop;                             /* packets lwIP couldn't queue (tcpip_input() failed) */
+	uint32_t rxRbu;                                   /* DMACSR.RBU events (DMA ran out of descriptors) */
+	uint32_t rxRefillLow;                             /* refills that left the ring not fully filled (no packet buffer memory) */
+	uint32_t rxMtlOverflow, rxMtlMissed, rxDmaMissed; /* clear-on-read hardware counters, accumulated every poll */
+	uint32_t rxDropCntWraps;                          /* reads with a counter overflow flag: the totals are lower bounds */
 
 	/* Current packet (written under txLock): total length for TDES3.FL and the sum of its fragment lengths */
 	size_t txPktLen;
 	size_t txFragSum;
 
 	/* TX statistics */
-	atomic_uint txDropped;  /* not queued: link down, TX stopped, ring full, no memory */
-	atomic_uint txRingFull; /* not queued because the ring was full (ERR_BUF) */
+	atomic_uint txDropped;  /* not queued and not retryable: link down, TX stopped, no memory (ERR_IF, ERR_MEM) */
+	atomic_uint txRingFull; /* not queued because the ring was full (ERR_BUF - the caller may retry) */
 	uint32_t txPackets;     /* completed packets (last descriptor written back), under TX ring lock */
 	uint32_t txErrors;      /* completed packets with TDES3.ES set, under TX ring lock */
 	uint32_t txErrFlags;    /* OR of TDES3 write-back error flags [15:0], under TX ring lock */
 
-	uint32_t linkStack[2048] __attribute__((aligned(16))); /* lwIP output path runs on it (netif_set_link_up()) */
+	uint32_t irqStack[2048] __attribute__((aligned(16))); /* RX -> tcpip_input, lwIP output path (netif_set_link_up()) */
 } eth_state_t;
 
 
@@ -412,7 +443,11 @@ static void eth_macConfig(eth_state_t *state)
 	v |= 0 << ETH_MACCR_BL_SHIFT;     /* Back-off limited to 2^10 slot delays */
 	/* Strip padding/CRC of length packets (ACS) and CRC of type packets (CST) */
 	v |= ETH_ENABLE_RX_PAD_REMOVE ? (ETH_MACCR_ACS | ETH_MACCR_CST) : 0;
-	v |= ETH_MACCR_IPC; /* Enable RX checksum offload TODO: verify together with RX path */
+	/*
+	 * RX checksum offload (as HAL): results go to RDES1 (IPHE/IPCE), not to RDES3.ES, and aren't used - lwIP checks the
+	 * checksums itself. Packets with checksum errors are not dropped in hardware (MTLRXQ0OMR.DISTCPEF = 1, eth_startRx()).
+	 */
+	v |= ETH_MACCR_IPC;
 	state->base[eth_maccr] = v;
 
 	v = state->base[eth_macecr];
@@ -811,8 +846,124 @@ static bool eth_nextTxDone(const net_bufdesc_ring_t *ring, size_t i)
 }
 
 
-/* Descriptor rings: TX callbacks only, RX is added together with the RX path */
+static inline eth_state_t *eth_rxRingState(const net_bufdesc_ring_t *ring)
+{
+	return (eth_state_t *)((uintptr_t)ring - offsetof(eth_state_t, rings[ETH_RING_RX]));
+}
+
+
+/*
+ * bdring fillRxDesc callback - called by net_refillRx() (IRQ thread or init, under the ring lock).
+ * The buffer is invalidated, not cleaned: a reused packet buffer may hold dirty lines written by lwIP, and they must
+ * not be written back over data the DMA stores. Packet buffers are page-aligned, so no cache line is shared.
+ */
+static void eth_fillRxDesc(const net_bufdesc_ring_t *ring, size_t i, addr_t pa, size_t sz, unsigned seg)
+{
+	volatile eth_dma_desc_t *desc = eth_desc(ring, i);
+	uint32_t rdes3 = ETH_RDES3_BUF1V | ETH_RDES3_IOC;
+
+	(void)seg;
+
+	/* NOMMU: pa == va */
+	eth_invalDCache((void *)pa, sz);
+
+	desc->des[0] = (uint32_t)pa;
+	desc->des[1] = 0U;
+	desc->des[2] = 0U;
+	desc->des[3] = rdes3;
+
+	/* descriptor contents must be visible to DMA before it gets the ownership */
+	__asm__ volatile("dmb" ::: "memory");
+	desc->des[3] = rdes3 | ETH_RDES3_OWN;
+	eth_cleanDCache(desc, sizeof(*desc));
+}
+
+
+/*
+ * bdring nextRxBufferSize callback - called by net_receivePackets() (IRQ thread, under the ring lock).
+ * Returns the number of bytes in the buffer of descriptor i, 0 if the DMA still owns it.
+ * A completed descriptor never returns 0 (that would stop net_receivePackets()): packets with errors, in more than one
+ * descriptor (giant packets, > RBSZ = 1536 B) or context descriptors are marked bad and dropped by eth_netifInput().
+ */
+static size_t eth_nextRxBufferSize(const net_bufdesc_ring_t *ring, size_t i)
+{
+	eth_state_t *state = eth_rxRingState(ring);
+	volatile eth_dma_desc_t *desc = eth_desc(ring, i);
+	struct pbuf *p = ring->bufp[i];
+	uint32_t rdes3;
+	size_t len, pl;
+
+	/* the descriptor may have been written back by DMA */
+	eth_invalDCache(desc, sizeof(*desc));
+	rdes3 = desc->des[3];
+	if ((rdes3 & ETH_RDES3_WB_OWN) != 0U) {
+		return 0;
+	}
+
+	/* don't read the rest of the descriptor (write-back) before OWN */
+	__asm__ volatile("dmb" ::: "memory");
+	state->rxLastRdes3 = rdes3;
+
+	if ((rdes3 & ETH_RDES3_WB_CTXT) != 0U) {
+		/* context descriptor (timestamps are not enabled): no packet data, drop it as a packet on its own */
+		state->rxPktLen = 0;
+		state->rxPktBad = true;
+		return 1;
+	}
+
+	if ((rdes3 & ETH_RDES3_WB_FD) != 0U) {
+		state->rxPktLen = 0;
+		state->rxPktBad = false;
+	}
+
+	if ((rdes3 & ETH_RDES3_WB_LD) == 0U) {
+		/* not the last descriptor of the packet: the buffer is full */
+		len = ETH_RX_BUF_SIZE;
+		state->rxPktBad = true;
+	}
+	else {
+		/* PL = length of the whole packet (CRC stripped: MACCR.ACS/CST) */
+		pl = rdes3 & ETH_RDES3_WB_PL_MASK;
+		len = (pl > state->rxPktLen) ? (pl - state->rxPktLen) : 0U;
+		if ((rdes3 & (ETH_RDES3_WB_FD | ETH_RDES3_WB_ES)) != ETH_RDES3_WB_FD) {
+			state->rxPktBad = true;
+		}
+		if ((len == 0U) || (len > ETH_RX_BUF_SIZE)) {
+			/* inconsistent length - keep the buffer bounds */
+			state->rxPktBad = true;
+			len = (len == 0U) ? 1U : ETH_RX_BUF_SIZE;
+		}
+	}
+	state->rxPktLen += len;
+
+	/* data written by the DMA: drop stale cache lines (speculative reads) before the CPU reads the buffer */
+	eth_invalDCache(p->payload, len);
+
+	return len;
+}
+
+
+/*
+ * bdring pktRxFinished callback: every descriptor is passed up as a packet of its own (a single pbuf).
+ * A packet in more than one descriptor (> RBSZ, e.g. a giant packet) is marked bad by eth_nextRxBufferSize() in every
+ * descriptor and dropped piece by piece. Chaining the pieces in net_receivePackets() would leak buffers:
+ * LWIP_HOOK_ETH_INPUT gets and frees only the last pbuf of the chain, and a chain left unfinished when the DMA still
+ * owns the next descriptor is dropped without being freed.
+ */
+static bool eth_pktRxFinished(const net_bufdesc_ring_t *ring, size_t i)
+{
+	(void)ring;
+	(void)i;
+
+	return true;
+}
+
+
+/* Descriptor rings: RX and TX callbacks */
 static const net_bufdesc_ops_t eth_ringOps = {
+	.nextRxBufferSize = eth_nextRxBufferSize,
+	.pktRxFinished = eth_pktRxFinished,
+	.fillRxDesc = eth_fillRxDesc,
 	.nextTxDone = eth_nextTxDone,
 	.fillTxDesc = eth_fillTxDesc,
 	.desc_size = ETH_DESC_SIZE,
@@ -890,7 +1041,7 @@ static void eth_logTxRegs(eth_state_t *state, const char *when)
  * Start the TX path (HAL: ETHEx_SetMTLConfig() + HAL_ETH_Start() TX part): MTL TX queue 0 (2048 B, store and forward,
  * enabled), flush it, TX DMA (suspended: tail pointer = ring base) and MAC TX (MACCR.TE).
  * The TX path is started once at init and runs regardless of the link state: linkoutput drops frames while the link
- * is down and eth_setLinkState() disables TE only for the time of a speed/duplex change. RX stays disabled.
+ * is down and eth_setLinkState() disables TE only for the time of a speed/duplex change.
  */
 static void eth_startTx(eth_state_t *state)
 {
@@ -1031,7 +1182,8 @@ static err_t eth_netifOutput(struct netif *netif, struct pbuf *p)
 
 	mutexUnlock(state->txLock);
 
-	if (err != ERR_OK) {
+	/* ERR_BUF is counted as ring-full only: the caller may retry */
+	if ((err != ERR_OK) && (err != ERR_BUF)) {
 		(void)atomic_fetch_add(&state->txDropped, 1U);
 	}
 
@@ -1039,87 +1191,364 @@ static err_t eth_netifOutput(struct netif *netif, struct pbuf *p)
 }
 
 
-/* Link thread: reap TX descriptors, check DMA channel status (fatal bus error stops TX, no recovery) */
-static void eth_txPoll(eth_state_t *state)
+/* Log RX DMA/MTL/MAC registers and the descriptors at the ring head (next to read) and tail (next to fill) */
+static void eth_logRxRegs(eth_state_t *state, const char *when)
 {
-	const uint32_t handled = ETH_DMACSR_TI | ETH_DMACSR_TPS | ETH_DMACSR_TBU | ETH_DMACSR_ETI |
-			ETH_DMACSR_FBE | ETH_DMACSR_CDE | ETH_DMACSR_AIS | ETH_DMACSR_NIS;
-	uint32_t sr;
+	const net_bufdesc_ring_t *rx = &state->rings[ETH_RING_RX];
+	volatile eth_dma_desc_t *desc;
+	uint32_t rdes[2][4];
+	unsigned int head, tail;
 
-	if (!state->txStarted) {
+	eth_printf(state, "RX %s: DMAC0SR=0x%08x DMADSR=0x%08x DMAC0RXCR=0x%08x DMAC0CARXDR=0x%08x DMAC0CARXBR=0x%08x DMAC0IER=0x%08x",
+			when, (unsigned int)state->base[eth_dmac0sr], (unsigned int)state->base[eth_dmadsr], (unsigned int)state->base[eth_dmac0rxcr],
+			(unsigned int)state->base[eth_dmac0carxdr], (unsigned int)state->base[eth_dmac0carxbr], (unsigned int)state->base[eth_dmac0ier]);
+	eth_printf(state, "RX %s: DMAC0RXDLAR=0x%08x DMAC0RXDTPR=0x%08x DMAC0RXRLR=%u MTLRXQ0OMR=0x%08x MTLRXQ0DR=0x%08x MACRXQC0R=0x%08x MACCR=0x%08x",
+			when, (unsigned int)state->base[eth_dmac0rxdlar], (unsigned int)state->base[eth_dmac0rxdtpr], (unsigned int)state->base[eth_dmac0rxrlr],
+			(unsigned int)state->base[eth_mtlrxq0omr], (unsigned int)state->base[eth_mtlrxq0dr], (unsigned int)state->base[eth_macrxqc0r],
+			(unsigned int)state->base[eth_maccr]);
+
+	if (!state->ringsValid) {
 		return;
 	}
 
-	sr = state->base[eth_dmac0sr];
-	if (((sr & ETH_DMACSR_FBE) != 0U) && !atomic_load(&state->txStopped)) {
-		atomic_store(&state->txStopped, true);
-		eth_printf(state, "ERROR: TX DMA fatal bus error (DMAC0SR=0x%08x TEB=%u) - transmission stopped, reset required",
-				(unsigned int)sr, (unsigned int)((sr & ETH_DMACSR_TEB_MASK) >> ETH_DMACSR_TEB_SHIFT));
-		eth_logTxRegs(state, "FBE");
+	/* called from the IRQ thread or after RX was stopped - nobody fills RX descriptors concurrently */
+	head = atomic_load(&rx->head);
+	tail = atomic_load(&rx->tail);
+	for (size_t k = 0; k < 2U; k++) {
+		desc = eth_desc(rx, (k == 0U) ? head : tail);
+		eth_invalDCache(desc, sizeof(*desc));
+		for (size_t j = 0; j < 4U; j++) {
+			rdes[k][j] = desc->des[j];
+		}
 	}
 
-	if ((sr & handled) != 0U) {
-		state->base[eth_dmac0sr] = sr & handled;
+	eth_printf(state, "RX %s: ring head=%u (0x%08x) RDES=%08x %08x %08x %08x, tail=%u (0x%08x) RDES=%08x %08x %08x %08x",
+			when, head, (unsigned int)eth_descPhys(rx, head),
+			(unsigned int)rdes[0][0], (unsigned int)rdes[0][1], (unsigned int)rdes[0][2], (unsigned int)rdes[0][3],
+			tail, (unsigned int)eth_descPhys(rx, tail),
+			(unsigned int)rdes[1][0], (unsigned int)rdes[1][1], (unsigned int)rdes[1][2], (unsigned int)rdes[1][3]);
+}
+
+
+/*
+ * RX tail pointer = descriptor after the last one passed to DMA (bdring ring->tail, the next one to fill; Linux stmmac).
+ * The DMA uses descriptors up to the tail pointer and suspends there (RBU) - bdring always keeps that one unfilled.
+ * HAL writes the address of the last filled descriptor instead, which leaves that descriptor unused until the next refill.
+ */
+static void eth_rxKick(eth_state_t *state)
+{
+	const net_bufdesc_ring_t *rx = &state->rings[ETH_RING_RX];
+
+	/* descriptors are cleaned (syscall with dsb) - order the tail pointer write after them anyway */
+	__asm__ volatile("dsb" ::: "memory");
+	state->base[eth_dmac0rxdtpr] = (uint32_t)eth_descPhys(rx, atomic_load(&rx->tail));
+}
+
+
+/*
+ * Start the RX path (HAL: ETHEx_SetMTLConfig() RX part + HAL_ETH_Start() RX part), after the TX path:
+ * fill the RX ring, MTL RX queue 0 (4096 B, store and forward), MAC RX queue 0, RX DMA, MAC RX (MACCR.RE).
+ * Not fallible: if packet buffers are short, the IRQ thread refills the ring later.
+ */
+static void eth_startRx(eth_state_t *state)
+{
+	net_bufdesc_ring_t *rx = &state->rings[ETH_RING_RX];
+	uint32_t v;
+
+	/* MMC counter interrupts don't depend on MACIER: mask them (HAL_ETH_Init()), clear pending ones (cleared on read) */
+	state->base[eth_mmc_rx_interrupt_mask] |= ETH_MMCRIMR_ALL;
+	state->base[eth_mmc_tx_interrupt_mask] |= ETH_MMCTIMR_ALL;
+	(void)state->base[eth_mmc_rx_interrupt];
+	(void)state->base[eth_mmc_tx_interrupt];
+
+	/* each descriptor is cleaned from D-cache by eth_fillRxDesc() */
+	(void)net_refillRx(rx);
+
+	/*
+	 * MTL RX queue 0: whole RX FIFO, store and forward, error and undersized packets dropped (FEP = FUP = 0).
+	 * DISTCPEF = 1: unlike HAL, packets with TCP/IP checksum errors (MACCR.IPC) are not dropped in the MTL - lwIP checks
+	 * the checksums itself and counts the errors. No hardware flow control (EHFC = 0).
+	 */
+	v = state->base[eth_mtlrxq0omr];
+	v &= ~(ETH_MTLRXQOMR_RQS_MASK | ETH_MTLRXQOMR_RFD_MASK | ETH_MTLRXQOMR_RFA_MASK | ETH_MTLRXQOMR_EHFC | ETH_MTLRXQOMR_DISTCPEF |
+			ETH_MTLRXQOMR_RSF | ETH_MTLRXQOMR_FEP | ETH_MTLRXQOMR_FUP | ETH_MTLRXQOMR_RTC_MASK);
+	v |= (ETH_RX_QUEUE_RQS << ETH_MTLRXQOMR_RQS_SHIFT) | ETH_MTLRXQOMR_RSF | ETH_MTLRXQOMR_DISTCPEF;
+	state->base[eth_mtlrxq0omr] = v;
+
+	v = state->base[eth_macrxqc0r];
+	v &= ~ETH_MACRXQC0R_RXQ0EN_MASK;
+	v |= ETH_MACRXQC0R_RXQ0EN_GT;
+	state->base[eth_macrxqc0r] = v;
+
+	state->base[eth_dmac0sr] = ETH_DMACSR_RPS | ETH_DMACSR_RBU;
+	eth_rxKick(state);
+	state->base[eth_dmac0rxcr] |= ETH_DMACRXCR_SR;
+	state->base[eth_maccr] |= ETH_MACCR_RE;
+	__asm__ volatile("dsb" ::: "memory");
+	state->rxStarted = true;
+
+	eth_debug_printf(state, "RX started: %u buffers, MTLRXQ0OMR=0x%08x MACRXQC0R=0x%08x DMAC0RXCR=0x%08x DMAC0RXDTPR=0x%08x MACCR=0x%08x MACPFR=0x%08x",
+			(unsigned int)((atomic_load(&rx->tail) - atomic_load(&rx->head)) & rx->last),
+			(unsigned int)state->base[eth_mtlrxq0omr], (unsigned int)state->base[eth_macrxqc0r], (unsigned int)state->base[eth_dmac0rxcr],
+			(unsigned int)state->base[eth_dmac0rxdtpr], (unsigned int)state->base[eth_maccr], (unsigned int)state->base[eth_macpfr]);
+}
+
+
+/*
+ * Stop the RX path: MAC RX first (no new packet enters the MTL), RX DMA, wait for the RX process to stop, MAC RX queue.
+ * Returns false if DMA may still write to the RX buffers (they must not be freed then).
+ */
+static bool eth_stopRx(eth_state_t *state)
+{
+	bool stopped;
+
+	if (!state->rxStarted) {
+		return true;
 	}
 
-	eth_txReap(state);
+	state->base[eth_maccr] &= ~ETH_MACCR_RE;
+	state->base[eth_dmac0rxcr] &= ~ETH_DMACRXCR_SR;
+	stopped = eth_waitReg(state, eth_dmadsr, ETH_DMADSR_RPS0_MASK, ETH_DMADSR_RPS_STOPPED << ETH_DMADSR_RPS0_SHIFT, ETH_RX_STOP_TIMEOUT_US);
+	state->base[eth_macrxqc0r] &= ~ETH_MACRXQC0R_RXQ0EN_MASK;
+	state->rxStarted = false;
+
+	if (!stopped) {
+		eth_printf(state, "WARN: RX stop: DMA not stopped");
+		eth_logRxRegs(state, "stop");
+	}
+
+	return stopped;
+}
+
+
+/*
+ * netif->input of this interface (lwIP's input function, tcpip_input, is called from here):
+ * called by net_receivePackets() in the IRQ thread right after the descriptor of the packet was read, so
+ * state->rxPktBad / rxLastRdes3 describe this packet. Bad packets are dropped and counted.
+ * The pbuf is always consumed: bdring ignores the return value, so a packet lwIP couldn't queue is freed here.
+ */
+static err_t eth_netifInput(struct pbuf *p, struct netif *netif)
+{
+	eth_state_t *state = netif->state;
+	uint32_t rdes3 = state->rxLastRdes3;
+
+	if (state->rxPktBad) {
+		state->rxPktBad = false;
+		if ((rdes3 & ETH_RDES3_WB_ES) != 0U) {
+			state->rxErrors++;
+			state->rxErrFlags |= rdes3 & ETH_RDES3_WB_ERR_MASK;
+		}
+		else {
+			state->rxBadDesc++;
+		}
+		if ((state->rxErrors + state->rxBadDesc) == 1U) {
+			eth_debug_printf(state, "RX: dropped bad packet, RDES3=0x%08x", (unsigned int)rdes3);
+		}
+		pbuf_free(p);
+		return ERR_OK;
+	}
+
+	state->rxPackets++;
+	state->rxBytes += p->tot_len;
+
+	if (state->input(p, netif) != ERR_OK) {
+		state->rxInputDrop++;
+		pbuf_free(p);
+	}
+
+	return ERR_OK;
+}
+
+
+/* IRQ thread: pass received packets to lwIP, refill the ring, move the tail pointer (resumes a suspended RX DMA) */
+static void eth_rxProcess(eth_state_t *state)
+{
+	net_bufdesc_ring_t *rx = &state->rings[ETH_RING_RX];
+
+	if (!state->rxStarted) {
+		return;
+	}
+
+	(void)net_receivePackets(rx, state->netif);
+	/*
+	 * Move the tail pointer only when descriptors were added: without new descriptors a suspended RX DMA would find
+	 * none again and raise RBU again (interrupt storm while packet buffers are exhausted); the refill is retried at
+	 * least once per LINK_POLL_INTERVAL_US.
+	 */
+	if (net_refillRx(rx) != 0U) {
+		eth_rxKick(state);
+	}
+	if (net_rxFullyFilled(rx) == 0) {
+		state->rxRefillLow++;
+	}
+}
+
+
+/*
+ * ETH interrupt handler (kernel context - no syscalls): mask the DMA channel 0 interrupts and wake the IRQ thread,
+ * which clears the status and unmasks them. DMAC0SR is only read (FBE is handled by the thread, the status stays set).
+ */
+static int eth_irqHandler(unsigned int n, void *arg)
+{
+	eth_state_t *state = arg;
+
+	(void)n;
+
+	state->base[eth_dmac0ier] = 0U;
+	(void)atomic_fetch_or(&state->irqStatus, state->base[eth_dmac0sr]);
+	atomic_fetch_add(&state->irqCount, 1U);
+
+	return 0;
+}
+
+
+/* IRQ thread: DMA fatal bus error - stop transmitting and receiving, no recovery (step 5) */
+static void eth_dmaFatal(eth_state_t *state, uint32_t sr)
+{
+	atomic_store(&state->txStopped, true);
+	state->base[eth_maccr] &= ~(ETH_MACCR_TE | ETH_MACCR_RE);
+
+	eth_printf(state, "ERROR: DMA fatal bus error (DMAC0SR=0x%08x TEB=%u REB=%u) - TX and RX stopped, reset required",
+			(unsigned int)sr, (unsigned int)((sr & ETH_DMACSR_TEB_MASK) >> ETH_DMACSR_TEB_SHIFT),
+			(unsigned int)((sr & ETH_DMACSR_REB_MASK) >> ETH_DMACSR_REB_SHIFT));
+	eth_logTxRegs(state, "FBE");
+	eth_logRxRegs(state, "FBE");
 }
 
 
 #if ETH_DEBUG
-static void eth_logTxStats(eth_state_t *state, const char *why)
+static void eth_logStats(eth_state_t *state, const char *why)
 {
 	const net_bufdesc_ring_t *tx = &state->rings[ETH_RING_TX];
+	const net_bufdesc_ring_t *rx = &state->rings[ETH_RING_RX];
 
 	eth_printf(state, "TX stats (%s): packets=%u errors=%u (flags 0x%04x) dropped=%u ring-full=%u MMC tx_packet_count_good=%u ring head=%u tail=%u",
 			why, (unsigned int)state->txPackets, (unsigned int)state->txErrors, (unsigned int)state->txErrFlags,
 			atomic_load(&state->txDropped), atomic_load(&state->txRingFull), (unsigned int)state->base[eth_tx_packet_count_good],
 			(unsigned int)atomic_load(&tx->head), (unsigned int)atomic_load(&tx->tail));
+	eth_printf(state, "RX stats (%s): packets=%u bytes=%u errors=%u (flags 0x%08x) bad-desc=%u input-drop=%u rbu=%u refill-low=%u irqs=%u "
+					  "MMC rx_unicast_packets_good=%u crc=%u align=%u MTL overflow=%u missed=%u DMA missed=%u counter-wraps=%u ring head=%u tail=%u",
+			why, (unsigned int)state->rxPackets, (unsigned int)state->rxBytes, (unsigned int)state->rxErrors, (unsigned int)state->rxErrFlags,
+			(unsigned int)state->rxBadDesc, (unsigned int)state->rxInputDrop, (unsigned int)state->rxRbu, (unsigned int)state->rxRefillLow,
+			atomic_load(&state->irqCount), (unsigned int)state->base[eth_rx_unicast_packets_good],
+			(unsigned int)state->base[eth_rx_crc_error_packets], (unsigned int)state->base[eth_rx_alignment_error_packets],
+			(unsigned int)state->rxMtlOverflow, (unsigned int)state->rxMtlMissed, (unsigned int)state->rxDmaMissed,
+			(unsigned int)state->rxDropCntWraps, (unsigned int)atomic_load(&rx->head), (unsigned int)atomic_load(&rx->tail));
 }
 #endif
 
 
 /*
- * NUCLEO-N657X0-Q has no PHY interrupt line (nINT/REFCLKO pin outputs REF_CLK) - poll the PHY.
- * NOTE: LAN8742A ISFR reports an event on every read when polled, so link changes are detected from BMSR.
+ * IRQ thread, every poll: accumulate the clear-on-read RX drop counters. Their fields have 11 bits; when one crosses its
+ * maximum between two reads, the overflow flag is set and the read value is not the full count (step 4 R5: 4166 drops
+ * read as 0) - such reads are counted, the totals are then lower bounds.
  */
-static void eth_linkThread(void *arg)
+static void eth_rxDropCounters(eth_state_t *state)
 {
-	eth_state_t *state = arg;
-#if ETH_DEBUG
-	unsigned int polls = 0, linkChanges = atomic_load(&state->linkChanges);
-	uint32_t txPackets = state->txPackets;
-#endif
+	uint32_t mpocr = state->base[eth_mtlrxq0mpocr];
+	uint32_t mfcr = state->base[eth_dmac0mfcr];
 
-	mutexLock(state->lock);
-	for (;;) {
-		(void)condWait(state->cond, state->lock, LINK_POLL_INTERVAL_US);
-		mutexUnlock(state->lock);
+	state->rxMtlOverflow += mpocr & ETH_MTLRXQMPOCR_OVFPKTCNT_MASK;
+	state->rxMtlMissed += (mpocr & ETH_MTLRXQMPOCR_MISPKTCNT_MASK) >> ETH_MTLRXQMPOCR_MISPKTCNT_SHIFT;
+	state->rxDmaMissed += mfcr & ETH_DMACMFCR_MFC_MASK;
+	if (((mpocr & (ETH_MTLRXQMPOCR_OVFCNTOVF | ETH_MTLRXQMPOCR_MISCNTOVF)) != 0U) || ((mfcr & ETH_DMACMFCR_MFCO) != 0U)) {
+		state->rxDropCntWraps++;
+	}
+}
 
-		/*
-		 * netif_set_link_up/down() (from eth_setLinkState()) runs lwIP code (DHCP, ARP, ...) and may call linkoutput:
-		 * lwIP core lock must be held, txLock must not be held here.
-		 */
+
+/* IRQ thread, once per LINK_POLL_INTERVAL_US (state->lock not held): PHY poll, statistics, tests */
+typedef struct {
+	unsigned int polls;
+	unsigned int linkChanges;
+	uint32_t txPackets, rxPackets;
+} eth_pollState_t;
+
+
+static void eth_poll(eth_state_t *state, eth_pollState_t *ps)
+{
+	/*
+	 * NUCLEO-N657X0-Q has no PHY interrupt line (nINT/REFCLKO pin outputs REF_CLK) - poll the PHY.
+	 * NOTE: LAN8742A ISFR reports an event on every read when polled, so link changes are detected from BMSR.
+	 * netif_set_link_up/down() (from eth_setLinkState()) runs lwIP code (DHCP, ARP, ...) and may call linkoutput:
+	 * lwIP core lock must be held, txLock must not be held here.
+	 */
+	if (state->phyValid) {
 		LOCK_TCPIP_CORE();
 		ephy_pollLink(&state->phy, atomic_load(&state->linkUp));
 		UNLOCK_TCPIP_CORE();
+	}
 
-		/* no TX interrupt: free completed TX pbufs also when lwIP stops sending */
-		eth_txPoll(state);
+	eth_rxDropCounters(state);
 
+	ps->polls++;
 #if ETH_DEBUG
-		polls++;
-		if (atomic_load(&state->linkChanges) != linkChanges) {
-			linkChanges = atomic_load(&state->linkChanges);
-			eth_logTxStats(state, atomic_load(&state->linkUp) ? "link up" : "link down");
-		}
-		else if (((polls % ETH_STATS_POLLS) == 0U) && (state->txPackets != txPackets)) {
-			txPackets = state->txPackets;
-			eth_logTxStats(state, "periodic");
-		}
+	if (atomic_load(&state->linkChanges) != ps->linkChanges) {
+		ps->linkChanges = atomic_load(&state->linkChanges);
+		eth_logStats(state, atomic_load(&state->linkUp) ? "link up" : "link down");
+	}
+	else if (((ps->polls % ETH_STATS_POLLS) == 0U) && ((state->txPackets != ps->txPackets) || (state->rxPackets != ps->rxPackets))) {
+		ps->txPackets = state->txPackets;
+		ps->rxPackets = state->rxPackets;
+		eth_logStats(state, "periodic");
+	}
 #endif
+}
 
-		mutexLock(state->lock);
+
+/*
+ * IRQ thread (imx-enet pattern): clear the DMA channel status, receive and refill, reap TX descriptors, unmask the
+ * interrupts and wait for the next interrupt; poll the PHY once per LINK_POLL_INTERVAL_US (also under traffic).
+ * The interrupt handler masks DMAC0IER, so events arriving while the thread works keep the status bits set and
+ * raise the interrupt again when the thread unmasks them; a wakeup before condWait() is not lost (sticky condition).
+ */
+static void eth_irqThread(void *arg)
+{
+	eth_state_t *state = arg;
+	eth_pollState_t ps = { .linkChanges = atomic_load(&state->linkChanges) };
+	time_t now, lastPoll = 0;
+	bool fatal = false;
+	uint32_t sr;
+
+	mutexLock(state->lock);
+	for (;;) {
+		sr = state->base[eth_dmac0sr];
+		if ((sr & ETH_DMACSR_W1C_MASK) != 0U) {
+			state->base[eth_dmac0sr] = sr & ETH_DMACSR_W1C_MASK;
+		}
+
+		if (((sr & ETH_DMACSR_FBE) != 0U) && !fatal) {
+			fatal = true;
+			eth_dmaFatal(state, sr);
+		}
+
+		if (!fatal) {
+			if ((sr & ETH_DMACSR_RBU) != 0U) {
+				state->rxRbu++;
+			}
+			eth_rxProcess(state);
+			eth_txReap(state);
+		}
+
+		gettime(&now, NULL);
+		if ((now - lastPoll) >= (time_t)LINK_POLL_INTERVAL_US) {
+			lastPoll = now;
+			mutexUnlock(state->lock);
+			eth_poll(state, &ps);
+			mutexLock(state->lock);
+		}
+
+		if (!fatal) {
+			state->base[eth_dmac0ier] = ETH_DMA_IRQS;
+			/*
+			 * Events that came while DMAC0IER was 0 (after the W1C above) may not raise the interrupt when it is
+			 * enabled again (NIS/AIS only summarize enabled sources) - handle them now instead of waiting.
+			 */
+			if ((state->base[eth_dmac0sr] & (ETH_DMACSR_RI | ETH_DMACSR_TI | ETH_DMACSR_RBU | ETH_DMACSR_FBE)) != 0U) {
+				continue;
+			}
+		}
+		(void)condWait(state->cond, state->lock, LINK_POLL_INTERVAL_US);
 	}
 
 	mutexUnlock(state->lock);
@@ -1375,14 +1804,23 @@ static int eth_initDma(eth_state_t *state)
 static void eth_releaseRings(eth_state_t *state, bool dmaIdle)
 {
 	const net_bufdesc_ring_t *tx = &state->rings[ETH_RING_TX];
+	const net_bufdesc_ring_t *rx = &state->rings[ETH_RING_RX];
 
 	if (!state->ringsValid) {
 		return;
 	}
 
 	if (!dmaIdle) {
-		eth_printf(state, "WARN: TX DMA not stopped - descriptor rings and TX buffers are not freed");
+		eth_printf(state, "WARN: DMA not stopped - descriptor rings and packet buffers are not freed");
 		return;
+	}
+
+	/* pbufs of RX descriptors filled and not received yet (other bufp entries were passed to lwIP) */
+	for (size_t i = atomic_load(&rx->head); i != atomic_load(&rx->tail); i = (i + 1U) & rx->last) {
+		if (rx->bufp[i] != NULL) {
+			pbuf_free(rx->bufp[i]);
+			rx->bufp[i] = NULL;
+		}
 	}
 
 	/* pbufs of queued/completed TX packets (net_transmitPacket() keeps one past the last fragment) */
@@ -1427,15 +1865,35 @@ static int eth_initHw(eth_state_t *state, size_t idx, bool mdio)
 	/* Last fallible step: on failure the rings are not allocated */
 	CHECK(eth_initDma(state));
 
+	/* DMA channel interrupts stay masked (DMAC0IER = 0) until the IRQ thread runs */
 	eth_startTx(state);
+	eth_startRx(state);
 
 	return 0;
 }
 
 
+/* Stop the interrupt handler, then RX and TX DMA. Returns false if DMA may still access the rings and buffers. */
+static bool eth_stopDevice(eth_state_t *state)
+{
+	bool rxIdle, txIdle;
+
+	if (state->irqValid) {
+		state->base[eth_dmac0ier] = 0U;
+		resourceDestroy(state->irqHandle);
+		state->irqValid = false;
+	}
+
+	rxIdle = eth_stopRx(state);
+	txIdle = eth_stopTx(state);
+
+	return rxIdle && txIdle;
+}
+
+
 static void eth_releaseResources(eth_state_t *state)
 {
-	bool dmaIdle = eth_stopTx(state);
+	bool dmaIdle = eth_stopDevice(state);
 
 	eth_releaseRings(state, dmaIdle);
 	resourceDestroy(state->cond);
@@ -1490,6 +1948,16 @@ static int eth_initDevice(eth_state_t *state, unsigned long devnum, bool mdio)
 		return err;
 	}
 
+	/* the handler only masks DMAC0IER and wakes the IRQ thread (state->cond), started by eth_netifInit() */
+	err = interrupt(eth_setup[idx].irq, eth_irqHandler, state, state->cond, &state->irqHandle);
+	if (err < 0) {
+		eth_printf(state, "Couldn't register interrupt %u: %s (%d)", eth_setup[idx].irq, strerror(-err), err);
+		eth_releaseResources(state);
+		return err;
+	}
+	state->irqValid = true;
+	eth_debug_printf(state, "IRQ %u registered", eth_setup[idx].irq);
+
 	if (mdio) {
 		/* FIXME: MDIO bus can't be unregistered - state must not be freed after this point */
 		state->mdioBus = register_mdio_bus(&eth_mdio_ops, state);
@@ -1539,6 +2007,11 @@ static int eth_netifInit(struct netif *netif, char *cfg)
 
 	state = netif->state;
 	state->netif = netif;
+
+	/* netif_add() sets netif->input before calling init: received packets go through eth_netifInput() */
+	state->input = netif->input;
+	netif->input = eth_netifInput;
+
 	atomic_init(&state->txDropped, 0U);
 	state->mdioBus = -1;
 	state->phyValid = false;
@@ -1546,11 +2019,30 @@ static int eth_netifInit(struct netif *netif, char *cfg)
 	atomic_init(&state->linkChanges, 0U);
 	state->ringsValid = false;
 	state->txStarted = false;
+	state->rxStarted = false;
 	atomic_init(&state->txStopped, false);
 	atomic_init(&state->txRingFull, 0U);
 	state->txPackets = 0;
 	state->txErrors = 0;
 	state->txErrFlags = 0;
+	state->irqValid = false;
+	atomic_init(&state->irqCount, 0U);
+	atomic_init(&state->irqStatus, 0U);
+	state->rxPktLen = 0;
+	state->rxPktBad = false;
+	state->rxLastRdes3 = 0;
+	state->rxPackets = 0;
+	state->rxBytes = 0;
+	state->rxErrors = 0;
+	state->rxErrFlags = 0;
+	state->rxBadDesc = 0;
+	state->rxInputDrop = 0;
+	state->rxRbu = 0;
+	state->rxRefillLow = 0;
+	state->rxMtlOverflow = 0;
+	state->rxMtlMissed = 0;
+	state->rxDmaMissed = 0;
+	state->rxDropCntWraps = 0;
 
 	if (cfg == NULL) {
 		return -EINVAL;
@@ -1605,18 +2097,24 @@ static int eth_netifInit(struct netif *netif, char *cfg)
 		else {
 			state->phyValid = true;
 			eth_logPhyId(state);
-
-			err = beginthread(eth_linkThread, LINK_THREAD_PRIO, state->linkStack, sizeof(state->linkStack), state);
-			if (err < 0) {
-				eth_printf(state, "Couldn't begin link thread: %s (%d)", strerror(-err), err);
-			}
 		}
+	}
 
+	if (err >= 0) {
+		/* RX, TX reaping, DMA errors and PHY polling */
+		err = beginthread(eth_irqThread, IRQ_THREAD_PRIO, state->irqStack, sizeof(state->irqStack), state);
 		if (err < 0) {
-			/* FIXME: state can't be released after register_mdio_bus() - at least keep DMA away from the rings */
-			(void)eth_stopTx(state);
-			return err;
+			eth_printf(state, "Couldn't begin IRQ thread: %s (%d)", strerror(-err), err);
 		}
+	}
+
+	if (err < 0) {
+		/*
+		 * FIXME: state can't be released after register_mdio_bus() - at least remove the interrupt handler
+		 * and keep DMA away from the rings
+		 */
+		(void)eth_stopDevice(state);
+		return err;
 	}
 
 	eth_debug_printf(state, "Initialized");
