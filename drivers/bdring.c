@@ -153,8 +153,8 @@ size_t net_receivePackets(net_bufdesc_ring_t *ring, struct netif *ni)
 
 		if (ring->ops->pktRxFinished(ring, i)) {
 #ifdef LWIP_HOOK_ETH_INPUT
-			if (LWIP_HOOK_ETH_INPUT(p, ni)) {
-				pbuf_free(p);
+			if (LWIP_HOOK_ETH_INPUT(pkt, ni)) {
+				pbuf_free(pkt);
 			}
 			else
 #endif
