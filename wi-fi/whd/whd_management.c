@@ -540,6 +540,12 @@ whd_result_t whd_wifi_on(whd_driver_t whd_driver, whd_interface_t *ifpp)
     }
 #endif
 
+    /* Disable AMPDU host reorder, WHD does not implement it (backported from WHD 5.x) */
+    if ( (wlan_chip_id == 55500) || (wlan_chip_id == 55560) || (wlan_chip_id == 55900) )
+    {
+        CHECK_RETURN(whd_wifi_set_iovar_value(ifp, IOVAR_STR_AMPDU_HOST_REORDER, WHD_FALSE) );
+    }
+
     return WHD_SUCCESS;
 }
 
