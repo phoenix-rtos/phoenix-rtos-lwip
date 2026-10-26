@@ -46,6 +46,8 @@
 
 #define MDIO_TIMEOUT 0
 
+#define ENET_RX_REFILL_RETRY_US (10 * 1000)
+
 #if defined(__CPU_IMXRT106X)
 
 #include <phoenix/arch/armv7m/imxrt/10xx/imxrt10xx.h>
@@ -551,7 +553,8 @@ static void enet_irqThread(void *arg)
 
 		if ((state->mmio->EIR & (ENET_IRQ_RXF | ENET_IRQ_TXF)) == 0) {
 			state->mmio->EIMR |= ENET_IRQ_RXF | ENET_IRQ_TXF;
-			condWait(state->irq_cond, state->irq_lock, 0);
+			/* with no free RX buffers no RX IRQ comes, so retry the refill */
+			condWait(state->irq_cond, state->irq_lock, (net_rxFullyFilled(&state->rx) != 0) ? 0 : ENET_RX_REFILL_RETRY_US);
 		}
 		exit = atomic_load(&state->drv_exit);
 	}
