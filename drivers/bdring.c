@@ -159,7 +159,10 @@ size_t net_receivePackets(net_bufdesc_ring_t *ring, struct netif *ni)
 			else
 #endif
 			{
-				ni->input(pkt, ni);
+				if (ni->input(pkt, ni) != ERR_OK) {
+					/* not queued (e.g. tcpip mailbox full) - the frame is still ours */
+					pbuf_free(pkt);
+				}
 			}
 			pkt = NULL;
 		}
