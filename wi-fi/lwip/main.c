@@ -102,6 +102,8 @@ struct wifi_device {
 			volatile uint8_t flags;
 			uint32_t idleCurrent;
 			uint32_t timeout;
+			uint16_t channel;
+			whd_security_t security;
 			ip_static_addr_t addr;
 		} apPriv;
 
@@ -149,6 +151,8 @@ static struct {
 		.netmask = IPADDR4_INIT_BYTES(255, 255, 255, 0),
 		.gateway = IPADDR4_INIT_BYTES(192, 168, 2, 1),
 	},
+	.ap.apPriv.channel = AP_CHANNEL,
+	.ap.apPriv.security = AP_SECURITY_MODE,
 };
 
 
@@ -167,6 +171,74 @@ static const char *trim(const char *str, size_t *len)
 	*len = sz;
 
 	return str;
+}
+
+
+static int wifi_ap_set_channel(const char *data, size_t len)
+{
+	char buf[8];
+	long int channel;
+	char *endp;
+
+	if (len > (sizeof(buf) - 1)) {
+		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't set Wi-Fi AP channel (bad channel value)\n");
+		return -1;
+	}
+
+	memcpy(buf, data, len);
+	buf[len] = '\0';
+
+	errno = 0;
+	channel = strtol(buf, &endp, 0);
+	/* channels <= 14 are 2.4 GHz, the others 5 GHz; the regulatory domain may still reject the channel */
+	if (errno != 0 || endp == buf || *endp != '\0' || channel < 1 || channel > 165 || (channel > 14 && channel < 32)) {
+		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't set Wi-Fi AP channel (bad channel value)\n");
+		return -1;
+	}
+
+	mutexLock(wifi_common.ap.lock);
+	wifi_common.ap.apPriv.channel = channel;
+	mutexUnlock(wifi_common.ap.lock);
+
+	return 0;
+}
+
+
+static const struct {
+	const char *name;
+	whd_security_t security;
+} wifi_ap_securities[] = {
+	{ "wpa2", WHD_SECURITY_WPA2_AES_PSK },
+	{ "wpa3", WHD_SECURITY_WPA3_SAE },
+	{ "wpa2wpa3", WHD_SECURITY_WPA3_WPA2_PSK },
+};
+
+
+static int wifi_ap_set_security(const char *data, size_t len)
+{
+	for (size_t i = 0; i < sizeof(wifi_ap_securities) / sizeof(wifi_ap_securities[0]); i++) {
+		if (strlen(wifi_ap_securities[i].name) == len && strncmp(wifi_ap_securities[i].name, data, len) == 0) {
+			mutexLock(wifi_common.ap.lock);
+			wifi_common.ap.apPriv.security = wifi_ap_securities[i].security;
+			mutexUnlock(wifi_common.ap.lock);
+			return 0;
+		}
+	}
+
+	wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't set Wi-Fi AP security (use wpa2, wpa3 or wpa2wpa3)\n");
+	return -1;
+}
+
+
+static const char *wifi_ap_security_name(whd_security_t security)
+{
+	for (size_t i = 0; i < sizeof(wifi_ap_securities) / sizeof(wifi_ap_securities[0]); i++) {
+		if (wifi_ap_securities[i].security == security) {
+			return wifi_ap_securities[i].name;
+		}
+	}
+
+	return "unknown";
 }
 
 
@@ -365,14 +437,18 @@ static void wifi_ap_thread(void *arg)
 		whd_ssid_t ssid;
 		uint8_t key[WSEC_MAX_PSK_LEN];
 		uint8_t keyLen;
+		uint16_t channel;
+		whd_security_t security;
 
 		mutexLock(wifi_common.ap.lock);
 		ssid = wifi_common.ap.ssid;
 		memcpy(key, wifi_common.ap.key.value, sizeof(key));
 		keyLen = wifi_common.ap.key.len;
+		channel = wifi_common.ap.apPriv.channel;
+		security = wifi_common.ap.apPriv.security;
 		mutexUnlock(wifi_common.ap.lock);
 
-		result = whd_wifi_init_ap(wifi_common.ap.iface.whd_iface, &ssid, AP_SECURITY_MODE, key, keyLen, AP_CHANNEL);
+		result = whd_wifi_init_ap(wifi_common.ap.iface.whd_iface, &ssid, security, key, keyLen, channel);
 		if (result != WHD_SUCCESS) {
 			wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't init Wi-Fi AP\n");
 			break;
@@ -674,6 +750,8 @@ static int wifi_dev_open(id_t id, int flags)
 	}
 	else if (id == AP_DEV_ID) {
 		SNPRINTF_APPEND(overflow, buf, size, "timeout=%u\n", wifi_common.ap.apPriv.timeout);
+		SNPRINTF_APPEND(overflow, buf, size, "channel=%u\n", wifi_common.ap.apPriv.channel);
+		SNPRINTF_APPEND(overflow, buf, size, "security=%s\n", wifi_ap_security_name(wifi_common.ap.apPriv.security));
 		SNPRINTF_APPEND(overflow, buf, size, "ssid=%.*s\n", wifi_common.ap.ssid.length, wifi_common.ap.ssid.value);
 		SNPRINTF_APPEND(overflow, buf, size, "ipaddr=%s\n", ipaddr_ntoa(&wifi_common.ap.apPriv.addr.addr));
 		SNPRINTF_APPEND(overflow, buf, size, "netmask=%s\n", ipaddr_ntoa(&wifi_common.ap.apPriv.addr.netmask));
@@ -763,6 +841,12 @@ static int wifi_dev_write(id_t id, const char *data, size_t size)
 	}
 	else if (id == AP_DEV_ID && size >= CONST_STRLEN("timeout ") && strncmp("timeout ", data, 8) == 0) {
 		wifi_ap_set_timeout(data + 8, size - 8);
+	}
+	else if (id == AP_DEV_ID && size >= CONST_STRLEN("channel ") && strncmp("channel ", data, 8) == 0) {
+		wifi_ap_set_channel(data + 8, size - 8);
+	}
+	else if (id == AP_DEV_ID && size >= CONST_STRLEN("security ") && strncmp("security ", data, 9) == 0) {
+		wifi_ap_set_security(data + 9, size - 9);
 	}
 	else if (id == AP_DEV_ID && size == CONST_STRLEN("start") && strncmp("start", data, size) == 0) {
 		wifi_ap_start();
