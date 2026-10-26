@@ -52,6 +52,20 @@
 #define ENET_IRQ_THREAD_PRIO 4
 #endif
 
+/* priority after the IRQ thread had work pending for ENET_IRQ_BUSY_US - a flood then shares the CPU with lower threads */
+#ifndef ENET_IRQ_BUSY_PRIO
+#define ENET_IRQ_BUSY_PRIO ENET_IRQ_THREAD_PRIO
+#endif
+
+#ifndef ENET_IRQ_BUSY_US
+#define ENET_IRQ_BUSY_US (10 * 1000)
+#endif
+
+/* loops between clock reads while busy, so a flood doesn't cost a syscall per loop */
+#define ENET_IRQ_BUSY_CHECK 16
+
+_Static_assert(ENET_IRQ_BUSY_PRIO >= ENET_IRQ_THREAD_PRIO, "ENET_IRQ_BUSY_PRIO must not be above ENET_IRQ_THREAD_PRIO");
+
 #if defined(__CPU_IMXRT106X)
 
 #include <phoenix/arch/armv7m/imxrt/10xx/imxrt10xx.h>
@@ -541,6 +555,11 @@ static void enet_irqThread(void *arg)
 	enet_state_t *state = arg;
 	size_t rx_done = 0;
 	unsigned exit;
+#if ENET_IRQ_BUSY_PRIO != ENET_IRQ_THREAD_PRIO
+	time_t busy_since = 0;
+	unsigned int busy_loops = 0;
+	bool lowered = false;
+#endif
 
 	mutexLock(state->irq_lock);
 	exit = atomic_load(&state->drv_exit);
@@ -556,10 +575,28 @@ static void enet_irqThread(void *arg)
 		net_reapTxFinished(&state->tx);
 
 		if ((state->mmio->EIR & (ENET_IRQ_RXF | ENET_IRQ_TXF)) == 0) {
+#if ENET_IRQ_BUSY_PRIO != ENET_IRQ_THREAD_PRIO
+			if (lowered && (setPriority(ENET_IRQ_THREAD_PRIO) == 0)) {
+				lowered = false;
+			}
+			busy_loops = 0;
+#endif
 			state->mmio->EIMR |= ENET_IRQ_RXF | ENET_IRQ_TXF;
 			/* with no free RX buffers no RX IRQ comes, so retry the refill */
 			condWait(state->irq_cond, state->irq_lock, (net_rxFullyFilled(&state->rx) != 0) ? 0 : ENET_RX_REFILL_RETRY_US);
 		}
+#if ENET_IRQ_BUSY_PRIO != ENET_IRQ_THREAD_PRIO
+		else if (!lowered && ((++busy_loops % ENET_IRQ_BUSY_CHECK) == 0)) {
+			time_t now;
+			gettime(&now, NULL);
+			if (busy_loops == ENET_IRQ_BUSY_CHECK) {
+				busy_since = now;
+			}
+			else if (((now - busy_since) > ENET_IRQ_BUSY_US) && (setPriority(ENET_IRQ_BUSY_PRIO) == 0)) {
+				lowered = true;
+			}
+		}
+#endif
 		exit = atomic_load(&state->drv_exit);
 	}
 	mutexUnlock(state->irq_lock);
