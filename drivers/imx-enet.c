@@ -48,6 +48,10 @@
 
 #define ENET_RX_REFILL_RETRY_US (10 * 1000)
 
+#ifndef ENET_IRQ_THREAD_PRIO
+#define ENET_IRQ_THREAD_PRIO 4
+#endif
+
 #if defined(__CPU_IMXRT106X)
 
 #include <phoenix/arch/armv7m/imxrt/10xx/imxrt10xx.h>
@@ -1333,7 +1337,7 @@ static int enet_initDevice(enet_state_t *state, int irq, bool mdio, volatile uin
 	}
 	enet_debug_printf(state, "Interrupt handler initialized successfully");
 
-	err = beginthread(enet_irqThread, 4, state->irq_stack, sizeof(state->irq_stack), state);
+	err = beginthread(enet_irqThread, ENET_IRQ_THREAD_PRIO, state->irq_stack, sizeof(state->irq_stack), state);
 	if (err != 0) {
 		enet_printf(state, "Couldn't begin interrupt thread: %s (%d)", strerror(-err), err);
 		return err;
