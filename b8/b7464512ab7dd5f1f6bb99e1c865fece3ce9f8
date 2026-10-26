@@ -1,0 +1,24 @@
+drivers/ephy.c
+  s_b14fc812b90e3e::t_421de52e106ad1 949-950,952-967,969,975-976,979-980,983-984,991-1009,1013-1014,1028,1031
+  s_b14fc812b90e3e::t_9ddd0b5b27358d 1016-1027
+  s_b14fc812b90e3e::t_2640122e9f99c5 877-884,887-889,892-895,901,904-907,913,1010-1012
+  s_b14fc812b90e3e::t_a67eae311c1ce4 870-871,1015,1029-1030
+drivers/ephy.h
+  s_b14fc812b90e3e::t_4b4f99c74ea2ec 35
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b8b7464512ab7dd5f1f6bb99e1c865fece3ce9f8",
+  "prompts": {},
+  "sessions": {
+    "s_b14fc812b90e3e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "43008e2d-b3cf-4677-abef-e61436ca1ba7",
+        "model": "unknown"
+      },
+      "human_author": "Marek Białowąs <marek.bialowas@phoenix-rtos.com>"
+    }
+  }
+}
