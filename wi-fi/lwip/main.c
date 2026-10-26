@@ -11,6 +11,7 @@
 
 #include <ctype.h>
 #include <string.h>
+#include <unistd.h>
 #include <sys/minmax.h>
 #include <sys/msg.h>
 #include <sys/stat.h>
@@ -791,8 +792,14 @@ static int wifi_dev_write(id_t id, const char *data, size_t size)
 static int wifi_dev_init(unsigned int port, id_t id, const char *path)
 {
 	oid_t wifi_oid = { port, id };
+	int err = create_dev(&wifi_oid, path);
 
-	return create_dev(&wifi_oid, path);
+	/* writing to the device before it exists (e.g. during init) leaves a regular file in its place */
+	if (err == -EEXIST && unlink(path) == 0) {
+		err = create_dev(&wifi_oid, path);
+	}
+
+	return err;
 }
 
 
