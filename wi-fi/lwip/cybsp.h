@@ -32,6 +32,11 @@
 
 #include "lwipopts.h"
 
+/* the level it had while priorities were ignored */
+#if !defined(CY_WIFI_THREAD_PRIORITY)
+#define CY_WIFI_THREAD_PRIORITY (CY_RTOS_PRIORITY_NORMAL)
+#endif
+
 #if defined(__cplusplus)
 extern "C" {
 #endif
