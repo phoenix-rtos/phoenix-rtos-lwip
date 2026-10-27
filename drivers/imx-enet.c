@@ -221,7 +221,8 @@ static void enet_start(enet_state_t *state)
 	// FIXME: last_will(ECR = ENET_ECR_MAGIC_VAL | ENET_ECR_RESET);
 
 	state->mmio->MRBR = ENET_MAX_PKT_SZ;
-	state->mmio->FTRL = BIT(14) - 1;  // FIXME: truncation to just above link MTU
+	/* longer frames never reach the ring, so every frame fits one buffer behind the SHIFT16 padding */
+	state->mmio->FTRL = ENET_MAX_PKT_SZ - ETH_PAD_SIZE;
 
 	uint32_t rcr = ENET_RCR_MAX_FL_NO_VLAN_VAL << ENET_RCR_MAX_FL_SHIFT |
 			ENET_RCR_CRCFWD | ENET_RCR_PAUFWD |
