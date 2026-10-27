@@ -1,0 +1,21 @@
+wi-fi/hal/cyabs_rtos.c
+  s_b2562b154c5f77::t_4c031be5c002d5 41
+wi-fi/lwip/cybsp_wifi.c
+  s_b2562b154c5f77::t_3a88de1c926c5f 48,50
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7e28af32f6887cd98273c2ef5b95703ea8117d0a",
+  "prompts": {},
+  "sessions": {
+    "s_b2562b154c5f77": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3d06d8cc-d657-408a-985a-2d351ff03c32",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Marek Białowąs <marek.bialowas@phoenix-rtos.com>"
+    }
+  }
+}
