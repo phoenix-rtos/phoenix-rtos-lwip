@@ -108,6 +108,7 @@ int net_initRings(net_bufdesc_ring_t *rings, const size_t *sizes, size_t nrings,
 		rings[i].last = sizes[i] - 1;
 		rings[i].phys = phys;
 		rings[i].ops = ops;
+		rings[i].partial = NULL;
 
 		sz = (sizes[i] * ops->desc_size + alignMask) & ~alignMask;
 		p += sz;
@@ -129,7 +130,7 @@ size_t net_receivePackets(net_bufdesc_ring_t *ring, struct netif *ni)
 	mutexLock(ring->lock);
 	n = 0;
 	i = atomic_load(&ring->head);
-	pkt = NULL;
+	pkt = ring->partial;
 
 	for (;;) {
 		if (i == atomic_load(&ring->tail)) {
@@ -172,6 +173,8 @@ size_t net_receivePackets(net_bufdesc_ring_t *ring, struct netif *ni)
 	}
 
 	atomic_store(&ring->head, i);
+	/* the rest of the frame comes in the next call - its buffers are already out of the ring */
+	ring->partial = pkt;
 	mutexUnlock(ring->lock);
 	return n;
 }

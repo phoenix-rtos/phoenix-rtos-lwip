@@ -50,6 +50,7 @@ struct net_bufdesc_ring_ {
 	addr_t phys;
 	const net_bufdesc_ops_t *ops;
 	handle_t lock;
+	struct pbuf *partial; /* RX: buffers of a frame whose last buffer has not arrived yet */
 };
 
 
