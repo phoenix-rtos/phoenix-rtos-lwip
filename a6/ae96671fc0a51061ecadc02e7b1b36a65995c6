@@ -1,0 +1,21 @@
+drivers/ephy.c
+  s_b14fc812b90e3e::t_ba22d3690ebaa3 580
+  s_b14fc812b90e3e::t_611f28c1e2fa16 581-583
+  s_b14fc812b90e3e::t_f4de3c5037b3fa 584
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a6ae96671fc0a51061ecadc02e7b1b36a65995c6",
+  "prompts": {},
+  "sessions": {
+    "s_b14fc812b90e3e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "43008e2d-b3cf-4677-abef-e61436ca1ba7",
+        "model": "unknown"
+      },
+      "human_author": "Marek Białowąs <marek.bialowas@phoenix-rtos.com>"
+    }
+  }
+}
