@@ -38,7 +38,7 @@ cy_rslt_t cy_rtos_create_thread(cy_thread_t *thread, cy_thread_entry_fn_t entry_
 
 	memset(thread, 0, sizeof(*thread));
 
-	if (sys_thread_opt_new(name, entry_function, arg, stack_size, 4, thread) < 0)
+	if (sys_thread_opt_new(name, entry_function, arg, stack_size, priority, thread) < 0)
 		return CY_RTOS_NO_MEMORY;
 
 	return CY_RSLT_SUCCESS;
