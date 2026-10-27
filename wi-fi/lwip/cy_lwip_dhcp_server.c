@@ -383,8 +383,8 @@ static void cy_dhcp_thread_func(cy_thread_arg_t thread_input)
 				/* Clear the DHCP options list */
 				memset(&reply_header->options, 0, sizeof(reply_header->options));
 
-				/* Record client MAC address */
-				memcpy(&client_mac_address, request_header->client_hardware_addr, sizeof(client_mac_address));
+				/* Record client MAC address (copied from the released discover packet above) */
+				memcpy(&client_mac_address, reply_header->client_hardware_addr, sizeof(client_mac_address));
 
 				/* Check whether device is already cached */
 				if (!get_client_ip_address_from_cache(&client_mac_address, &client_ip_address)) {
