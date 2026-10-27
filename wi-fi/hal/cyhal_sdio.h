@@ -44,6 +44,7 @@
 #include "cy_result.h"
 #include "cyhal_hw_types.h"
 #include "cyhal_modules.h"
+#include "cyabs_rtos.h"
 
 #if defined(__cplusplus)
 extern "C" {
@@ -175,7 +176,7 @@ typedef void (*cyhal_sdio_irq_handler_t)(void *handler_arg, cyhal_sdio_irq_event
  * @return The status of the init request
  */
 cy_rslt_t cyhal_sdio_init(cyhal_sdio_t *obj);
-cy_rslt_t cyhal_sdio_start_irq_thread(cyhal_sdio_t *obj);
+cy_rslt_t cyhal_sdio_start_irq_thread(cyhal_sdio_t *obj, cy_thread_priority_t priority);
 
 /** Release the SDIO peripheral, not currently invoked. It requires further
  *  resource management.

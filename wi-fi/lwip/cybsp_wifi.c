@@ -45,10 +45,6 @@ extern "C" {
 #if !defined(CY_WIFI_THREAD_STACK_SIZE)
 #define CY_WIFI_THREAD_STACK_SIZE (5120)
 #endif
-/* the level it had while priorities were ignored */
-#if !defined(CY_WIFI_THREAD_PRIORITY)
-#define CY_WIFI_THREAD_PRIORITY (CY_RTOS_PRIORITY_NORMAL)
-#endif
 #if !defined(CY_WIFI_COUNTRY)
 #define CY_WIFI_COUNTRY (WHD_COUNTRY_UNITED_STATES)
 #endif

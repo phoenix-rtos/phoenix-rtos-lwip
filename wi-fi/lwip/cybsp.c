@@ -63,7 +63,8 @@ cy_rslt_t cybsp_init(void)
 		result = cyhal_sdio_init(&sdio_obj);
 
 		if (result == CY_RSLT_SUCCESS) {
-			result = cyhal_sdio_start_irq_thread(cybsp_get_wifi_sdio_obj());
+			/* the IRQ thread only wakes the WHD thread up */
+			result = cyhal_sdio_start_irq_thread(cybsp_get_wifi_sdio_obj(), CY_WIFI_THREAD_PRIORITY);
 		}
 	}
 #endif

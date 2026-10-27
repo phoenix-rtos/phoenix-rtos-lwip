@@ -321,10 +321,10 @@ static void sdio_irq_thread(void *arg)
 }
 
 /* NOTE: obj is ignored - state is kept in sdio_common */
-cy_rslt_t cyhal_sdio_start_irq_thread(cyhal_sdio_t *obj)
+cy_rslt_t cyhal_sdio_start_irq_thread(cyhal_sdio_t *obj, cy_thread_priority_t priority)
 {
 	cy_log_msg(CYLF_SDIO, CY_LOG_DEBUG, "cyhal_sdio_start_irq_thread\n");
-	if (cy_rtos_create_thread(&sdio_common.irq_thread_id, sdio_irq_thread, "SDIO_IRQ", NULL, 1024, 4, NULL) != CY_RSLT_SUCCESS) {
+	if (cy_rtos_create_thread(&sdio_common.irq_thread_id, sdio_irq_thread, "SDIO_IRQ", NULL, 1024, priority, NULL) != CY_RSLT_SUCCESS) {
 		cy_log_msg(CYLF_SDIO, CY_LOG_ERR, "failed to start SDIO IRQ handler thread\n");
 		return CYHAL_SDIO_RSLT_ERR_BAD_PARAM;
 	}
