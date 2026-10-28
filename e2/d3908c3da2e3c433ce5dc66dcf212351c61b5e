@@ -1,0 +1,25 @@
+wi-fi/hal/cyhal_sdio.c
+  s_2a0ee698ed0070::t_97569d4c455511 321,324
+wi-fi/hal/cyhal_sdio.h
+  s_2a0ee698ed0070::t_b5f6a12b327f09 47,179
+wi-fi/lwip/cybsp.c
+  s_2a0ee698ed0070::t_a021dd6b6aa922 66-67
+wi-fi/lwip/cybsp.h
+  s_2a0ee698ed0070::t_5749ca7a3de45a 35-39
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e2d3908c3da2e3c433ce5dc66dcf212351c61b5e",
+  "prompts": {},
+  "sessions": {
+    "s_2a0ee698ed0070": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "dabc8aed-6b92-42ff-ad1c-20d926dc2d47",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Marek Białowąs <marek.bialowas@phoenix-rtos.com>"
+    }
+  }
+}
