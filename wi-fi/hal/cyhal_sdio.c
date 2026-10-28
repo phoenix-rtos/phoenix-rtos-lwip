@@ -90,6 +90,7 @@ static struct {
 	addr_t dmaphys;
 
 	volatile bool irq_enabled;
+	volatile bool irq_rearm; /* the card interrupt waits masked for the next command */
 
 	handle_t irq_handle;
 	handle_t irq_lock;
@@ -290,6 +291,14 @@ static void sdio_irq_thread(void *arg)
 			condWait(sdio_common.irq_cond, sdio_common.irq_lock, 0);
 		}
 
+		if (!finish) {
+			/* this will also clear CINT */
+			val = *(sdio_common.base + int_status_en);
+			val &= ~(1 << 8); /* CINTESEN=0 */
+			*(sdio_common.base + int_status_en) = val;
+			sdio_common.irq_rearm = true;
+		}
+
 		mutexUnlock(sdio_common.irq_lock);
 
 		if (finish) {
@@ -298,20 +307,12 @@ static void sdio_irq_thread(void *arg)
 
 		// cy_log_msg(CYLF_SDIO, CY_LOG_DEBUG, "got SDIO IRQ\n");
 
-		/* this will also clear CINT */
-		val = *(sdio_common.base + int_status_en);
-		val &= ~(1 << 8); /* CINTESEN=0 */
-		*(sdio_common.base + int_status_en) = val;
-
+		/*
+		 * The card holds the interrupt until WHD services it over SDIO, so the next command unmasks it
+		 * (sdio_irq_rearm). The handler wakes the WHD thread, which always reads the card's interrupt
+		 * status next. The interrupt may fire once more after each command until WHD clears that status.
+		 */
 		sdio_common.irq_handler(sdio_common.irq_handler_arg, CYHAL_SDIO_CARD_INTERRUPT);
-
-		val = *(sdio_common.base + int_status_en);
-		val |= 1 << 8; /* CINTESEN=1 */
-		*(sdio_common.base + int_status_en) = val;
-
-		val = *(sdio_common.base + int_signal_en);
-		val |= 1 << 8; /* CINTIEN=1 */
-		*(sdio_common.base + int_signal_en) = val;
 
 		// cy_log_msg(CYLF_SDIO, CY_LOG_DEBUG, "done SDIO IRQ\n");
 	}
@@ -637,6 +638,30 @@ static cy_rslt_t cyhal_sdio_send_cmd_internal(cyhal_transfer_t direction, cyhal_
 }
 
 
+static void sdio_irq_rearm(void)
+{
+	uint32_t val;
+
+	/* skips the lock on every command; a re-arm set concurrently is done by WHD's next command */
+	if (!sdio_common.irq_rearm) {
+		return;
+	}
+
+	mutexLock(sdio_common.irq_lock);
+	if (sdio_common.irq_rearm && sdio_common.irq_enabled) {
+		val = *(sdio_common.base + int_status_en);
+		val |= 1 << 8; /* CINTESEN=1 */
+		*(sdio_common.base + int_status_en) = val;
+
+		val = *(sdio_common.base + int_signal_en);
+		val |= 1 << 8; /* CINTIEN=1 */
+		*(sdio_common.base + int_signal_en) = val;
+	}
+	sdio_common.irq_rearm = false;
+	mutexUnlock(sdio_common.irq_lock);
+}
+
+
 /* NOTE: obj is ignored - state is kept in sdio_common */
 cy_rslt_t cyhal_sdio_send_cmd(const cyhal_sdio_t *obj, cyhal_transfer_t direction,
 		cyhal_sdio_command_t command, uint32_t argument, uint32_t *response)
@@ -657,6 +682,8 @@ cy_rslt_t cyhal_sdio_send_cmd(const cyhal_sdio_t *obj, cyhal_transfer_t directio
 
 		usleep(1000);
 	}
+
+	sdio_irq_rearm();
 
 	return res;
 }
@@ -763,6 +790,7 @@ cy_rslt_t cyhal_sdio_bulk_transfer(cyhal_sdio_t *obj, cyhal_transfer_t direction
 		usleep(1000);
 	}
 
+	sdio_irq_rearm();
 
 	return res;
 }
@@ -804,21 +832,22 @@ void cyhal_sdio_irq_enable(cyhal_sdio_t *obj, cyhal_sdio_irq_event_t event, bool
 		return;
 	}
 
-	if (enable != sdio_common.irq_enabled) {
-		val = *(sdio_common.base + int_status_en);
-		if (enable)
-			*(sdio_common.base + int_status_en) = val | (1 << 8); /* CINTESEN=1 */
-		else
-			*(sdio_common.base + int_status_en) = val & ~(1 << 8); /* CINTESEN=0 */
+	mutexLock(sdio_common.irq_lock);
+	val = *(sdio_common.base + int_status_en);
+	if (enable)
+		*(sdio_common.base + int_status_en) = val | (1 << 8); /* CINTESEN=1 */
+	else
+		*(sdio_common.base + int_status_en) = val & ~(1 << 8); /* CINTESEN=0 */
 
-		val = *(sdio_common.base + int_signal_en);
-		if (enable)
-			*(sdio_common.base + int_signal_en) = val | (1 << 8); /* CINTIEN=1 */
-		else
-			*(sdio_common.base + int_signal_en) = val & ~(1 << 8); /* CINTIEN=0 */
+	val = *(sdio_common.base + int_signal_en);
+	if (enable)
+		*(sdio_common.base + int_signal_en) = val | (1 << 8); /* CINTIEN=1 */
+	else
+		*(sdio_common.base + int_signal_en) = val & ~(1 << 8); /* CINTIEN=0 */
 
-		sdio_common.irq_enabled = enable;
-	}
+	sdio_common.irq_enabled = enable;
+	sdio_common.irq_rearm = false;
+	mutexUnlock(sdio_common.irq_lock);
 }
 
 #endif /* (CYBSP_WIFI_INTERFACE_TYPE == CYBSP_SDIO_INTERFACE) */
