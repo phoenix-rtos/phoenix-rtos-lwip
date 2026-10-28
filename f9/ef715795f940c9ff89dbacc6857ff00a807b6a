@@ -1,0 +1,19 @@
+wi-fi/lwip/cy_lwip_dhcp_server.c
+  s_b2562b154c5f77::t_564d3fcc2b4164 386-387
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f9ef715795f940c9ff89dbacc6857ff00a807b6a",
+  "prompts": {},
+  "sessions": {
+    "s_b2562b154c5f77": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3d06d8cc-d657-408a-985a-2d351ff03c32",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Marek Białowąs <marek.bialowas@phoenix-rtos.com>"
+    }
+  }
+}
