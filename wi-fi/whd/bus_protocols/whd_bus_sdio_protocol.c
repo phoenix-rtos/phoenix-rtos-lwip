@@ -291,10 +291,14 @@ whd_result_t whd_bus_sdio_wait_for_wlan_event(whd_driver_t whd_driver, cy_semaph
 whd_result_t whd_bus_sdio_send_buffer(whd_driver_t whd_driver, whd_buffer_t buffer)
 {
     whd_result_t retval;
+    /*
+     * PHOENIX FIX: the transfer starts after the bus header, so the length must not include it either.
+     * Upstream subtracts only sizeof(whd_buffer_t) and reads MAX_BUS_HEADER_SIZE bytes past the frame.
+     */
     retval =
         whd_bus_transfer_bytes(whd_driver, BUS_WRITE, WLAN_FUNCTION, 0,
                                (uint16_t)(whd_buffer_get_current_piece_size(whd_driver,
-                                                                            buffer) - sizeof(whd_buffer_t) ),
+                                                                            buffer) - sizeof(whd_buffer_header_t) ),
                                (whd_transfer_bytes_packet_t *)(whd_buffer_get_current_piece_data_pointer(whd_driver,
                                                                                                          buffer) +
                                                                sizeof(whd_buffer_t) ) );
