@@ -1,0 +1,24 @@
+wi-fi/whd/whd_resources.c
+  s_961eda7c4468ed::t_4661a137cc77a4 58-59,131-150
+  s_961eda7c4468ed::t_ef44caf2032f7d 50-54
+wi-fi/hal/cyhal_sdio.c
+  s_961eda7c4468ed::t_4305949c8b26fd 534
+wi-fi/hal/cyhal_sdio_def.h
+  s_961eda7c4468ed::t_8f7aac1138647e 17,22-29,36-38
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ba89d839219536ddb6a452a0d275443d80f04798",
+  "prompts": {},
+  "sessions": {
+    "s_961eda7c4468ed": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8172be12-599a-462e-8ba1-28cddf925c2a",
+        "model": "unknown"
+      },
+      "human_author": "Marek Białowąs <marek.bialowas@phoenix-rtos.com>"
+    }
+  }
+}
