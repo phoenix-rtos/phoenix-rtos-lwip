@@ -1,0 +1,19 @@
+wi-fi/whd/whd_management.c
+  s_961eda7c4468ed::t_ab2f8d7c28d743 543-548
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "88485bdceaade7dbb532c7f62d07bf0f75b6ed28",
+  "prompts": {},
+  "sessions": {
+    "s_961eda7c4468ed": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8172be12-599a-462e-8ba1-28cddf925c2a",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Marek Białowąs <marek.bialowas@phoenix-rtos.com>"
+    }
+  }
+}
