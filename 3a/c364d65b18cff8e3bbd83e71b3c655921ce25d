@@ -1,0 +1,19 @@
+wi-fi/lwip/main.c
+  s_f22855d8155e43::t_4f7afca1efd949 179-244,253,264-265,267,269,295,302,535,542
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3ac364d65b18cff8e3bbd83e71b3c655921ce25d",
+  "prompts": {},
+  "sessions": {
+    "s_f22855d8155e43": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "80ab6fa5-1bbc-414b-8cac-b9866d353568",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Marek Białowąs <marek.bialowas@phoenix-rtos.com>"
+    }
+  }
+}
