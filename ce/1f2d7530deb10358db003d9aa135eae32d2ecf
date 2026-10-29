@@ -1,0 +1,19 @@
+wi-fi/whd/bus_protocols/whd_bus_sdio_protocol.c
+  s_2a0ee698ed0070::t_bc0c27b096295e 294-297,301
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ce1f2d7530deb10358db003d9aa135eae32d2ecf",
+  "prompts": {},
+  "sessions": {
+    "s_2a0ee698ed0070": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "dabc8aed-6b92-42ff-ad1c-20d926dc2d47",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Marek Białowąs <marek.bialowas@phoenix-rtos.com>"
+    }
+  }
+}
