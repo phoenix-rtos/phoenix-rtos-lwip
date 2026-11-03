@@ -70,6 +70,12 @@ cy_rslt_t cyhal_usb_init(cyhal_usb_t *obj, const char *path)
 }
 
 
+bool cyhal_usb_is_initialized(cyhal_usb_t *obj)
+{
+	return obj != NULL && obj->usb_priv != NULL && ((usb_priv_t *)obj->usb_priv)->fd != -1;
+}
+
+
 bool cyhal_usb_check_state(const char *path)
 {
 	__attribute__((unused)) oid_t oid;
@@ -166,7 +172,7 @@ static ssize_t cyhal_usb_devctl(const usb_priv_t *priv, void *buffer, size_t buf
 }
 
 
-cy_rslt_t cyhal_usb_free(cyhal_usb_t *obj)
+cy_rslt_t cyhal_usb_close(cyhal_usb_t *obj)
 {
 	if (obj == NULL || obj->usb_priv == NULL) {
 		return CY_RTOS_BAD_PARAM;
@@ -182,7 +188,17 @@ cy_rslt_t cyhal_usb_free(cyhal_usb_t *obj)
 	}
 	memset(&priv->oid, 0, sizeof(priv->oid));
 
-	free(priv);
+	return CY_RSLT_SUCCESS;
+}
+
+
+cy_rslt_t cyhal_usb_free(cyhal_usb_t *obj)
+{
+	if (cyhal_usb_close(obj) != CY_RSLT_SUCCESS) {
+		return CY_RTOS_BAD_PARAM;
+	}
+
+	free(obj->usb_priv);
 	obj->usb_priv = NULL;
 
 	return CY_RSLT_SUCCESS;

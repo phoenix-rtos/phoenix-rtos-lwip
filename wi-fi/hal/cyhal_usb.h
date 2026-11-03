@@ -66,12 +66,30 @@
 cy_rslt_t cyhal_usb_init(cyhal_usb_t *obj, const char *path);
 
 
+/** Check if the USB object is initialized.
+ *
+ * @param[in,out] obj The USB object
+ * @return The status of the is initialized request
+ */
+bool cyhal_usb_is_initialized(cyhal_usb_t *obj);
+
+
 /** Release the USB peripheral.
  *
  * @param[in,out] obj The USB object
  * @return The status of the deinit request
  */
 cy_rslt_t cyhal_usb_free(cyhal_usb_t *obj);
+
+
+/** Close the underlying USB object without releasing it.
+ *
+ * Safe to call cyhal_usb_free after this.
+ *
+ * @param[in,out] obj The USB object
+ * @return The status of the close request
+ */
+cy_rslt_t cyhal_usb_close(cyhal_usb_t *obj);
 
 
 /** Check USB state (down/up)
