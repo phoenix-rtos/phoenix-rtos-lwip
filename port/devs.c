@@ -21,10 +21,12 @@
 #include "route.h"
 #include "filter.h"
 
+#include <stdbool.h>
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
 #include <sys/msg.h>
+#include <sys/file.h>
 #include <sys/threads.h>
 #include <sys/minmax.h>
 #include <posix/utils.h>
@@ -80,26 +82,26 @@
 static struct {
 #if LWIP_ROUTE_DEV
 	struct {
-		int busy;
+		pid_t client;
 		char buf[LWIP_ROUTE_DEV_BUFFER_SIZE];
 		int len;
 	} route;
 #endif
 #if LWIP_IFSTATUS_DEV
 	struct {
-		int busy;
+		pid_t client;
 		char buf[LWIP_IFSTATUS_DEV_BUFFER_SIZE];
 		int len;
 	} ifstatus;
 #endif
 #if LWIP_EXT_PF
 	struct {
-		int busy;
+		pid_t client;
 	} pf;
 #endif
 #if LWIP_LINKMONITOR_DEV
 	struct {
-		int busy;
+		pid_t client;
 		int disconnected;
 		int reconnected;
 		int last_link;
@@ -109,7 +111,7 @@ static struct {
 #endif
 #if LWIP_STATS
 	struct {
-		int busy;
+		pid_t client;
 		size_t len;
 		char buf[LWIP_STATS_DEV_BUFFER_SIZE];
 	} stats;
@@ -119,7 +121,7 @@ static struct {
 
 
 #if LWIP_ROUTE_DEV
-static int route_open(int flags)
+static int route_open(pid_t client, int flags)
 {
 	rt_entry_t *entry;
 	struct netif *netif;
@@ -130,7 +132,7 @@ static int route_open(int flags)
 	if (flags & (O_WRONLY | O_RDWR))
 		return -EACCES;
 
-	if (devs_common.route.busy)
+	if (devs_common.route.client != 0)
 		return -EBUSY;
 
 	mutexLock(rt_table.lock);
@@ -143,14 +145,14 @@ static int route_open(int flags)
 	if ((entry = rt_table.entries) != NULL) {
 		do {
 			SNPRINTF_APPEND("%.2s%u\t%08X\t%08X\t%04X\t%d\t%u\t%d\t%08X\t%d\t%u\t%u\n",
-				entry->netif->name, entry->netif->num,
-				ip4_addr_get_u32(&entry->dst),                                                          /* Destination */
-				ip4_addr_get_u32(entry->flags & RTF_GATEWAY ? &entry->gw : netif_ip4_gw(entry->netif)), /* Gateway */
-				entry->flags, 0, 0,                                                                     /* Flags, RefCnt, Use */
-				entry->metric,
-				ip4_addr_get_u32(&entry->genmask),
-				entry->netif->mtu,
-				0, 0); /* Window, IRTT */
+					entry->netif->name, entry->netif->num,
+					ip4_addr_get_u32(&entry->dst),                                                          /* Destination */
+					ip4_addr_get_u32(entry->flags & RTF_GATEWAY ? &entry->gw : netif_ip4_gw(entry->netif)), /* Gateway */
+					entry->flags, 0, 0,                                                                     /* Flags, RefCnt, Use */
+					entry->metric,
+					ip4_addr_get_u32(&entry->genmask),
+					entry->netif->mtu,
+					0, 0); /* Window, IRTT */
 		} while ((entry = entry->next) != rt_table.entries);
 	}
 
@@ -162,14 +164,14 @@ static int route_open(int flags)
 			flags |= RTF_GATEWAY;
 
 		SNPRINTF_APPEND("%.2s%u\t%08X\t%08X\t%04X\t%d\t%u\t%d\t%08X\t%d\t%u\t%u\n",
-			netif->name, netif->num,
-			prefix,                                /* Destination */
-			ip4_addr_get_u32(netif_ip4_gw(netif)), /* Gateway */
-			flags, 0, 0,                           /* Flags, RefCnt, Use */
-			0,                                     /* Metric */
-			ip4_addr_get_u32(netif_ip4_netmask(netif)),
-			netif->mtu,
-			0, 0); /* Window, IRTT */
+				netif->name, netif->num,
+				prefix,                                /* Destination */
+				ip4_addr_get_u32(netif_ip4_gw(netif)), /* Gateway */
+				flags, 0, 0,                           /* Flags, RefCnt, Use */
+				0,                                     /* Metric */
+				ip4_addr_get_u32(netif_ip4_netmask(netif)),
+				netif->mtu,
+				0, 0); /* Window, IRTT */
 	}
 
 	mutexUnlock(rt_table.lock);
@@ -177,25 +179,29 @@ static int route_open(int flags)
 	if (overflow)
 		return -EFBIG;
 
-	devs_common.route.busy = 1;
+	devs_common.route.client = client;
 	devs_common.route.len = buf - devs_common.route.buf;
 
 	return 0;
 }
 
 
-static int route_close(void)
+static int route_close(pid_t client)
 {
-	if (!devs_common.route.busy)
+	if (devs_common.route.client == 0 || (client != 1 && devs_common.route.client != client))
 		return -EBADF;
-	devs_common.route.busy = 0;
+	devs_common.route.client = 0;
 	return 0;
 }
 
 
-static int route_read(char *data, size_t size, size_t offset)
+static int route_read(pid_t client, char *data, size_t size, size_t offset)
 {
 	int read;
+
+	if (devs_common.route.client == 0 || client != devs_common.route.client) {
+		return -EBADF;
+	}
 
 	if (offset > devs_common.route.len)
 		return -ERANGE;
@@ -205,11 +211,38 @@ static int route_read(char *data, size_t size, size_t offset)
 
 	return read;
 }
+
+
+static int route_write(pid_t client, const char *data, size_t size, size_t offset)
+{
+	if (devs_common.route.client == 0 || client != devs_common.route.client) {
+		return -EBADF;
+	}
+	return -EOPNOTSUPP;
+}
+
+
+static int route_getattr(pid_t client, int type, long long *val)
+{
+	switch (type) {
+		case atSize:
+			if (devs_common.route.client == 0 || devs_common.route.client != client) {
+				*val = 0;
+			}
+			else {
+				*val = devs_common.route.len;
+			}
+			return EOK;
+
+		default:
+			return -EINVAL;
+	}
+}
 #endif /* LWIP_ROUTE_DEV */
 
 
 #if LWIP_IFSTATUS_DEV
-static int ifstatus_open(int flags)
+static int ifstatus_open(pid_t client, int flags)
 {
 	struct netif *netif;
 	netif_driver_t *drv;
@@ -220,7 +253,7 @@ static int ifstatus_open(int flags)
 	if (flags & (O_WRONLY | O_RDWR))
 		return -EACCES;
 
-	if (devs_common.ifstatus.busy)
+	if (devs_common.ifstatus.client != 0)
 		return -EBUSY;
 
 	buf = devs_common.ifstatus.buf;
@@ -267,25 +300,29 @@ static int ifstatus_open(int flags)
 	if (overflow)
 		return -EFBIG;
 
-	devs_common.ifstatus.busy = 1;
+	devs_common.ifstatus.client = client;
 	devs_common.ifstatus.len = buf - devs_common.ifstatus.buf;
 
 	return 0;
 }
 
 
-static int ifstatus_close(void)
+static int ifstatus_close(pid_t client)
 {
-	if (!devs_common.ifstatus.busy)
+	if (devs_common.ifstatus.client == 0 || (client != 1 && devs_common.ifstatus.client != client))
 		return -EBADF;
-	devs_common.ifstatus.busy = 0;
+	devs_common.ifstatus.client = 0;
 	return 0;
 }
 
 
-static int ifstatus_read(char *data, size_t size, size_t offset)
+static int ifstatus_read(pid_t client, char *data, size_t size, size_t offset)
 {
 	int read;
+
+	if (devs_common.ifstatus.client == 0 || devs_common.ifstatus.client != client) {
+		return -EBADF;
+	}
 
 	if (offset > devs_common.ifstatus.len)
 		return -ERANGE;
@@ -294,6 +331,33 @@ static int ifstatus_read(char *data, size_t size, size_t offset)
 	memcpy(data, devs_common.ifstatus.buf + offset, read);
 
 	return read;
+}
+
+
+static int ifstatus_write(pid_t client, const char *data, size_t size, size_t offset)
+{
+	if (devs_common.ifstatus.client == 0 || devs_common.ifstatus.client != client) {
+		return -EBADF;
+	}
+	return -EOPNOTSUPP;
+}
+
+
+static int ifstatus_getattr(pid_t client, int type, long long *val)
+{
+	switch (type) {
+		case atSize:
+			if (devs_common.ifstatus.client == 0 || devs_common.ifstatus.client != client) {
+				*val = 0;
+			}
+			else {
+				*val = devs_common.ifstatus.len;
+			}
+			return EOK;
+
+		default:
+			return -EINVAL;
+	}
 }
 #endif /* LWIP_IFSTATUS_DEV */
 
@@ -362,15 +426,15 @@ static void stats_sys_append(const struct stats_sys *sys)
 #endif /* SYS_STATS */
 
 
-static int stats_open(int flags)
+static int stats_open(pid_t client, int flags)
 {
 	if (flags & (O_WRONLY | O_RDWR))
 		return -EACCES;
 
-	if (devs_common.stats.busy)
+	if (devs_common.stats.client != 0)
 		return -EBUSY;
 
-	devs_common.stats.busy = 1;
+	devs_common.stats.client = client;
 	devs_common.stats.len = 0;
 
 #if LINK_STATS
@@ -416,9 +480,13 @@ static int stats_open(int flags)
 }
 
 
-static int stats_read(char *data, size_t size, size_t offset)
+static int stats_read(pid_t client, char *data, size_t size, size_t offset)
 {
 	int read;
+
+	if (devs_common.stats.client == 0 || devs_common.stats.client != client) {
+		return -EBADF;
+	}
 
 	if (offset > devs_common.stats.len)
 		return -ERANGE;
@@ -430,21 +498,46 @@ static int stats_read(char *data, size_t size, size_t offset)
 }
 
 
-static int stats_close(void)
+static int stats_write(pid_t client, const char *data, size_t size, size_t offset)
 {
-	if (!devs_common.stats.busy)
+	if (devs_common.stats.client == 0 || devs_common.stats.client != client) {
 		return -EBADF;
-
-	devs_common.stats.busy = 0;
-
-	return 0;
+	}
+	return -EOPNOTSUPP;
 }
 
+
+static int stats_getattr(pid_t client, int type, long long *val)
+{
+	switch (type) {
+		case atSize:
+			if (devs_common.stats.client == 0 || devs_common.stats.client != client) {
+				*val = 0;
+			}
+			else {
+				*val = devs_common.stats.len;
+			}
+			return EOK;
+
+		default:
+			return -EINVAL;
+	}
+}
+
+
+static int stats_close(pid_t client)
+{
+	if (devs_common.stats.client == 0 || (client != 1 && devs_common.stats.client != client))
+		return -EBADF;
+
+	devs_common.stats.client = 0;
+	return 0;
+}
 #endif /* LWIP_STATS */
 
 
 #if LWIP_LINKMONITOR_DEV
-static int linkmonitor_open(int flags)
+static int linkmonitor_open(pid_t client, int flags)
 {
 	struct netif *netif;
 	char *buf;
@@ -454,7 +547,7 @@ static int linkmonitor_open(int flags)
 	if (flags & (O_WRONLY | O_RDWR))
 		return -EACCES;
 
-	if (devs_common.linkmonitor.busy)
+	if (devs_common.linkmonitor.client != 0)
 		return -EBUSY;
 
 	netif = netif_find(LWIP_LINKMONITOR_DEV_NAME);
@@ -479,25 +572,29 @@ static int linkmonitor_open(int flags)
 	devs_common.linkmonitor.disconnected = 0;
 	devs_common.linkmonitor.reconnected = 0;
 
-	devs_common.linkmonitor.busy = 1;
+	devs_common.linkmonitor.client = client;
 	devs_common.linkmonitor.len = buf - devs_common.linkmonitor.buf;
 
 	return 0;
 }
 
 
-static int linkmonitor_close(void)
+static int linkmonitor_close(pid_t client)
 {
-	if (!devs_common.linkmonitor.busy)
+	if (devs_common.linkmonitor.client == 0 || (client != 1 && devs_common.linkmonitor.client != client))
 		return -EBADF;
-	devs_common.linkmonitor.busy = 0;
+	devs_common.linkmonitor.client = 0;
 	return 0;
 }
 
 
-static int linkmonitor_read(char *data, size_t size, size_t offset)
+static int linkmonitor_read(pid_t client, char *data, size_t size, size_t offset)
 {
 	int read;
+
+	if (devs_common.linkmonitor.client == 0 || devs_common.linkmonitor.client != client) {
+		return -EBADF;
+	}
 
 	if (offset > devs_common.linkmonitor.len)
 		return -ERANGE;
@@ -506,6 +603,33 @@ static int linkmonitor_read(char *data, size_t size, size_t offset)
 	memcpy(data, devs_common.linkmonitor.buf + offset, read);
 
 	return read;
+}
+
+
+static int linkmonitor_write(pid_t client, const char *data, size_t size, size_t offset)
+{
+	if (devs_common.linkmonitor.client == 0 || devs_common.linkmonitor.client != client) {
+		return -EBADF;
+	}
+	return -EOPNOTSUPP;
+}
+
+
+static int linkmonitor_getattr(pid_t client, int type, long long *val)
+{
+	switch (type) {
+		case atSize:
+			if (devs_common.linkmonitor.client == 0 || devs_common.linkmonitor.client != client) {
+				*val = 0;
+			}
+			else {
+				*val = devs_common.linkmonitor.len;
+			}
+			return EOK;
+
+		default:
+			return -EINVAL;
+	}
 }
 
 
@@ -542,37 +666,60 @@ static void linkmonitor_init(const char *dev)
 
 
 #if LWIP_EXT_PF
-static int pf_open(int flags)
+static int pf_open(pid_t client, int flags)
 {
 	if (flags & (O_RDONLY | O_RDWR))
 		return -EACCES;
 
-	if (devs_common.pf.busy)
+	if (devs_common.pf.client != 0)
 		return -EBUSY;
 
-	devs_common.pf.busy = 1;
+	devs_common.pf.client = client;
 
 	return 0;
 }
 
 
-static int pf_close(void)
+static int pf_close(pid_t client)
 {
-	if (!devs_common.pf.busy)
+	if (devs_common.pf.client == 0 || (client != 1 && devs_common.pf.client != client))
 		return -EBADF;
-	devs_common.pf.busy = 0;
+	devs_common.pf.client = 0;
 	return 0;
 }
 
 
-static int pf_write(const void *data, size_t size)
+static int pf_write(pid_t client, const void *data, size_t size, size_t offset)
 {
 	const pfrule_array_t *input = data;
 
-	if (input == NULL || !size || size != input->len * sizeof(pfrule_t) + sizeof(pfrule_array_t))
+	if (devs_common.pf.client == 0 || devs_common.pf.client != client) {
+		return -EBADF;
+	}
+
+	if (offset != 0) {
+		return -EINVAL;
+	}
+
+	if (input == NULL || size < sizeof(pfrule_array_t) || size != input->len * sizeof(pfrule_t) + sizeof(pfrule_array_t))
 		return -EINVAL;
 
 	return pf_rulesUpdate(input);
+}
+
+
+static int pf_read(pid_t client, const char *data, size_t size, size_t offset)
+{
+	if (devs_common.pf.client == 0 || devs_common.pf.client != client) {
+		return -EBADF;
+	}
+	return -EOPNOTSUPP;
+}
+
+
+static int pf_getattr(pid_t client, int type, long long *val)
+{
+	return -EINVAL;
 }
 #endif /* LWIP_EXT_PF */
 
@@ -638,107 +785,139 @@ int devs_init(unsigned int port)
 }
 
 
-int dev_open(id_t id, int flags)
+int dev_open(id_t id, pid_t client, int flags)
 {
 	switch (id) {
 #if LWIP_ROUTE_DEV
 		case DEV_ROUTE_ID:
-			return route_open(flags);
+			return route_open(client, flags);
 #endif
 #if LWIP_IFSTATUS_DEV
 		case DEV_IFSTATUS_ID:
-			return ifstatus_open(flags);
+			return ifstatus_open(client, flags);
 #endif
 #if LWIP_EXT_PF
 		case DEV_PF_ID:
-			return pf_open(flags);
+			return pf_open(client, flags);
 #endif
 #if LWIP_LINKMONITOR_DEV
 		case DEV_LINKMONITOR_ID:
-			return linkmonitor_open(flags);
+			return linkmonitor_open(client, flags);
 #endif
 #if LWIP_STATS
 		case DEV_STATS_ID:
-			return stats_open(flags);
+			return stats_open(client, flags);
 #endif
 	}
 	return -ENOENT;
 }
 
-int dev_close(id_t id)
+int dev_close(id_t id, pid_t client)
 {
 	switch (id) {
 #if LWIP_ROUTE_DEV
 		case DEV_ROUTE_ID:
-			return route_close();
+			return route_close(client);
 #endif
 #if LWIP_IFSTATUS_DEV
 		case DEV_IFSTATUS_ID:
-			return ifstatus_close();
+			return ifstatus_close(client);
 #endif
 #if LWIP_EXT_PF
 		case DEV_PF_ID:
-			return pf_close();
+			return pf_close(client);
 #endif
 #if LWIP_LINKMONITOR_DEV
 		case DEV_LINKMONITOR_ID:
-			return linkmonitor_close();
+			return linkmonitor_close(client);
 #endif
 #if LWIP_STATS
 		case DEV_STATS_ID:
-			return stats_close();
-#endif
-	}
-	return -ENOENT;
-}
-
-
-int dev_read(id_t id, void *data, size_t size, size_t offset)
-{
-	switch (id) {
-#if LWIP_ROUTE_DEV
-		case DEV_ROUTE_ID:
-			return route_read(data, size, offset);
-#endif
-#if LWIP_IFSTATUS_DEV
-		case DEV_IFSTATUS_ID:
-			return ifstatus_read(data, size, offset);
-#endif
-#if LWIP_EXT_PF
-		case DEV_PF_ID:
-			return -EACCES;
-#endif
-#if LWIP_LINKMONITOR_DEV
-		case DEV_LINKMONITOR_ID:
-			return linkmonitor_read(data, size, offset);
-#endif
-#if LWIP_STATS
-		case DEV_STATS_ID:
-			return stats_read(data, size, offset);
+			return stats_close(client);
 #endif
 	}
 	return -ENOENT;
 }
 
 
-int dev_write(id_t id, const void *data, size_t size, size_t offset)
+int dev_read(id_t id, pid_t client, void *data, size_t size, size_t offset)
 {
 	switch (id) {
 #if LWIP_ROUTE_DEV
 		case DEV_ROUTE_ID:
-			return -EACCES;
+			return route_read(client, data, size, offset);
 #endif
 #if LWIP_IFSTATUS_DEV
 		case DEV_IFSTATUS_ID:
-			return -EACCES;
+			return ifstatus_read(client, data, size, offset);
 #endif
 #if LWIP_EXT_PF
 		case DEV_PF_ID:
-			return pf_write(data, size);
+			return pf_read(client, data, size, offset);
 #endif
 #if LWIP_LINKMONITOR_DEV
 		case DEV_LINKMONITOR_ID:
-			return -EACCES;
+			return linkmonitor_read(client, data, size, offset);
+#endif
+#if LWIP_STATS
+		case DEV_STATS_ID:
+			return stats_read(client, data, size, offset);
+#endif
+	}
+	return -ENOENT;
+}
+
+
+int dev_write(id_t id, pid_t client, const void *data, size_t size, size_t offset)
+{
+	switch (id) {
+#if LWIP_ROUTE_DEV
+		case DEV_ROUTE_ID:
+			return route_write(client, data, size, offset);
+#endif
+#if LWIP_IFSTATUS_DEV
+		case DEV_IFSTATUS_ID:
+			return ifstatus_write(client, data, size, offset);
+#endif
+#if LWIP_EXT_PF
+		case DEV_PF_ID:
+			return pf_write(client, data, size, offset);
+#endif
+#if LWIP_LINKMONITOR_DEV
+		case DEV_LINKMONITOR_ID:
+			return linkmonitor_write(client, data, size, offset);
+#endif
+#if LWIP_STATS
+		case DEV_STATS_ID:
+			return stats_write(client, data, size, offset);
+#endif
+	}
+	return -ENOENT;
+}
+
+
+int dev_getattr(id_t id, pid_t client, int type, long long *val)
+{
+	switch (id) {
+#if LWIP_ROUTE_DEV
+		case DEV_ROUTE_ID:
+			return route_getattr(client, type, val);
+#endif
+#if LWIP_IFSTATUS_DEV
+		case DEV_IFSTATUS_ID:
+			return ifstatus_getattr(client, type, val);
+#endif
+#if LWIP_EXT_PF
+		case DEV_PF_ID:
+			return pf_getattr(client, type, val);
+#endif
+#if LWIP_LINKMONITOR_DEV
+		case DEV_LINKMONITOR_ID:
+			return linkmonitor_getattr(client, type, val);
+#endif
+#if LWIP_STATS
+		case DEV_STATS_ID:
+			return stats_getattr(client, type, val);
 #endif
 	}
 	return -ENOENT;
