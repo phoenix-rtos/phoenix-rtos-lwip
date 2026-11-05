@@ -10,7 +10,7 @@
  */
 
 #include "arch/cc.h"
-#include "ephy.h"
+#include "ephy/ephy.h"
 #include "lwip/err.h"
 #include "lwip/netif.h"
 #include "lwip/opt.h"
@@ -128,7 +128,7 @@ static void greth_irqThread(void *arg)
 
 		if ((state->mmio->STAT & GRETH_STAT_PS) != 0) {
 			state->mmio->STAT = GRETH_STAT_PS;
-			ephy_macInterrupt(&state->phy);
+			ephy_handleInterrupt(&state->phy);
 		}
 
 		if ((state->mmio->STAT & (GRETH_STAT_TI | GRETH_STAT_RI | GRETH_STAT_PS)) == 0) {
@@ -217,33 +217,35 @@ static const mdio_bus_ops_t greth_mdio_ops = {
 };
 
 
-static void greth_setLinkState(void *arg, int state)
+static void greth_setLinkState(void *arg, bool linkUp)
 {
 	struct netif *netif = arg;
-	greth_state_t *s = netif->state;
-	int speed, full_duplex;
+	greth_state_t *state = netif->state;
+	enum eth_linkSpeed speed;
+	enum eth_duplex duplex;
 	uint32_t ctrl;
 
-	if (state != 0) {
-		speed = ephy_linkSpeed(&s->phy, &full_duplex);
-		ctrl = s->mmio->CTRL & ~(GRETH_CTRL_FD | GRETH_CTRL_SP | GRETH_CTRL_GB);
+	if (linkUp) {
+		speed = ephy_linkSpeed(&state->phy, &duplex);
+		ctrl = state->mmio->CTRL & ~(GRETH_CTRL_FD | GRETH_CTRL_SP | GRETH_CTRL_GB);
 
-		if (full_duplex != 0) {
+		if (duplex == eth_duplexFull) {
 			ctrl |= GRETH_CTRL_FD;
 		}
+
 		switch (speed) {
-			case 10:
+			case eth_linkSpeed10M:
 				break;
-			case 100:
+			case eth_linkSpeed100M:
 				ctrl |= GRETH_CTRL_SP;
 				break;
-			case 1000:
+			case eth_linkSpeed1G:
 				ctrl |= GRETH_CTRL_GB | GRETH_CTRL_FD;
 				break;
 			default:
 				break;
 		}
-		s->mmio->CTRL = ctrl;
+		state->mmio->CTRL = ctrl;
 		netif_set_link_up(netif);
 	}
 	else {
@@ -580,7 +582,7 @@ static int greth_netifInit(struct netif *netif, char *cfg)
 	greth_debug_printf(state, "Initialized GRETH");
 
 	if (cfg != NULL) {
-		err = ephy_init(&state->phy, cfg, 0, greth_setLinkState, (void *)state->netif);
+		err = ephy_init(&state->phy, cfg, 0, greth_setLinkState, state->netif);
 		if (err < 0) {
 			greth_printf(state, "WARN: PHY init failed: %s (%d)", strerror(-err), err);
 			greth_cleanupResources(state);
@@ -594,31 +596,32 @@ static int greth_netifInit(struct netif *netif, char *cfg)
 
 const char *greth_media(struct netif *netif)
 {
-	int full_duplex, speed;
 	greth_state_t *state;
 	state = netif->state;
+	enum eth_linkSpeed speed;
+	enum eth_duplex duplex;
 
-	speed = ephy_linkSpeed(&state->phy, &full_duplex);
+	speed = ephy_linkSpeed(&state->phy, &duplex);
 
 	switch (speed) {
-		case 0:
+		case eth_linkSpeedUnknown:
 			return "unspecified";
-		case 10:
-			if (full_duplex != 0) {
+		case eth_linkSpeed10M:
+			if (duplex == eth_duplexFull) {
 				return "10Mbps/full-duplex";
 			}
 			else {
 				return "10Mbps/half-duplex";
 			}
-		case 100:
-			if (full_duplex != 0) {
+		case eth_linkSpeed100M:
+			if (duplex == eth_duplexFull) {
 				return "100Mbps/full-duplex";
 			}
 			else {
 				return "100Mbps/half-duplex";
 			}
-		case 1000:
-			if (full_duplex != 0) {
+		case eth_linkSpeed1G:
+			if (duplex == eth_duplexFull) {
 				return "1000Mbps/full-duplex";
 			}
 			else {
