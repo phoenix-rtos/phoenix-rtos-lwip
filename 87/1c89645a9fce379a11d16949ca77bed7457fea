@@ -1,0 +1,30 @@
+wi-fi/lwip/main.c
+  s_f22855d8155e43::t_778e1fe71dd434 105-106,155-156,249-256,258-263,265-267,274-277,279-298,304-305,307-312,314-328,525-526,532-533,551,854-855,947-952
+  s_f22855d8155e43::t_4f7afca1efd949 178-210,212-216,220-226,231-248,257,268-269,271,273,299,306,539,546
+  s_7fdf579f26cce8::t_f9c7ce03e93c76 264
+  s_7fdf579f26cce8::t_95879e07718535 211,217-219,227-230
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "871c89645a9fce379a11d16949ca77bed7457fea",
+  "prompts": {},
+  "sessions": {
+    "s_7fdf579f26cce8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1e6a7038-4b85-4f89-b898-16b37ba80c2d",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Marek Białowąs <marek.bialowas@phoenix-rtos.com>"
+    },
+    "s_f22855d8155e43": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "80ab6fa5-1bbc-414b-8cac-b9866d353568",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Marek Białowąs <marek.bialowas@phoenix-rtos.com>"
+    }
+  }
+}
