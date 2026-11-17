@@ -770,23 +770,6 @@ int ephy_enableLoopback(const eth_phy_state_t *phy, bool enable)
 		bmcr |= ephy_bmcrMaxSpeedMask(phy);
 	}
 
-	switch (phy->model) {
-		case ephy_ksz8081rna:
-		case ephy_ksz8081rnb:
-		case ephy_ksz8081rnd: {
-			/* force link up, disable transmitter */
-			const uint16_t mask = (1U << 11) | (1U << 3);
-			uint16_t phycr2 = ephy_regRead(phy, EPHY_KSZ8081_1F_PHYCR2);
-			phycr2 = enable ?
-					(phycr2 | mask) :
-					(phycr2 & ~mask);
-			ephy_regWrite(phy, EPHY_KSZ8081_1F_PHYCR2, phycr2);
-			break;
-		}
-		default:
-			break;
-	}
-
 	/* loopback */
 	bmcr = enable ?
 			(bmcr | (1U << 14)) :
