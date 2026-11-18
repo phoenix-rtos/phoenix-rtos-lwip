@@ -88,5 +88,6 @@ uint16_t ephy_mmdRead(const eth_phy_state_t *phy, uint16_t devad, uint16_t addr)
 
 void ephy_mmdWrite(const eth_phy_state_t *phy, uint16_t devad, uint16_t addr, uint16_t val);
 
+void ephy_softReset(const eth_phy_state_t *phy);
 
 #endif /* NET_EPHY_DRIVER_H_ */

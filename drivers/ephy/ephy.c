@@ -98,7 +98,7 @@ void ephy_mmdWrite(const eth_phy_state_t *phy, uint16_t devad, uint16_t addr, ui
 }
 
 
-static void ephy_softReset(const eth_phy_state_t *phy)
+void ephy_softReset(const eth_phy_state_t *phy)
 {
 	uint16_t res;
 	int retries = 10;
