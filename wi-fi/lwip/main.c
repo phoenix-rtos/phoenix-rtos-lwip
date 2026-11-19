@@ -60,6 +60,14 @@ _Static_assert(((float)WIFI_STA_SCAN_TIMEOUT_SECONDS / WIFI_STA_N_SCANS) >= 5.0f
 #define AP_SECURITY_MODE WHD_SECURITY_WPA2_AES_PSK
 #define AP_CHANNEL       1
 
+/* Channel to scan when connecting as STA. 0 scans all channels. */
+#ifndef WIFI_STA_SCAN_CHANNEL
+#define WIFI_STA_SCAN_CHANNEL 0
+#endif
+
+/* Maximum number of channels in the STA scan channel list */
+#define STA_SCAN_CHANNELS_MAX 14U
+
 #define CTRL_DEV_ID   2
 #define CTRL_DEV_NAME "/dev/wifi/ctrl"
 
@@ -93,7 +101,7 @@ struct wifi_device {
 
 	bool busy;
 	int len;
-	char buf[192];
+	char buf[256]; /* fits the STA status with the longest SSIDs and channel list */
 	cy_lwip_nw_interface_t iface;
 
 	union {
@@ -111,6 +119,8 @@ struct wifi_device {
 		struct {
 			handle_t tid;
 			whd_scan_result_t scanResult;
+			/* 0-terminated channel list for scanning; scanChannels[0]==0 means scan all channels */
+			uint16_t scanChannels[STA_SCAN_CHANNELS_MAX + 1];
 		} staPriv;
 	};
 };
@@ -154,6 +164,7 @@ static struct {
 	},
 	.ap.apPriv.channel = AP_CHANNEL,
 	.ap.apPriv.security = AP_SECURITY_MODE,
+	.sta.staPriv.scanChannels = { WIFI_STA_SCAN_CHANNEL },
 };
 
 
@@ -246,6 +257,13 @@ static int wifi_ap_set_error(const char *error)
 }
 
 
+static bool wifi_channel_valid(long int channel)
+{
+	/* channels <= 14 are 2.4 GHz, the others 5 GHz; the regulatory domain may still reject the channel */
+	return (channel >= 1) && (channel <= 165) && ((channel <= 14) || (channel >= 32));
+}
+
+
 static int wifi_ap_set_channel(const char *data, size_t len)
 {
 	char buf[8];
@@ -262,8 +280,7 @@ static int wifi_ap_set_channel(const char *data, size_t len)
 
 	errno = 0;
 	channel = strtol(buf, &endp, 10);
-	/* channels <= 14 are 2.4 GHz, the others 5 GHz; the regulatory domain may still reject the channel */
-	if (errno != 0 || endp == buf || *endp != '\0' || channel < 1 || channel > 165 || (channel > 14 && channel < 32)) {
+	if (errno != 0 || endp == buf || *endp != '\0' || !wifi_channel_valid(channel)) {
 		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't set Wi-Fi AP channel (bad channel value)\n");
 		return wifi_ap_set_error("value");
 	}
@@ -398,6 +415,61 @@ static int wifi_set_key(id_t id, const char *key, size_t len)
 	memcpy(wifi_common.dev[id].key.value, key, len);
 	wifi_common.dev[id].key.len = len;
 	mutexUnlock(wifi_common.dev[id].lock);
+
+	return 0;
+}
+
+
+/* sets the space-separated STA scan channel list, an empty list scans all channels */
+static int wifi_sta_set_channels(const char *data, size_t len)
+{
+	uint16_t channels[STA_SCAN_CHANNELS_MAX + 1] = { 0 };
+	size_t count = 0;
+
+	while (len > 0U) {
+		if (*data == ' ') {
+			data++;
+			len--;
+			continue;
+		}
+
+		char buf[8];
+		size_t numLen = 0;
+		while ((numLen < len) && (data[numLen] != ' ')) {
+			numLen++;
+		}
+
+		if (count == STA_SCAN_CHANNELS_MAX) {
+			wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't set Wi-Fi STA channels (max %u channels)\n", STA_SCAN_CHANNELS_MAX);
+			return -1;
+		}
+
+		if (numLen > (sizeof(buf) - 1U)) {
+			wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't set Wi-Fi STA channels (bad channel value)\n");
+			return -1;
+		}
+
+		memcpy(buf, data, numLen);
+		buf[numLen] = '\0';
+
+		char *endp;
+		errno = 0;
+		long int channel = strtol(buf, &endp, 10);
+		if ((errno != 0) || (endp == buf) || (*endp != '\0') || !wifi_channel_valid(channel)) {
+			wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't set Wi-Fi STA channels (bad channel value)\n");
+			return -1;
+		}
+
+		/* the list stays 0-terminated, channels[STA_SCAN_CHANNELS_MAX] is never written */
+		channels[count] = (uint16_t)channel;
+		count++;
+		data += numLen;
+		len -= numLen;
+	}
+
+	mutexLock(wifi_common.sta.lock);
+	memcpy(wifi_common.sta.staPriv.scanChannels, channels, sizeof(channels));
+	mutexUnlock(wifi_common.sta.lock);
 
 	return 0;
 }
@@ -638,6 +710,7 @@ static int wifi_sta_connect(void)
 	bool ifaceAdded = false;
 	struct timespec tp;
 	time_t when, now;
+	const uint16_t *channelList;
 
 	if (wifi_get_state(&wifi_common.sta) == wifi_running) {
 		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "STA is already connected\n");
@@ -672,6 +745,7 @@ static int wifi_sta_connect(void)
 		mutexLock(wifi_common.sta.lock);
 		memset(&wifi_common.sta.staPriv.scanResult, 0, sizeof(wifi_common.sta.staPriv.scanResult));
 		wifi_common.sta.staPriv.scanResult.security = WHD_SECURITY_UNKNOWN;
+		channelList = (wifi_common.sta.staPriv.scanChannels[0] != 0U) ? wifi_common.sta.staPriv.scanChannels : NULL;
 		do {
 			left = when - now;
 			if (left <= 0) {
@@ -679,7 +753,7 @@ static int wifi_sta_connect(void)
 				break;
 			}
 			result = whd_wifi_scan(wifi_common.sta.iface.whd_iface, STA_SCAN_TYPE, STA_BSS_TYPE,
-					&ssid, NULL, NULL, NULL, wifi_scan_result_cb, &wifi_common.sta.staPriv.scanResult, &ssid);
+					&ssid, NULL, channelList, NULL, wifi_scan_result_cb, &wifi_common.sta.staPriv.scanResult, &ssid);
 			condWait(wifi_common.sta.cond, wifi_common.sta.lock, min((WIFI_STA_SCAN_TIMEOUT_SECONDS * 1000000ULL) / WIFI_STA_N_SCANS, left * 1000000ULL));
 
 			(void)whd_wifi_stop_scan(wifi_common.sta.iface.whd_iface);
@@ -839,6 +913,12 @@ static int wifi_dev_open(id_t id, int flags)
 
 	if (id == STA_DEV_ID) {
 		SNPRINTF_APPEND(overflow, buf, size, "ssid=%.*s\n", wifi_common.sta.ssid.length, wifi_common.sta.ssid.value);
+		/* an empty list means all channels are scanned */
+		SNPRINTF_APPEND(overflow, buf, size, "channels=");
+		for (size_t i = 0; wifi_common.sta.staPriv.scanChannels[i] != 0U; i++) {
+			SNPRINTF_APPEND(overflow, buf, size, "%s%u", (i == 0U) ? "" : " ", wifi_common.sta.staPriv.scanChannels[i]);
+		}
+		SNPRINTF_APPEND(overflow, buf, size, "\n");
 		enum wifi_state state = wifi_get_state(&wifi_common.sta);
 		if (state == wifi_running) {
 			whd_ssid_t ssid;
@@ -940,6 +1020,12 @@ static int wifi_dev_write(id_t id, const char *data, size_t size)
 	}
 	else if (size >= CONST_STRLEN("key ") && strncmp("key ", data, 4) == 0) {
 		wifi_set_key(id, data + 4, size - 4);
+	}
+	else if (id == STA_DEV_ID && size >= CONST_STRLEN("channels ") && strncmp("channels ", data, 9) == 0) {
+		wifi_sta_set_channels(data + 9, size - 9);
+	}
+	else if (id == STA_DEV_ID && size == CONST_STRLEN("channels") && strncmp("channels", data, size) == 0) {
+		wifi_sta_set_channels(NULL, 0);
 	}
 	else if (id == STA_DEV_ID && size == CONST_STRLEN("connect") && strncmp("connect", data, size) == 0) {
 		wifi_sta_connect();
