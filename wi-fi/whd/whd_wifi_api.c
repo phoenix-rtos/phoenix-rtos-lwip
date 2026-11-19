@@ -2435,20 +2435,6 @@ static void *whd_wifi_scan_events_handler(whd_interface_t ifp, const whd_event_h
         count_tmp = 16;
     }
 
-#ifdef WPRINT_ENABLE_WHD_DEBUG
-    /* print out scan results info */
-    {
-        char ea_buf[WHD_ETHER_ADDR_STR_LEN];
-        char ssid_buf[SSID_NAME_SIZE + 1];
-
-        WPRINT_WHD_DEBUG( ("Scan result: channel=%d signal=%d ssid=%s bssid=%s\n", record->channel,
-                           record->signal_strength,
-                           whd_ssid_to_string(record->SSID.value, record->SSID.length, ssid_buf,
-                                              (uint8_t)sizeof(ssid_buf) ),
-                           whd_ether_ntoa( (const uint8_t *)bss_info->BSSID.octet, ea_buf, sizeof(ea_buf) ) ) );
-    }
-#endif /* WPRINT_ENABLE_WHD_DEBUG */
-
     for (rate_num = 0; rate_num < count_tmp; rate_num++)
     {
         uint32_t rate = RSPEC_TO_KBPS(bss_info->rateset.rates[rate_num]);
@@ -2694,6 +2680,20 @@ static void *whd_wifi_scan_events_handler(whd_interface_t ifp, const whd_event_h
     }
     record->band = (CHSPEC_IS2G(chanspec) ? WHD_802_11_BAND_2_4GHZ :
                     (CHSPEC_IS5G(chanspec) ? WHD_802_11_BAND_5GHZ : WHD_802_11_BAND_6GHZ) );
+
+#ifdef WPRINT_ENABLE_WHD_DEBUG
+    /* print out scan results info - after all fields are populated */
+    {
+        char ea_buf[WHD_ETHER_ADDR_STR_LEN];
+        char ssid_buf[SSID_NAME_SIZE + 1];
+
+        WPRINT_WHD_DEBUG( ("Scan result: channel=%d signal=%d ssid=%s bssid=%s\n", record->channel,
+                           record->signal_strength,
+                           whd_ssid_to_string(record->SSID.value, record->SSID.length, ssid_buf,
+                                              (uint8_t)sizeof(ssid_buf) ),
+                           whd_ether_ntoa( (const uint8_t *)bss_info->BSSID.octet, ea_buf, sizeof(ea_buf) ) ) );
+    }
+#endif /* WPRINT_ENABLE_WHD_DEBUG */
 
     whd_driver->internal_info.scan_result_callback(&whd_driver->internal_info.whd_scan_result_ptr, handler_user_data,
                                                    WHD_SCAN_INCOMPLETE);
