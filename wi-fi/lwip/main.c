@@ -696,8 +696,14 @@ static int wifi_sta_connect(void)
 			}
 		} while (result == WHD_SUCCESS && wifi_common.sta.staPriv.scanResult.security == WHD_SECURITY_UNKNOWN);
 
+		if (result == WHD_SCAN_ABORTED) {
+			/* the scan timed out without a result for the SSID */
+			wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "network %.*s not found\n", (int)ssid.length, ssid.value);
+			mutexUnlock(wifi_common.sta.lock);
+			break;
+		}
 		if (result != WHD_SUCCESS) {
-			wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't get network's security\n");
+			wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't scan for network %.*s (%u)\n", (int)ssid.length, ssid.value, (unsigned int)result);
 			mutexUnlock(wifi_common.sta.lock);
 			break;
 		}
