@@ -4,12 +4,11 @@
  * LwIP Wi-Fi
  *
  * Copyright 2021, 2026 Phoenix Systems
- * Author: Ziemowit Leszczynski, Julian Uziembło
+ * Author: Ziemowit Leszczynski, Julian Uziembło, Jan Wisniewski
  *
  * SPDX-License-Identifier: BSD-3-Clause
  */
 
-#include <ctype.h>
 #include <string.h>
 #include <sys/minmax.h>
 #include <sys/msg.h>
@@ -28,6 +27,7 @@
 #include "lwipopts.h"
 #include "netif.h"
 #include "lwip/sys.h"
+#include "cmd.h"
 
 /* timeout for STA scanning in seconds */
 #ifndef WIFI_STA_SCAN_TIMEOUT_SECONDS
@@ -70,8 +70,6 @@ _Static_assert(((float)WIFI_STA_SCAN_TIMEOUT_SECONDS / WIFI_STA_N_SCANS) >= 5.0f
 
 #define CTRL_DEV_ID   2
 #define CTRL_DEV_NAME "/dev/wifi/ctrl"
-
-#define CONST_STRLEN(str) (sizeof(str) - 1)
 
 #define SNPRINTF_APPEND(overflow, buf, size, fmt, ...) \
 	do { \
@@ -168,24 +166,6 @@ static struct {
 };
 
 
-static const char *trim(const char *str, size_t *len)
-{
-	size_t sz = *len;
-	while (sz > 0 && !isgraph(*str)) {
-		str++;
-		sz--;
-	}
-
-	while (sz > 0 && !isgraph(str[sz - 1])) {
-		sz--;
-	}
-
-	*len = sz;
-
-	return str;
-}
-
-
 /* radio-wide queries go through the primary (STA) interface like WHD's AP code; it exists while Wi-Fi is on */
 static bool wifi_ap_security_supported(whd_security_t security)
 {
@@ -246,6 +226,12 @@ static bool wifi_ap_channel_supported(uint16_t channel)
 }
 
 
+/* passed to the STA/AP command handlers */
+struct wifi_dev_cmd_data {
+	id_t id;
+};
+
+
 /* TODO: report errors of all AP/STA commands that set a value, with clearer messages */
 static int wifi_ap_set_error(const char *error)
 {
@@ -264,8 +250,10 @@ static bool wifi_channel_valid(long int channel)
 }
 
 
-static int wifi_ap_set_channel(const char *data, size_t len)
+static int wifi_ap_set_channel(const cmdCtx_t *ctx)
 {
+	const char *data = ctx->args;
+	size_t len = ctx->argsLen;
 	char buf[8];
 	long int channel;
 	char *endp;
@@ -309,8 +297,11 @@ static const struct {
 };
 
 
-static int wifi_ap_set_security(const char *data, size_t len)
+static int wifi_ap_set_security(const cmdCtx_t *ctx)
 {
+	const char *data = ctx->args;
+	size_t len = ctx->argsLen;
+
 	for (size_t i = 0; i < sizeof(wifi_ap_securities) / sizeof(wifi_ap_securities[0]); i++) {
 		if (strlen(wifi_ap_securities[i].name) == len && strncmp(wifi_ap_securities[i].name, data, len) == 0) {
 			if (!wifi_ap_security_supported(wifi_ap_securities[i].security)) {
@@ -343,8 +334,10 @@ static const char *wifi_ap_security_name(whd_security_t security)
 }
 
 
-static int wifi_ap_set_timeout(const char *data, size_t len)
+static int wifi_ap_set_timeout(const cmdCtx_t *ctx)
 {
+	const char *data = ctx->args;
+	size_t len = ctx->argsLen;
 	char buf[16];
 	long int timeout;
 	char *endp;
@@ -383,8 +376,13 @@ static int wifi_ap_set_timeout(const char *data, size_t len)
 }
 
 
-static int wifi_set_ssid(id_t id, const char *ssid, size_t len)
+static int wifi_set_ssid(const cmdCtx_t *ctx)
 {
+	const struct wifi_dev_cmd_data *cmdData = ctx->userData;
+	id_t id = cmdData->id;
+	const char *ssid = ctx->args;
+	size_t len = ctx->argsLen;
+
 	if (len > SSID_NAME_SIZE) {
 		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't set Wi-Fi SSID (max length is %u)\n", SSID_NAME_SIZE);
 		return -1;
@@ -399,8 +397,13 @@ static int wifi_set_ssid(id_t id, const char *ssid, size_t len)
 }
 
 
-static int wifi_set_key(id_t id, const char *key, size_t len)
+static int wifi_set_key(const cmdCtx_t *ctx)
 {
+	const struct wifi_dev_cmd_data *cmdData = ctx->userData;
+	id_t id = cmdData->id;
+	const char *key = ctx->args;
+	size_t len = ctx->argsLen;
+
 	if (len < WSEC_MIN_PSK_LEN) {
 		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "can't set Wi-Fi key (min length is %u)\n", WSEC_MIN_PSK_LEN);
 		return -1;
@@ -421,8 +424,10 @@ static int wifi_set_key(id_t id, const char *key, size_t len)
 
 
 /* sets the space-separated STA scan channel list, an empty list scans all channels */
-static int wifi_sta_set_channels(const char *data, size_t len)
+static int wifi_sta_set_channels(const cmdCtx_t *ctx)
 {
+	const char *data = ctx->args;
+	size_t len = ctx->argsLen;
 	uint16_t channels[STA_SCAN_CHANNELS_MAX + 1] = { 0 };
 	size_t count = 0;
 
@@ -699,7 +704,7 @@ static void wifi_scan_result_cb(whd_scan_result_t **result_ptr, void *user_data,
 }
 
 
-static int wifi_sta_connect(void)
+static int wifi_sta_connect(const cmdCtx_t *ctx)
 {
 	whd_result_t result;
 	whd_ssid_t ssid;
@@ -711,6 +716,8 @@ static int wifi_sta_connect(void)
 	struct timespec tp;
 	time_t when, now;
 	const uint16_t *channelList;
+
+	(void)ctx;
 
 	if (wifi_get_state(&wifi_common.sta) == wifi_running) {
 		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "STA is already connected\n");
@@ -823,9 +830,11 @@ static void wifi_sta_disconnect(void)
 }
 
 
-static int wifi_ap_start(void)
+static int wifi_ap_start(const cmdCtx_t *ctx)
 {
 	uint8_t flags;
+
+	(void)ctx;
 
 	mutexLock(wifi_common.ap.lock);
 
@@ -1010,59 +1019,97 @@ static int wifi_set_addr(ip_addr_t *addr, const char *data, size_t size)
 }
 
 
-static int wifi_dev_write(id_t id, const char *data, size_t size)
+static int wifi_sta_disconnect_cmd(const cmdCtx_t *ctx)
+{
+	(void)ctx;
+	wifi_sta_disconnect();
+	return 0;
+}
+
+
+static int wifi_ap_stop_cmd(const cmdCtx_t *ctx)
+{
+	(void)ctx;
+	wifi_ap_stop();
+	return 0;
+}
+
+
+static int wifi_ap_set_ipaddr(const cmdCtx_t *ctx)
+{
+	(void)wifi_set_addr(&wifi_common.ap.apPriv.addr.addr, ctx->args, ctx->argsLen);
+	return 0;
+}
+
+
+static int wifi_ap_set_netmask(const cmdCtx_t *ctx)
+{
+	(void)wifi_set_addr(&wifi_common.ap.apPriv.addr.netmask, ctx->args, ctx->argsLen);
+	return 0;
+}
+
+
+static int wifi_ap_set_gateway(const cmdCtx_t *ctx)
+{
+	(void)wifi_set_addr(&wifi_common.ap.apPriv.addr.gateway, ctx->args, ctx->argsLen);
+	return 0;
+}
+
+
+static const cmd_t wifi_sta_cmds[] = {
+	{ "ssid", wifi_set_ssid, CMD_ARGS_REQUIRED },
+	{ "key", wifi_set_key, CMD_ARGS_REQUIRED },
+	{ "channels", wifi_sta_set_channels, CMD_ARGS_OPTIONAL },
+	{ "connect", wifi_sta_connect },
+	{ "disconnect", wifi_sta_disconnect_cmd },
+};
+
+
+static const cmd_t wifi_ap_cmds[] = {
+	{ "ssid", wifi_set_ssid, CMD_ARGS_REQUIRED },
+	{ "key", wifi_set_key, CMD_ARGS_REQUIRED },
+	{ "timeout", wifi_ap_set_timeout, CMD_ARGS_REQUIRED },
+	{ "channel", wifi_ap_set_channel, CMD_ARGS_REQUIRED },
+	{ "security", wifi_ap_set_security, CMD_ARGS_REQUIRED },
+	{ "start", wifi_ap_start },
+	{ "stop", wifi_ap_stop_cmd },
+	{ "ipaddr", wifi_ap_set_ipaddr, CMD_ARGS_REQUIRED },
+	{ "netmask", wifi_ap_set_netmask, CMD_ARGS_REQUIRED },
+	{ "gateway", wifi_ap_set_gateway, CMD_ARGS_REQUIRED },
+};
+
+
+/* runs the command written to a device, returns the written size on success */
+static int wifi_run_cmd(const cmd_t *cmds, size_t count, const char *data, size_t size, void *userData)
 {
 	const size_t inputSize = size;
-	data = trim(data, &size);
+	cmdCtx_t ctx = { .userData = userData };
+	const cmd_t *cmd;
 
-	if (size >= CONST_STRLEN("ssid ") && strncmp("ssid ", data, 5) == 0) {
-		wifi_set_ssid(id, data + 5, size - 5);
-	}
-	else if (size >= CONST_STRLEN("key ") && strncmp("key ", data, 4) == 0) {
-		wifi_set_key(id, data + 4, size - 4);
-	}
-	else if (id == STA_DEV_ID && size >= CONST_STRLEN("channels ") && strncmp("channels ", data, 9) == 0) {
-		wifi_sta_set_channels(data + 9, size - 9);
-	}
-	else if (id == STA_DEV_ID && size == CONST_STRLEN("channels") && strncmp("channels", data, size) == 0) {
-		wifi_sta_set_channels(NULL, 0);
-	}
-	else if (id == STA_DEV_ID && size == CONST_STRLEN("connect") && strncmp("connect", data, size) == 0) {
-		wifi_sta_connect();
-	}
-	else if (id == STA_DEV_ID && size == CONST_STRLEN("disconnect") && strncmp("disconnect", data, size) == 0) {
-		wifi_sta_disconnect();
-	}
-	else if (id == AP_DEV_ID && size >= CONST_STRLEN("timeout ") && strncmp("timeout ", data, 8) == 0) {
-		wifi_ap_set_timeout(data + 8, size - 8);
-	}
-	else if (id == AP_DEV_ID && size >= CONST_STRLEN("channel ") && strncmp("channel ", data, 8) == 0) {
-		wifi_ap_set_channel(data + 8, size - 8);
-	}
-	else if (id == AP_DEV_ID && size >= CONST_STRLEN("security ") && strncmp("security ", data, 9) == 0) {
-		wifi_ap_set_security(data + 9, size - 9);
-	}
-	else if (id == AP_DEV_ID && size == CONST_STRLEN("start") && strncmp("start", data, size) == 0) {
-		wifi_ap_start();
-	}
-	else if (id == AP_DEV_ID && size == CONST_STRLEN("stop") && strncmp("stop", data, size) == 0) {
-		wifi_ap_stop();
-	}
-	else if (id == AP_DEV_ID && size >= CONST_STRLEN("ipaddr ") && strncmp("ipaddr ", data, 7) == 0) {
-		wifi_set_addr(&wifi_common.ap.apPriv.addr.addr, data + 7, size - 7);
-	}
-	else if (id == AP_DEV_ID && size >= CONST_STRLEN("netmask ") && strncmp("netmask ", data, 8) == 0) {
-		wifi_set_addr(&wifi_common.ap.apPriv.addr.netmask, data + 8, size - 8);
-	}
-	else if (id == AP_DEV_ID && size >= CONST_STRLEN("gateway ") && strncmp("gateway ", data, 8) == 0) {
-		wifi_set_addr(&wifi_common.ap.apPriv.addr.gateway, data + 8, size - 8);
-	}
-	else {
+	data = cmd_trim(data, &size);
+
+	cmd = cmd_find(cmds, count, data, size, &ctx);
+	if (cmd == NULL) {
 		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "got unknown Wi-Fi command: %.*s\n", (int)size, data);
 		return -EINVAL;
 	}
 
-	return inputSize;
+	/* TODO: SEN-193 report handler errors to the writer */
+	(void)cmd->handler(&ctx);
+
+	return (int)inputSize;
+}
+
+
+static int wifi_dev_write(id_t id, const char *data, size_t size)
+{
+	struct wifi_dev_cmd_data cmdData = { .id = id };
+
+	if (id == STA_DEV_ID) {
+		return wifi_run_cmd(wifi_sta_cmds, sizeof(wifi_sta_cmds) / sizeof(wifi_sta_cmds[0]), data, size, &cmdData);
+	}
+
+	return wifi_run_cmd(wifi_ap_cmds, sizeof(wifi_ap_cmds) / sizeof(wifi_ap_cmds[0]), data, size, &cmdData);
 }
 
 
@@ -1253,8 +1300,10 @@ static void _wifi_deinit(void)
 }
 
 
-static void wifi_deinit(void)
+static int wifi_deinit(const cmdCtx_t *ctx)
 {
+	(void)ctx;
+
 	mutexLock(wifi_common.ctrl.lock);
 	if (!wifi_common.initialized) {
 		wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "Wi-Fi is not up\n");
@@ -1263,6 +1312,8 @@ static void wifi_deinit(void)
 		_wifi_deinit();
 	}
 	mutexUnlock(wifi_common.ctrl.lock);
+
+	return 0;
 }
 
 
@@ -1344,9 +1395,11 @@ static int _wifi_init(void)
 }
 
 
-static int wifi_init(void)
+static int wifi_init(const cmdCtx_t *ctx)
 {
 	int err;
+
+	(void)ctx;
 
 	mutexLock(wifi_common.ctrl.lock);
 	if (wifi_common.initialized) {
@@ -1364,6 +1417,12 @@ static int wifi_init(void)
 
 	return err;
 }
+
+
+static const cmd_t wifi_ctrl_cmds[] = {
+	{ "on", wifi_init },
+	{ "off", wifi_deinit },
+};
 
 
 static void wifi_ctrl_thread(void *arg)
@@ -1442,26 +1501,9 @@ static void wifi_ctrl_thread(void *arg)
 				break;
 			}
 
-			case mtWrite: {
-				const char *data = msg.i.data;
-				size_t size = msg.i.size;
-
-				data = trim(data, &size);
-
-				if (size == CONST_STRLEN("on") && strncmp("on", data, size) == 0) {
-					wifi_init();
-				}
-				else if (size == CONST_STRLEN("off") && strncmp("off", data, size) == 0) {
-					wifi_deinit();
-				}
-				else {
-					wm_cy_log_msg(CYLF_MIDDLEWARE, CY_LOG_ERR, "got unknown Wi-Fi command: %.*s\n", (int)size, data);
-					msg.o.err = -EINVAL;
-					break;
-				}
-				msg.o.err = msg.i.size;
+			case mtWrite:
+				msg.o.err = wifi_run_cmd(wifi_ctrl_cmds, sizeof(wifi_ctrl_cmds) / sizeof(wifi_ctrl_cmds[0]), msg.i.data, msg.i.size, NULL);
 				break;
-			}
 
 			default:
 				msg.o.err = -EOPNOTSUPP;
