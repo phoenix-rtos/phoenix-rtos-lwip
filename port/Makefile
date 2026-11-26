@@ -23,6 +23,7 @@ endif
 ifeq (${LWIP_WIFI_BUILD},yes)
   LOCAL_CFLAGS += -DLWIP_WIFI=1
   DEP_LIBS += wifi-hal wifi-lwip wifi-whd
+  LIBS += libusb
 else
   LOCAL_CFLAGS += -DLWIP_WIFI=0
 endif

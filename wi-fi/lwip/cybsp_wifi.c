@@ -169,10 +169,6 @@ typedef cyhal_transfer_t cyhal_sdio_transfer_type_t;
 
 #elif defined(WIFI_MODE_USB)
 
-#ifndef WIFI_DEVICE_PATH
-#define WIFI_DEVICE_PATH "/dev/wlan0"
-#endif
-
 #endif /* !(defined(WIFI_MODE_M2M) || defined(WIFI_MODE_USB)) */
 
 static whd_driver_t whd_drv;
@@ -509,10 +505,7 @@ static cyhal_usb_t usb_obj;
 //--------------------------------------------------------------------------------------------------
 cy_rslt_t _cybsp_wifi_usb_init_bus(void)
 {
-	whd_usb_config_t whd_usb_config = {
-		.path = WIFI_DEVICE_PATH,
-	};
-	return whd_bus_usb_attach(whd_drv, &whd_usb_config, &usb_obj);
+	return whd_bus_usb_attach(whd_drv, &usb_obj);
 }
 
 #endif

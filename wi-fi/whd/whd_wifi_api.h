@@ -118,7 +118,7 @@ extern void whd_bus_spi_detach(whd_driver_t whd_driver);
  *
  *  @return WHD_SUCCESS or Error code
  */
-extern whd_result_t whd_bus_usb_attach(whd_driver_t whd_driver, whd_usb_config_t *config, cyhal_usb_t *usb_obj);
+extern whd_result_t whd_bus_usb_attach(whd_driver_t whd_driver, cyhal_usb_t *usb_obj);
 
 /** Detach the WLAN Device to a specific USB bus
  *
