@@ -1,0 +1,63 @@
+{
+	"bomFormat": "CycloneDX",
+	"specVersion": "1.6",
+	"version": 1,
+	"metadata": {
+		"component": {
+			"type": "library",
+			"name": "lwip-core",
+			"description": "G3-PLC additions to lwIP core (LWIP_G3_BUILD=yes only)"
+		},
+		"properties": [
+			{
+				"name": "scope",
+				"value": "Third-party-derived code vendored by this component only. Meant to be merged into a product-level SBOM, not scanned on its own."
+			}
+		]
+	},
+	"components": [
+		{
+			"type": "library",
+			"bom-ref": "lwip-lowpan6-g3",
+			"name": "lwip-lowpan6-g3",
+			"description": "G3-PLC 6LoWPAN adaptation layer: Phoenix-RTOS fork of lwIP's 6LoWPAN implementation, replacing it in G3 builds",
+			"supplier": {
+				"name": "Phoenix Systems",
+				"url": ["https://phoenix-rtos.com"]
+			},
+			"licenses": [
+				{
+					"license": {
+						"id": "BSD-3-Clause"
+					}
+				}
+			],
+			"pedigree": {
+				"ancestors": [
+					{
+						"type": "library",
+						"name": "lwip",
+						"version": "2.1.2",
+						"cpe": "cpe:2.3:a:lwip_project:lwip:2.1.2:*:*:*:*:*:*:*",
+						"purl": "pkg:github/phoenix-rtos/lwip@cac552df1fc95c363423f3dc1c8d8ff0d586e2a5"
+					}
+				],
+				"notes": "Forked from lwIP's src/netif/lowpan6.c and src/netif/lowpan6_common.c and extended for G3-PLC. lwIP's own copies are excluded from G3 builds, so lwIP 6LoWPAN advisories apply to these files instead. Upstream fixes to src/netif/lowpan6*.c are not picked up by submodule bumps and must be ported by hand."
+			},
+			"properties": [
+				{
+					"name": "derived-from",
+					"value": "g3/lowpan6_g3.c <- lib-lwip/src/netif/lowpan6.c"
+				},
+				{
+					"name": "derived-from",
+					"value": "g3/lowpan6_common.c <- lib-lwip/src/netif/lowpan6_common.c"
+				},
+				{
+					"name": "note",
+					"value": "No CPE on this component on purpose: the lwIP CPE would attach every lwIP advisory (TCP, DHCP, ...) to it a second time. The ancestor carries the CPE; triage lwIP advisories whose fix touches src/netif/lowpan6*.c against these files."
+				}
+			]
+		}
+	]
+}

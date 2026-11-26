@@ -47,4 +47,5 @@ endif
 
 NAME := lwip-drivers
 LOCAL_SRCS := $(DRIVERS_SRCS)
+LICENSE := BSD-3-Clause
 include $(static-lib.mk)

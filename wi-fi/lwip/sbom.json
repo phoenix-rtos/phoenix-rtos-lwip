@@ -1,0 +1,137 @@
+{
+	"bomFormat": "CycloneDX",
+	"specVersion": "1.6",
+	"version": 1,
+	"metadata": {
+		"component": {
+			"type": "library",
+			"name": "wifi-lwip",
+			"description": "Infineon Wi-Fi middleware glue between WHD and lwIP (LWIP_WIFI_BUILD=yes only)"
+		},
+		"properties": [
+			{
+				"name": "scope",
+				"value": "Third-party code vendored by this component only. Meant to be merged into a product-level SBOM, not scanned on its own."
+			}
+		]
+	},
+	"components": [
+		{
+			"type": "library",
+			"bom-ref": "wifi-mw-core",
+			"name": "wifi-mw-core",
+			"version": "3.1.1",
+			"description": "lwIP network interface integration for WHD (lwip-whd-port)",
+			"supplier": {
+				"name": "Infineon Technologies AG (Cypress Semiconductor)",
+				"url": [
+					"https://github.com/Infineon/wifi-mw-core"
+				]
+			},
+			"licenses": [
+				{
+					"license": {
+						"name": "Cypress (an Infineon company) End User License Agreement",
+						"url": "https://github.com/Infineon/wifi-mw-core/blob/release-v3.1.1/EULA.txt"
+					}
+				}
+			],
+			"purl": "pkg:github/Infineon/wifi-mw-core@e5994a729e9c823757c642c0efad83e5616c4ec5#lwip-whd-port",
+			"properties": [
+				{
+					"name": "source",
+					"value": "cy_lwip.c, cy_lwip.h, cy_lwip_dhcp_server.c, cy_lwip_dhcp_server.h, cy_lwip_error.h, cy_lwip_log.h, cy_wifimwcore_eapol.h"
+				},
+				{
+					"name": "note",
+					"value": "Closest public release is 3.1.0-3.1.1; the .c files are heavily modified. The EULA permits use only with Cypress/Infineon integrated circuits."
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "connectivity-utilities-mw",
+			"name": "connectivity-utilities",
+			"version": "3.0.3",
+			"description": "Middleware result codes",
+			"supplier": {
+				"name": "Infineon Technologies AG (Cypress Semiconductor)",
+				"url": [
+					"https://github.com/Infineon/connectivity-utilities"
+				]
+			},
+			"licenses": [
+				{
+					"license": {
+						"name": "Cypress (an Infineon company) End User License Agreement",
+						"url": "https://github.com/Infineon/connectivity-utilities/blob/release-v3.0.3/EULA.txt"
+					}
+				}
+			],
+			"purl": "pkg:github/Infineon/connectivity-utilities@e28d4096220b63fd8c69105a2892ebc34990595d",
+			"properties": [
+				{
+					"name": "source",
+					"value": "cy_result_mw.h (header only)"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "whd-bsp-integration",
+			"name": "whd-bsp-integration",
+			"version": "2.0.0",
+			"description": "WHD board integration and lwIP network buffer management",
+			"supplier": {
+				"name": "Infineon Technologies AG (Cypress Semiconductor)",
+				"url": [
+					"https://github.com/Infineon/whd-bsp-integration"
+				]
+			},
+			"licenses": [
+				{
+					"license": {
+						"id": "Apache-2.0"
+					}
+				}
+			],
+			"purl": "pkg:github/Infineon/whd-bsp-integration@c180a141838d02aea52f86967772f8216fc15a18",
+			"properties": [
+				{
+					"name": "source",
+					"value": "cybsp_wifi.c, cybsp_wifi.h, cy_network_buffer_lwip.c, cy_network_buffer.h"
+				},
+				{
+					"name": "note",
+					"value": "Closest public release; modified locally."
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "cypress-bsp",
+			"name": "cypress-bsp",
+			"description": "Board support package skeleton (cybsp)",
+			"supplier": {
+				"name": "Infineon Technologies AG (Cypress Semiconductor)"
+			},
+			"licenses": [
+				{
+					"license": {
+						"id": "Apache-2.0"
+					}
+				}
+			],
+			"properties": [
+				{
+					"name": "source",
+					"value": "cybsp.c, cybsp.h, cybsp_types.h"
+				},
+				{
+					"name": "note",
+					"value": "Taken from an Infineon ModusToolbox target BSP in 2021 (commit 980f922); the exact BSP and version were not recorded."
+				}
+			]
+		}
+	]
+}

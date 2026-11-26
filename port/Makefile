@@ -30,4 +30,5 @@ endif
 LWIP_MAIN_THREAD_STACKSIZE ?= 4096
 LOCAL_LDFLAGS := -z stack-size=$(LWIP_MAIN_THREAD_STACKSIZE)
 
+LICENSE := BSD-3-Clause
 include $(binary.mk)

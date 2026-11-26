@@ -18,4 +18,6 @@ LOCAL_SRCS := whd_ap.c whd_buffer_api.c whd_cdc_bdc.c whd_chip.c whd_chip_consta
 
 LOCAL_CFLAGS += -DCYHAL_API_VERSION=1
 
+LICENSE := Apache-2.0
+LOCAL_SBOM := sbom.json
 include $(static-lib.mk)

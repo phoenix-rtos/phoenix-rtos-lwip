@@ -1,0 +1,71 @@
+{
+	"bomFormat": "CycloneDX",
+	"specVersion": "1.6",
+	"version": 1,
+	"metadata": {
+		"component": {
+			"type": "library",
+			"name": "wifi-whd",
+			"description": "Infineon Wi-Fi Host Driver for Phoenix-RTOS lwIP (LWIP_WIFI_BUILD=yes only)"
+		},
+		"properties": [
+			{
+				"name": "scope",
+				"value": "Third-party code vendored by this component only. Meant to be merged into a product-level SBOM, not scanned on its own."
+			}
+		]
+	},
+	"components": [
+		{
+			"type": "library",
+			"bom-ref": "wifi-host-driver",
+			"name": "wifi-host-driver",
+			"version": "3.3.0.24096",
+			"description": "Infineon AIROC Wi-Fi Host Driver (WHD), Wi-Fi 5 variant",
+			"supplier": {
+				"name": "Infineon Technologies AG (Cypress Semiconductor)",
+				"url": ["https://github.com/Infineon/wifi-host-driver"]
+			},
+			"licenses": [
+				{
+					"license": {
+						"id": "Apache-2.0"
+					}
+				}
+			],
+			"purl": "pkg:github/Infineon/wifi-host-driver@9e4da8f0a5f5bf480d5e3661d028f68877423beb#WHD/COMPONENT_WIFI5",
+			"externalReferences": [
+				{
+					"type": "vcs",
+					"url": "https://github.com/Infineon/wifi-host-driver"
+				},
+				{
+					"type": "distribution",
+					"url": "https://github.com/Infineon/AIROC-Wi-Fi-Bluetooth-STM32",
+					"comment": "Actual import source: v1.7.1.5645"
+				}
+			],
+			"pedigree": {
+				"notes": "Imported from Infineon AIROC-Wi-Fi-Bluetooth-STM32 v1.7.1.5645 (phoenix-rtos-lwip commit 8fc4917). Its whd_version.h is identical to wifi-host-driver release-v4.1.0 (commit 9e4da8f0), WHD/COMPONENT_WIFI5, which the purl points at. 36 of the 73 upstream files are modified locally; the largest changes are whd_resources.c (firmware, NVRAM and CLM loading from the filesystem), wifi_nvram_image.h (board NVRAM) and whd_wifi_api.c."
+			},
+			"properties": [
+				{
+					"name": "source",
+					"value": "wi-fi/whd, except bus_protocols/whd_bus_usb_protocol.[ch]"
+				},
+				{
+					"name": "note",
+					"value": "bus_protocols/whd_bus_usb_protocol.[ch] carry a Cypress 2023 Apache-2.0 header but are not present in any public wifi-host-driver tag; added by Phoenix Systems in commit 7dbfb8b. Origin unverified."
+				},
+				{
+					"name": "note",
+					"value": "NVD has no CPE for WHD, so CPE and purl based scanners will not report anything for it. Track Infineon PSIRT advisories by hand."
+				},
+				{
+					"name": "note",
+					"value": "Chip firmware, NVRAM and CLM blobs (Sterling LWB, Sterling LWB5+, AW-NM512) are loaded at runtime from /firmware and are not part of this component; list them in the SBOM of whatever installs them."
+				}
+			]
+		}
+	]
+}

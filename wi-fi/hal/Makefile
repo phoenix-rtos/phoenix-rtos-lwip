@@ -12,4 +12,6 @@ LOCAL_SRCS := cyhal_gpio.c cyhal_sdio.c cyhal_usb.c cyhal_utils.c cyabs_rtos.c c
 
 LOCAL_CFLAGS += -Idrivers
 
+LICENSE := BSD-3-Clause AND Apache-2.0 AND LicenseRef-Cypress-EULA
+LOCAL_SBOM := sbom.json
 include $(static-lib.mk)

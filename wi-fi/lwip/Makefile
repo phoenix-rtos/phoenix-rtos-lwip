@@ -15,4 +15,6 @@ LOCAL_CFLAGS += -DCY_RSLT_MODULE_BOARD_LIB_WHD_INTEGRATION=0x2ff
 LOCAL_CFLAGS += -DENABLE_WIFI_MIDDLEWARE_LOGS
 LOCAL_CFLAGS += -DCYBSP_WIFI_WL_REG_ON=0 # fake value - actual pin is hardcoded
 
+LICENSE := BSD-3-Clause AND Apache-2.0 AND LicenseRef-Cypress-EULA
+LOCAL_SBOM := sbom.json
 include $(static-lib.mk)

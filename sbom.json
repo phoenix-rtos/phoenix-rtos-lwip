@@ -1,0 +1,106 @@
+{
+	"bomFormat": "CycloneDX",
+	"specVersion": "1.6",
+	"version": 1,
+	"metadata": {
+		"component": {
+			"type": "library",
+			"name": "lwip-core",
+			"description": "lwIP core as built for Phoenix-RTOS (lib-lwip submodule)"
+		},
+		"properties": [
+			{
+				"name": "scope",
+				"value": "Third-party code vendored by this component only. Meant to be merged into a product-level SBOM, not scanned on its own."
+			}
+		]
+	},
+	"components": [
+		{
+			"type": "library",
+			"bom-ref": "lwip",
+			"name": "lwip",
+			"version": "2.1.2",
+			"description": "lwIP TCP/IP stack, Phoenix-RTOS fork",
+			"supplier": {
+				"name": "lwIP project",
+				"url": [
+					"https://savannah.nongnu.org/projects/lwip/"
+				]
+			},
+			"licenses": [
+				{
+					"license": {
+						"id": "BSD-3-Clause"
+					}
+				}
+			],
+			"cpe": "cpe:2.3:a:lwip_project:lwip:2.1.2:*:*:*:*:*:*:*",
+			"purl": "pkg:github/phoenix-rtos/lwip@cac552df1fc95c363423f3dc1c8d8ff0d586e2a5",
+			"externalReferences": [
+				{
+					"type": "vcs",
+					"url": "https://github.com/phoenix-rtos/lwip"
+				},
+				{
+					"type": "website",
+					"url": "https://savannah.nongnu.org/projects/lwip/"
+				}
+			],
+			"pedigree": {
+				"ancestors": [
+					{
+						"type": "library",
+						"name": "lwip",
+						"version": "2.1.2",
+						"cpe": "cpe:2.3:a:lwip_project:lwip:2.1.2:*:*:*:*:*:*:*",
+						"purl": "pkg:github/lwip-tcpip/lwip@159e31b689577dbf69cf0683bbaffbd71fa5ee10"
+					}
+				],
+				"notes": "STABLE-2_1_2_RELEASE (159e31b6) plus 52 commits on branch STABLE-2_1_x_phoenix: cherry-picks from upstream STABLE-2_1 and Phoenix changes (packet sockets, IPsec hooks, ioctl interface). STABLE-2_1_3_RELEASE is NOT merged: about 30 of its fixes are missing, including 'icmp6: Don't copy too much data' (CVE-2020-22283) and 'tcp: Fix double free in tcp_split_unsent_seg()'. Match advisories against 2.1.2; for fixes identified by commit, check whether the commit is an ancestor of the pinned fork commit."
+			},
+			"properties": [
+				{
+					"name": "source",
+					"value": "lib-lwip submodule; built from LWIPNOAPPSFILES in src/Filelists.mk minus netif/slipif.c. G3 builds additionally drop netif/lowpan6.c and netif/lowpan6_common.c (replaced by g3/, see g3/sbom.json). src/apps (httpd, mqtt, snmp, mdns, sntp, smtp, tftp, ...) is not built."
+				},
+				{
+					"name": "configuration",
+					"value": "include/default-opts/lwipopts.h: LWIP_IPV6 is not enabled, so IPv6, 6LoWPAN and zepif sources compile to nothing; PPP with PAP, CHAP and MSCHAP is enabled. G3 builds use include/default-opts/g3/lwipopts.h, which enables LWIP_IPV6."
+				},
+				{
+					"name": "maintenance",
+					"value": "The purl pins the lib-lwip submodule commit. Update it whenever the submodule is bumped, and update version, cpe and pedigree if the upstream base changes (e.g. after merging STABLE-2_1_3_RELEASE)."
+				}
+			],
+			"components": [
+				{
+					"type": "library",
+					"bom-ref": "lwip-polarssl",
+					"name": "polarssl",
+					"description": "MD4, MD5, SHA-1 and DES primitives bundled with lwIP for PPP authentication (CHAP, MSCHAP)",
+					"supplier": {
+						"name": "PolarSSL (Paul Bakker), based on XySSL (Christophe Devine)"
+					},
+					"licenses": [
+						{
+							"license": {
+								"id": "BSD-3-Clause"
+							}
+						}
+					],
+					"properties": [
+						{
+							"name": "source",
+							"value": "lib-lwip/src/netif/ppp/polarssl/{md4,md5,sha1,des}.c, compiled in because CHAP_SUPPORT and MSCHAP_SUPPORT are enabled without an external crypto library. arc4.c is present but compiles to nothing (MPPE_SUPPORT is off)."
+						},
+						{
+							"name": "note",
+							"value": "Upstream version unknown (2009-era PolarSSL, trimmed by lwIP). No CPE on purpose: the polarssl CPE matches TLS, bignum and RSA advisories for code that is not present, and defects in this copy are filed against lwIP, whose CPE covers it."
+						}
+					]
+				}
+			]
+		}
+	]
+}

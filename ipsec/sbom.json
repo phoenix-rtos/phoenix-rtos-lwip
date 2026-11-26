@@ -1,0 +1,161 @@
+{
+	"bomFormat": "CycloneDX",
+	"specVersion": "1.6",
+	"version": 1,
+	"metadata": {
+		"component": {
+			"type": "library",
+			"name": "lwip-ipsec",
+			"description": "IPsec (AH/ESP, manual keying and PF_KEY) for Phoenix-RTOS lwIP"
+		},
+		"properties": [
+			{
+				"name": "scope",
+				"value": "Third-party code vendored by this component only. Meant to be merged into a product-level SBOM, not scanned on its own."
+			}
+		]
+	},
+	"components": [
+		{
+			"type": "library",
+			"bom-ref": "embedded-ipsec",
+			"name": "embedded-ipsec",
+			"description": "embedded IPsec: IPsec tunnel mode with manual keying for small systems",
+			"supplier": {
+				"name": "Niklaus Schild and Christian Scheurer (HTI Biel/Bienne)",
+				"url": [
+					"http://www.christianscheurer.ch"
+				]
+			},
+			"licenses": [
+				{
+					"license": {
+						"id": "BSD-3-Clause"
+					}
+				}
+			],
+			"properties": [
+				{
+					"name": "source",
+					"value": "ah.c, des.c, esp.c, ipsec.c, ipsecdev.c, md5.c, sha1.c, util.c and their headers. Heavily adapted by Phoenix Systems, which also added sa.c, sadb.c, key_sockets.c, mbuff.c and sha1_imp.c."
+				},
+				{
+					"name": "note",
+					"value": "2003 code; upstream version and distribution point unknown, no CPE exists. Vulnerabilities can only be found by review, not by scanning."
+				}
+			],
+			"components": [
+				{
+					"type": "library",
+					"bom-ref": "embedded-ipsec-openssl",
+					"name": "openssl",
+					"description": "DES/3DES and SHA-1 code extracted from OpenSSL (Eric Young's SSLeay-era implementations)",
+					"supplier": {
+						"name": "OpenSSL Project; Eric Young",
+						"url": [
+							"https://www.openssl.org"
+						]
+					},
+					"licenses": [
+						{
+							"license": {
+								"id": "OpenSSL"
+							}
+						}
+					],
+					"properties": [
+						{
+							"name": "source",
+							"value": "Portions of des.c and sha1.c (\"portions Copyright (c) 1998-2003 OpenSSL\")"
+						},
+						{
+							"name": "note",
+							"value": "OpenSSL 0.9.x era, exact version unknown. No CPE on purpose: the openssl CPE matches hundreds of advisories for code that is not present. The OpenSSL/SSLeay license requires the acknowledgement \"This product includes cryptographic software written by Eric Young (eay@cryptsoft.com)\" in product documentation."
+						}
+					]
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "openwall-md5",
+			"name": "openwall-md5",
+			"description": "OpenSSL-compatible MD5 implementation by Solar Designer",
+			"supplier": {
+				"name": "Alexander Peslyak (Solar Designer)",
+				"url": [
+					"https://openwall.info/wiki/people/solar/software/public-domain-source-code/md5"
+				]
+			},
+			"licenses": [
+				{
+					"license": {
+						"name": "Public domain, with a cut-down BSD license as fallback (see md5_imp.c)",
+						"url": "https://openwall.info/wiki/people/solar/software/public-domain-source-code/md5"
+					}
+				}
+			],
+			"properties": [
+				{
+					"name": "source",
+					"value": "md5_imp.c, md5_imp.h"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "embeddedknowledge-aes",
+			"name": "embeddedknowledge-aes",
+			"description": "Table-based AES implementation for embedded systems",
+			"supplier": {
+				"name": "embeddedknowledge.blogspot.com",
+				"url": [
+					"http://embeddedknowledge.blogspot.com/2012/03/optimized-aes-source-code-for-embedded.html"
+				]
+			},
+			"licenses": [
+				{
+					"license": {
+						"name": "Public domain (stated in aes.c)"
+					}
+				}
+			],
+			"properties": [
+				{
+					"name": "source",
+					"value": "aes.c, aes.h"
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "libtomcrypt",
+			"name": "libtomcrypt",
+			"description": "SHA-256 compression function; the HMAC wrapper is Phoenix-written",
+			"supplier": {
+				"name": "LibTom Projects",
+				"url": [
+					"https://github.com/libtom/libtomcrypt"
+				]
+			},
+			"licenses": [
+				{
+					"license": {
+						"name": "Public domain (LibTomCrypt before 1.18)"
+					}
+				}
+			],
+			"cpe": "cpe:2.3:a:libtom:libtomcrypt:*:*:*:*:*:*:*:*",
+			"properties": [
+				{
+					"name": "source",
+					"value": "sha256.c (src/hashes/sha2/sha256.c)"
+				},
+				{
+					"name": "note",
+					"value": "Version unknown; the file header predates the 1.18 relicensing. Duplicates phoenix-rtos-corelibs/libsha256, which tracks libtomcrypt by commit; switching to that library would drop this entry."
+				}
+			]
+		}
+	]
+}

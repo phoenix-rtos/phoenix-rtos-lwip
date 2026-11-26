@@ -41,6 +41,9 @@ SRCS := $(LWIP_SRCS)
 LOCAL_CFLAGS += -Wno-char-subscripts -Wno-format-zero-length
 # don't install include subdir contents, these are actually internal headers
 LOCAL_HEADER_DIR := nothing
+LICENSE := BSD-3-Clause
+# lwIP fork (lib-lwip); G3 builds replace lwIP's 6LoWPAN with a derived copy in g3/
+LOCAL_SBOM := sbom.json $(if $(filter yes,$(LWIP_G3_BUILD)),g3/sbom.json)
 include $(static-lib.mk)
 
 # should define NET_DRIVERS and platform driver sources

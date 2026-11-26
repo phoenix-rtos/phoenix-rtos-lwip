@@ -10,4 +10,6 @@ IPSEC_SRCS := aes.c ah.c des.c esp.c ipsec.c ipsecdev.c key_sockets.c mbuff.c md
 
 NAME := lwip-ipsec
 LOCAL_SRCS := $(IPSEC_SRCS)
+LICENSE := BSD-3-Clause AND OpenSSL AND LicenseRef-Public-Domain
+LOCAL_SBOM := sbom.json
 include $(static-lib.mk)

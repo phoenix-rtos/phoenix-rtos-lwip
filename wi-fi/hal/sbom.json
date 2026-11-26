@@ -1,0 +1,141 @@
+{
+	"bomFormat": "CycloneDX",
+	"specVersion": "1.6",
+	"version": 1,
+	"metadata": {
+		"component": {
+			"type": "library",
+			"name": "wifi-hal",
+			"description": "Phoenix-RTOS implementation of the Infineon HAL and RTOS abstraction APIs used by WHD (LWIP_WIFI_BUILD=yes only)"
+		},
+		"properties": [
+			{
+				"name": "scope",
+				"value": "Third-party code vendored by this component only. Meant to be merged into a product-level SBOM, not scanned on its own."
+			},
+			{
+				"name": "note",
+				"value": "Only API headers are third-party; every .c file in wi-fi/hal is Phoenix-written. Listed for licensing and completeness."
+			}
+		]
+	},
+	"components": [
+		{
+			"type": "library",
+			"bom-ref": "abstraction-rtos",
+			"name": "abstraction-rtos",
+			"description": "RTOS abstraction API headers",
+			"supplier": {
+				"name": "Infineon Technologies AG (Cypress Semiconductor)",
+				"url": [
+					"https://github.com/Infineon/abstraction-rtos"
+				]
+			},
+			"licenses": [
+				{
+					"license": {
+						"id": "Apache-2.0"
+					}
+				}
+			],
+			"properties": [
+				{
+					"name": "source",
+					"value": "cyabs_rtos.h, cyabs_rtos_impl.h (adapted from COMPONENT_FREERTOS)"
+				},
+				{
+					"name": "note",
+					"value": "Heavily adapted; closest public releases are 1.5.0 (cyabs_rtos.h) and 1.11.0 (cyabs_rtos_impl.h)."
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "psoc6hal",
+			"name": "psoc6hal",
+			"description": "Hardware abstraction layer API headers",
+			"supplier": {
+				"name": "Infineon Technologies AG (Cypress Semiconductor)",
+				"url": [
+					"https://github.com/Infineon/psoc6hal"
+				]
+			},
+			"licenses": [
+				{
+					"license": {
+						"id": "Apache-2.0"
+					}
+				}
+			],
+			"properties": [
+				{
+					"name": "source",
+					"value": "cyhal.h, cyhal_drivers.h, cyhal_gpio.h, cyhal_hw_types.h (from cyhal_hw_types_template.h), cyhal_modules.h, cyhal_sdio.h, cyhal_spi.h"
+				},
+				{
+					"name": "note",
+					"value": "Trimmed to what WHD uses; closest public releases are 1.0.0-1.3.0."
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "core-lib",
+			"name": "core-lib",
+			"description": "Common result and utility headers",
+			"supplier": {
+				"name": "Infineon Technologies AG (Cypress Semiconductor)",
+				"url": [
+					"https://github.com/Infineon/core-lib"
+				]
+			},
+			"licenses": [
+				{
+					"license": {
+						"id": "Apache-2.0"
+					}
+				}
+			],
+			"properties": [
+				{
+					"name": "source",
+					"value": "cy_result.h, cy_utils.h"
+				},
+				{
+					"name": "note",
+					"value": "Modified; closest public releases are 1.0.0 (cy_result.h) and 1.3.0 (cy_utils.h)."
+				}
+			]
+		},
+		{
+			"type": "library",
+			"bom-ref": "connectivity-utilities-log",
+			"name": "connectivity-utilities",
+			"description": "Logging API header (cy_log)",
+			"supplier": {
+				"name": "Infineon Technologies AG (Cypress Semiconductor)",
+				"url": [
+					"https://github.com/Infineon/connectivity-utilities"
+				]
+			},
+			"licenses": [
+				{
+					"license": {
+						"name": "Cypress (an Infineon company) End User License Agreement",
+						"url": "https://github.com/Infineon/connectivity-utilities/blob/release-v3.0.3/EULA.txt"
+					}
+				}
+			],
+			"properties": [
+				{
+					"name": "source",
+					"value": "cy_log.h (header only; cy_log.c is a Phoenix reimplementation)"
+				},
+				{
+					"name": "note",
+					"value": "Modified; closest public release is 3.0.3. The EULA permits use only with Cypress/Infineon integrated circuits."
+				}
+			]
+		}
+	]
+}
