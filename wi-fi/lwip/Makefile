@@ -1,18 +1,27 @@
 #
 # Makefile for phoenix-rtos-lwip
 #
-# Copyright 2019-2021 Phoenix Systems
+# Copyright 2019-2021, 2026 Phoenix Systems
+# Author: Jan Wisniewski
 #
-# %LICENSE%
+# SPDX-License-Identifier: BSD-3-Clause
 #
 
 NAME := wifi-lwip
 
-LOCAL_SRCS := cybsp.c cybsp_wifi.c cy_network_buffer_lwip.c cy_lwip.c cy_lwip_dhcp_server.c main.c
+LOCAL_SRCS := cybsp.c cybsp_wifi.c cy_network_buffer_lwip.c cy_lwip.c cy_lwip_dhcp_server.c cmd.c main.c
 
 LOCAL_CFLAGS += -DCY_WIFI_HOST_WAKE_SW_FORCE=0
 LOCAL_CFLAGS += -DCY_RSLT_MODULE_BOARD_LIB_WHD_INTEGRATION=0x2ff
 LOCAL_CFLAGS += -DENABLE_WIFI_MIDDLEWARE_LOGS
 LOCAL_CFLAGS += -DCYBSP_WIFI_WL_REG_ON=0 # fake value - actual pin is hardcoded
+
+# RF certification test interface (/dev/wifi/rftest)
+ifeq (${LWIP_WIFI_RFTEST},yes)
+  LOCAL_SRCS += rftest.c
+  LOCAL_CFLAGS += -DLWIP_WIFI_RFTEST=1
+else
+  LOCAL_CFLAGS += -DLWIP_WIFI_RFTEST=0
+endif
 
 include $(static-lib.mk)
